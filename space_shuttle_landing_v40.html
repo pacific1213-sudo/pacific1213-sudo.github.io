@@ -1,0 +1,2867 @@
+/*
+ * Program   : Space Shuttle Landing Simulator
+ * Version   : V40
+ * Date      : 2026-11-01
+ * Copyright : Copyright (c) 2026 [Yasuhiro Kaizu]
+ *
+ * Development:
+ *   Designed and developed with assistance from
+ *   OpenAI ChatGPT.
+ * Note      : This simulator is not certified for real-world flight training.
+ */
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Space Shuttle Landing Simulator V40</title>
+<style>
+    body { margin: 0; overflow: hidden; background-color: #000; color: #0f0; font-family: monospace; }
+    canvas { display: block; }
+    #message { position: absolute; top: 50%; width: 100%; text-align: center; font-size: 32px; display: none; text-shadow: 2px 2px 4px #000; z-index: 5; }
+    
+    #menu {
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        text-align: center; background: rgba(0, 15, 0, 0.9); border: 2px solid #0f0;
+        width: 420px; max-width: calc(100vw - 48px); box-sizing: border-box; padding: 24px; z-index: 10; box-shadow: 0 0 20px #0f0;
+    }
+    .menu-title { font-size: 22px; margin-bottom: 22px; font-weight: bold; white-space: nowrap; }
+    .menu-btn {
+        display: block; width: 100%; background: #000; color: #0f0; border: 1px solid #0f0;
+        padding: 12px; margin-bottom: 8px; font-family: monospace; font-size: 17px; cursor: pointer; transition: 0.2s;
+    }
+    .menu-btn:hover { background: #0f0; color: #000; }
+    .menu-desc { font-size: 14px; margin-top: -5px; margin-bottom: 20px; color: #0a0; }
+
+    /* V14 temporary test configuration: hide crosswind and demo entry points only. */
+    .menu-btn[data-scenario="CROSSWIND"],
+    .menu-btn[data-scenario="CROSSWIND"] + .menu-desc,
+    .menu-btn[data-action="start-demo"],
+    .menu-btn[data-action="start-demo"] + .menu-desc { display: none; }
+
+    #configUI {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 15, 0, 0.95); z-index: 20; color: #0f0;
+        font-family: monospace; overflow-y: auto; padding: 20px; box-sizing: border-box;
+    }
+    .config-table { width: 100%; max-width: 800px; margin: 0 auto; border-collapse: collapse; text-align: left; font-size: 16px; }
+    .config-table th { padding: 12px; border-bottom: 2px solid #0f0; color: #ff0; }
+    .config-table td { padding: 12px; border-bottom: 1px dotted #050; }
+    .btn-assign { background: #000; color: #0f0; border: 1px solid #0f0; padding: 5px 15px; cursor: pointer; font-family: monospace; font-size: 14px; transition: 0.2s; }
+    .btn-assign:hover { background: #0f0; color: #000; }
+    .btn-cancel { background: #0f0; color: #000; border: 1px solid #0f0; padding: 5px 15px; cursor: pointer; font-family: monospace; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div id="menu">
+    <div class="menu-title">SPACE SHUTTLE LANDING SIMULATOR</div>
+    
+    <button class="menu-btn" data-action="start-manual" data-scenario="CALM">[ 1. CALM WEATHER ]</button>
+    <div class="menu-desc">Ideal conditions. No wind. Manual Control.</div>
+    
+    <button class="menu-btn" data-action="start-manual" data-scenario="CROSSWIND">[ 2. CROSSWIND ]</button>
+    <div class="menu-desc">Random crosswind (Max 15 KTS). Manual Control.</div>
+    
+    <button class="menu-btn" data-action="start-demo" style="color:#ff0; border-color:#ff0;">[ 3. FINAL APPROACH (DEMO) ]</button>
+    <div class="menu-desc" style="color:#aa0;">MSBLS-inspired guidance demo; randomized left/right entry. Not authentic Shuttle guidance. Touchdown criteria are simulator targets.</div>
+
+    <button class="menu-btn" data-action="open-config" style="margin-top:20px; border-style:dashed;">[ 4. JOYSTICK CONFIG ]</button>
+</div>
+
+<button id="btn-config" style="position: absolute; bottom: 20px; right: 20px; background: rgba(0,20,0,0.8); color: #0f0; border: 1px solid #0f0; padding: 10px; font-family: monospace; cursor: pointer; z-index: 15; font-size: 16px; box-shadow: 0 0 10px #0f0;" data-action="open-config">⚙ CONFIG</button>
+
+<div id="configUI" style="display:none;">
+    <h2 style="text-align:center; font-size:32px; margin-top:40px;">JOYSTICK CONFIGURATION</h2>
+    <div style="text-align:center; margin-bottom:20px; color:#aa0; font-size:14px;">
+        Click "ASSIGN" and move the desired axis or press the button on your controller.
+    </div>
+    <div id="config-container"></div>
+    <div style="text-align:center; margin-top:40px;">
+        <button class="menu-btn" style="width:250px; font-size: 24px; margin:0 auto;" data-action="close-config">SAVE & CLOSE</button>
+    </div>
+</div>
+
+<div id="message"></div>
+<canvas id="gameCanvas"></canvas>
+
+<script>
+    // ==========================================
+    // 0. AUTO TEST SUITE (Development Only)
+    // ==========================================
+    // Executes automatically upon initialization to detect math and logic errors.
+    class AutoTester {
+        static runAll() {
+            let passed = 0, failed = 0;
+            console.log("=== STARTING AUTOMATED TESTS (BLOCK 1: INTERFACE) ===");
+
+            function assert(condition, testName) {
+                if (condition) { console.log(`[OK] ${testName}`); passed++; } 
+                else { console.error(`[FAIL] ${testName}`); failed++; }
+            }
+
+            try {
+                assert(MathUtils.normalize360(370) === 10, "MathUtils.normalize360(370) should be 10");
+                assert(MathUtils.normalize360(-10) === 350, "MathUtils.normalize360(-10) should be 350");
+                assert(MathUtils.clamp(5, 0, 10) === 5, "MathUtils.clamp within range");
+                assert(MathUtils.clamp(-5, 0, 10) === 0, "MathUtils.clamp below min");
+                assert(FormatUtils.formatFloat1(0) === "0.0", "FormatUtils.formatFloat1(0) correctly formats zero");
+                assert(FormatUtils.formatFloat1(-1.2) === "-1.2", "FormatUtils.formatFloat1(-1.2) handles negatives");
+                let testInput = new InputManager(CONFIG.INPUT); testInput.resetState();
+                let axes = testInput.getAxes();
+                assert(axes.pitch === 0 && axes.roll === 0 && axes.yaw === 0, "InputManager initial state is strictly 0");
+
+                console.log(`%c=== TEST RESULTS: ${passed} PASSED, ${failed} FAILED ===`, failed === 0 ? "color: #0f0; font-weight: bold;" : "color: #f00; font-weight: bold;");
+                if (failed === 0) console.log("%c[BASIC CHECKS PASSED] These tests do not certify flight-model accuracy or end-to-end landing behavior.", "color: #0ff;");
+            } catch (e) { console.error("[FATAL EXCEPTION] Automated tests crashed:", e); }
+        }
+    }
+
+    // ==========================================
+    // 1. DATA DEFINITIONS & CONFIGURATIONS
+    // ==========================================
+    const APP_CONSTANTS = {
+        DEG_TO_RAD: Math.PI / 180.0, RAD_TO_DEG: 180.0 / Math.PI, PI: Math.PI, CIRCLE_RAD: Math.PI * 2.0, CIRCLE_DEG: 360.0, HALF: 0.5, MS_PER_SEC: 1000.0,
+        MPS_TO_KNOTS: 1.94384, KNOTS_TO_MPS: 0.514444, M_TO_FT: 3.28084, FT_TO_M: 0.3048, MPS_TO_FPS: 3.28084, PERCENT_SCALE: 100.0,
+        CLIP_CODE: { LEFT: 1, RIGHT: 2, BOTTOM: 8, TOP: 4 },
+        PHYSICS: Object.freeze({
+            ZERO: 0,
+            UNIT: 1,
+            HALF: 0.5,
+            QUARTER: 0.25,
+            VECTOR_EPSILON: 0.001,
+            VELOCITY_EPSILON: 0.01,
+            AERO_SPEED_THRESHOLD_MPS: 10.0,
+            AOA_SPEED_THRESHOLD_MPS: 0.1,
+            GROUND_BOUNCE_SPEED_MPS: 1.0,
+            MAX_FRAME_DELTA_SECONDS: 0.25,
+            DEFAULT_START_ALTITUDE_M: 4000.0,
+            DEFAULT_START_DOWNRANGE_M: -14117.0,
+            MAX_CROSSWIND_KTS: 15.0,
+            MAX_PHYSICS_SUBSTEP_SECONDS: 1.0 / 60.0
+        })
+        // Environmental physics constants are defined in environment data.
+    };
+
+    // Environment data supplied to the physics model.
+    const ENVIRONMENTS = {
+        EARTH: {
+            name: "EARTH",
+            gravity: 9.80665,
+            airDensitySeaLevel: 1.225,
+            scaleHeight: 8500.0,
+            groundY: 0.0,
+            bounceFactor: 0.5,
+            frictionFactor: 0.98,
+            groundAngularFriction: 0.8
+        },
+        MOON: {
+            name: "MOON",
+            gravity: 1.62,
+            airDensitySeaLevel: 0.0, // Aerodynamic forces are disabled in vacuum.
+            scaleHeight: 1.0,        // Prevent division by zero.
+            groundY: 0.0,
+            bounceFactor: 0.2,       // Reduced bounce on lunar regolith.
+            frictionFactor: 0.99,
+            groundAngularFriction: 0.9
+        },
+        MARS: {
+            name: "MARS",
+            gravity: 3.721,
+            airDensitySeaLevel: 0.020, // Very thin atmosphere.
+            scaleHeight: 11100.0,
+            groundY: 0.0,
+            bounceFactor: 0.4,
+            frictionFactor: 0.95,
+            groundAngularFriction: 0.85
+        }
+    };
+
+	// Scenario data defines initial state and landing-zone geometry.
+    const SCENARIOS = {
+        EARTH_KSC_RUNWAY: {
+            environment: ENVIRONMENTS.EARTH,
+            startX: 0, startY: 4000, startZ: -14117, startYawRad: 0,
+            landingZone: {
+                type: "RUNWAY",        // Runway landing zone.
+                x: 0, z: 0, headingRad: 0,
+                width: 91.44, length: 4572.0,
+                color: "#0f0",         // Bright green.
+                groundColor: "#005500" // Dark green ground.
+            }
+        },
+        MOON_BASE_TARGET: {
+            environment: ENVIRONMENTS.MOON,
+            startX: 0, startY: 15000, startZ: 0, startYawRad: 0,
+            landingZone: {
+                type: "CROSSMARK",     // Cross-mark landing zone.
+                x: 0, z: 0, headingRad: 0,
+                size: 200.0,           // バツ印の大きさ（メートル）
+                color: "#ff0",         // Yellow.
+                groundColor: "#333333" // Dark gray lunar regolith.
+            }
+        }
+    };
+
+    // V4 landing criteria are simulator targets for repeatable evaluation, not official NASA limits.
+    const LANDING_CRITERIA_CONFIG = Object.freeze({
+        MAX_TOUCHDOWN_SPEED_KTS: 220.0,
+        MAX_SINK_RATE_FPS: 9.0,
+        MAX_LATERAL_OFFSET_M: 45.72,
+        MIN_PITCH_DEG: 5.0,
+        MAX_PITCH_DEG: 25.0,
+        MAX_YAW_ALIGNMENT_DEG: 5.0,
+        MAX_ROLL_DEG: 5.0
+    });
+
+    class LandingAssessment {
+        static evaluate(state, scenario, gearDown) {
+            if (!state || !state.pos || !state.vel || !state.ori || !scenario?.landingZone) {
+                throw new TypeError("Valid flight state and landing-zone scenario are required");
+            }
+            const zone = scenario.landingZone;
+            const euler = state.ori.toEulerRad();
+            const heading = Number.isFinite(zone.headingRad) ? zone.headingRad : 0;
+            const dx = state.pos.x - zone.x;
+            const dz = state.pos.z - zone.z;
+            const lateralOffsetM = dx * Math.cos(heading) - dz * Math.sin(heading);
+            const longitudinalOffsetM = dx * Math.sin(heading) + dz * Math.cos(heading);
+            const runwayLength = Number.isFinite(zone.length) ? zone.length : 0;
+            const runwayWidth = Number.isFinite(zone.width) ? zone.width : 0;
+            const withinRunway = zone.type === "RUNWAY"
+                && Math.abs(lateralOffsetM) <= runwayWidth / 2
+                && Math.abs(longitudinalOffsetM) <= runwayLength / 2;
+            const yawErrorRad = Math.atan2(
+                Math.sin(euler.yaw - heading), Math.cos(euler.yaw - heading)
+            );
+            const pitchDeg = -euler.pitch * APP_CONSTANTS.RAD_TO_DEG;
+            const rollDeg = euler.roll * APP_CONSTANTS.RAD_TO_DEG;
+            const yawAlignmentDeg = yawErrorRad * APP_CONSTANTS.RAD_TO_DEG;
+            const speedKts = state.vel.mag() * APP_CONSTANTS.MPS_TO_KNOTS;
+            const sinkRateFps = Math.max(0, -state.vel.y) * APP_CONSTANTS.MPS_TO_FPS;
+            const checks = {
+                speed: speedKts <= LANDING_CRITERIA_CONFIG.MAX_TOUCHDOWN_SPEED_KTS,
+                sink: sinkRateFps <= LANDING_CRITERIA_CONFIG.MAX_SINK_RATE_FPS,
+                drift: Math.abs(lateralOffsetM) <= LANDING_CRITERIA_CONFIG.MAX_LATERAL_OFFSET_M,
+                pitch: pitchDeg >= LANDING_CRITERIA_CONFIG.MIN_PITCH_DEG
+                    && pitchDeg <= LANDING_CRITERIA_CONFIG.MAX_PITCH_DEG,
+                yaw: Math.abs(yawAlignmentDeg) <= LANDING_CRITERIA_CONFIG.MAX_YAW_ALIGNMENT_DEG,
+                roll: Math.abs(rollDeg) <= LANDING_CRITERIA_CONFIG.MAX_ROLL_DEG,
+                runway: withinRunway,
+                gear: !!gearDown
+            };
+            return Object.freeze({
+                timestampSeconds: null,
+                speedKts,
+                sinkRateFps,
+                lateralOffsetM,
+                longitudinalOffsetM,
+                pitchDeg,
+                yawAlignmentDeg,
+                rollDeg,
+                gearDown: !!gearDown,
+                withinRunway,
+                checks: Object.freeze(checks),
+                passed: Object.values(checks).every(Boolean)
+            });
+        }
+    }
+
+    // V3 approach scenario generation. Values are simulation setup parameters, not measured Shuttle entry data.
+    const APPROACH_CONFIG = Object.freeze({
+        // V22 extended HAC-terminal geometry. These are simulator tuning values, not NASA trajectory data.
+        // The start is placed outside the short final with the runway retained within the visible ground area so the aircraft has room to turn and descend.
+        ENTRY_LATERAL_OFFSET_M: 4500.0,
+        ENTRY_DOWNRANGE_M: -20000.0,
+        ENTRY_ALTITUDE_M: 6000.0,
+        INITIAL_HEADING_OFFSET_RAD: 30.0 * APP_CONSTANTS.DEG_TO_RAD,
+        INITIAL_BANK_RAD: 12.0 * APP_CONSTANTS.DEG_TO_RAD,
+        APPROACH_AOA_RAD: 10.0 * APP_CONSTANTS.DEG_TO_RAD,
+        FLARE_START_ALTITUDE_M: 500.0,
+        FLARE_END_ALTITUDE_M: 100.0,
+        FLARE_FLIGHT_PATH_RAD: -1.0 * APP_CONSTANTS.DEG_TO_RAD,
+        GEAR_DEPLOY_ALTITUDE_M: 500.0,
+        MAX_BANK_RAD: 20.0 * APP_CONSTANTS.DEG_TO_RAD,
+        HEADING_TO_BANK_GAIN: 1.2,
+        BANK_TO_ROLL_COMMAND_GAIN: 1.5,
+        PITCH_ERROR_GAIN: 1.5,
+        FLIGHT_PATH_ERROR_GAIN: 0.8,
+        YAW_ERROR_GAIN: 0.35,
+        MAX_ROLL_COMMAND: 0.45,
+        MAX_PITCH_COMMAND: 0.5,
+        MAX_YAW_COMMAND: 0.25,
+        APPROACH_LABEL: "MSBLS-INSPIRED SIM"
+    });
+
+    // V5 gear geometry and rollout values are explicit simulator approximations, not Shuttle-certified data.
+    const LANDING_GEAR_CONFIG = Object.freeze({
+        MAIN_GEAR_OFFSETS_M: Object.freeze([
+            Object.freeze({ x: -2.4, y: -1.5, z: -3.5 }),
+            Object.freeze({ x: 2.4, y: -1.5, z: -3.5 })
+        ]),
+        NOSE_GEAR_OFFSET_M: Object.freeze({ x: 0, y: -1.2, z: 7.5 }),
+        ROLLING_RESISTANCE_MPS2: 0.12,
+        MAX_WHEEL_BRAKE_DECEL_MPS2: 8.0,
+        STOP_SPEED_MPS: 0.3,
+        ANGULAR_DAMPING_PER_SECOND: 2.5,
+        GROUND_ROLL_STABILIZATION_PER_SECOND: 3.0,
+        // Dynamic-pressure proxy: lift fraction follows (ground speed / touchdown speed)^2.
+        // This is a simulator approximation, not a validated Shuttle aerodynamic coefficient.
+        GROUND_PITCH_RESPONSE_PER_SECOND: 1.2,
+        // Smooth pitch-unloading time constant after main-gear touchdown; simulator tuning value.
+        GROUND_PITCH_UNLOAD_DURATION_SECONDS: 12.0,
+        ROLLOUT_STEERING_RATE_RAD_PER_SEC: 3.0 * APP_CONSTANTS.DEG_TO_RAD,
+        ROLLOUT_STEERING_MIN_SPEED_MPS: 2.0
+    });
+
+    // Visual landing-gear geometry for the Chase view.
+    // These dimensions are simulator visualization approximations, not certified Shuttle drawings.
+    const LANDING_GEAR_VISUAL_CONFIG = Object.freeze({
+        // Coordinates are in the orbiter model's local frame (meters).
+        // Main gear is outboard under the wing area; nose gear is forward under the nose.
+        MAIN_STRUT_ATTACH_X_M: 6.8,
+        STRUT_ATTACH_Y_M: -1.2,
+        MAIN_GEAR_X_M: 5.8,
+        MAIN_GEAR_Z_M: -7.0,
+        NOSE_STRUT_ATTACH_Z_M: 13.2,
+        NOSE_GEAR_Z_M: 11.0,
+        AXLE_Y_M: -4.0,
+        WHEEL_RADIUS_M: 0.95,
+        WHEEL_WIDTH_M: 0.42,
+        MAIN_WHEEL_LATERAL_SPACING_M: 0.72,
+        NOSE_WHEEL_LATERAL_SPACING_M: 0.48,
+        CIRCLE_SEGMENTS: 16,
+        STRUT_COLOR_ROLE: "aircraftColor"
+    });
+
+    class ApproachScenarioFactory {
+        static create(random = Math.random) {
+            if (typeof random !== "function") throw new TypeError("random must be a function");
+            const side = random() < APP_CONSTANTS.HALF ? -1 : 1;
+            const startX = side * APPROACH_CONFIG.ENTRY_LATERAL_OFFSET_M;
+            const startZ = APPROACH_CONFIG.ENTRY_DOWNRANGE_M;
+            // Start tangent to the terminal HAC turn, not aligned directly with the runway.
+            const headingOffset = side * APPROACH_CONFIG.INITIAL_HEADING_OFFSET_RAD;
+            const startYawRad = -headingOffset;
+            const startRollRad = side * APPROACH_CONFIG.INITIAL_BANK_RAD;
+            return {
+                ...SCENARIOS.EARTH_KSC_RUNWAY,
+                startX,
+                startY: APPROACH_CONFIG.ENTRY_ALTITUDE_M,
+                startZ,
+                startYawRad,
+                startRollRad,
+                approachSide: side < 0 ? "LEFT" : "RIGHT",
+                approachPhase: "HAC_TERMINAL",
+                guidanceLabel: APPROACH_CONFIG.APPROACH_LABEL,
+                windWorld: { x: 0, y: 0, z: 0 }
+            };
+        }
+    }
+
+    // Demonstration guidance controller. This is deliberately not represented as flight-certified
+    // Shuttle/MSBLS logic; gains are tunable simulation values and require end-to-end validation.
+    class ApproachGuidanceController {
+        calculate(avionics) {
+            if (!avionics || !avionics.physics || !avionics.physics.state) {
+                throw new TypeError("A valid avionics/physics state is required");
+            }
+            const physics = avionics.physics;
+            const scenario = avionics.getScenario();
+            const landingZone = scenario?.landingZone;
+            if (!landingZone) return { pitch: 0, roll: 0, yaw: 0, speedbrake: 0 };
+
+            const position = physics.state.pos;
+            const targetDx = landingZone.x - position.x;
+            const targetDz = landingZone.z - position.z;
+            const horizontalRange = Math.hypot(targetDx, targetDz);
+            const desiredHeading = Math.atan2(targetDx, targetDz);
+            const headingError = Math.atan2(
+                Math.sin(desiredHeading - avionics.getYawRad()),
+                Math.cos(desiredHeading - avionics.getYawRad())
+            );
+            const desiredRoll = MathUtils.clamp(
+                headingError * APPROACH_CONFIG.HEADING_TO_BANK_GAIN,
+                -APPROACH_CONFIG.MAX_BANK_RAD,
+                APPROACH_CONFIG.MAX_BANK_RAD
+            );
+            const rollError = desiredRoll - avionics.getRollRad();
+            const geometricFlightPath = horizontalRange > APP_CONSTANTS.PHYSICS.VECTOR_EPSILON
+                ? Math.atan2(physics.env.groundY - position.y, horizontalRange)
+                : 0;
+            const altitudeAGL = Math.max(0, position.y - physics.env.groundY);
+            const flareProgress = MathUtils.clamp(
+                (APPROACH_CONFIG.FLARE_START_ALTITUDE_M - altitudeAGL)
+                    / (APPROACH_CONFIG.FLARE_START_ALTITUDE_M - APPROACH_CONFIG.FLARE_END_ALTITUDE_M),
+                0, 1
+            );
+            const desiredFlightPath = geometricFlightPath * (1 - flareProgress)
+                + APPROACH_CONFIG.FLARE_FLIGHT_PATH_RAD * flareProgress;
+            const desiredPitch = desiredFlightPath + APPROACH_CONFIG.APPROACH_AOA_RAD;
+            const pitchError = desiredPitch - avionics.getPitchRad();
+            // Add flight-path feedback so flare guidance responds to actual descent/climb state,
+            // rather than relying on pitch attitude alone. Gain remains a simulator tuning value.
+            const flightPathError = desiredFlightPath - avionics.getGammaRad();
+            const pitchCommand = pitchError * APPROACH_CONFIG.PITCH_ERROR_GAIN
+                + flightPathError * APPROACH_CONFIG.FLIGHT_PATH_ERROR_GAIN;
+
+            return {
+                pitch: MathUtils.clamp(pitchCommand,
+                    -APPROACH_CONFIG.MAX_PITCH_COMMAND, APPROACH_CONFIG.MAX_PITCH_COMMAND),
+                roll: MathUtils.clamp(rollError * APPROACH_CONFIG.BANK_TO_ROLL_COMMAND_GAIN,
+                    -APPROACH_CONFIG.MAX_ROLL_COMMAND, APPROACH_CONFIG.MAX_ROLL_COMMAND),
+                yaw: MathUtils.clamp(headingError * APPROACH_CONFIG.YAW_ERROR_GAIN,
+                    -APPROACH_CONFIG.MAX_YAW_COMMAND, APPROACH_CONFIG.MAX_YAW_COMMAND),
+                speedbrake: 0
+            };
+        }
+    }
+
+    class LandingAssessmentTester {
+        static runAll() {
+            let passed = 0, failed = 0;
+            const assert = (condition, name) => {
+                if (condition) { console.log(`[OK] ${name}`); passed++; }
+                else { console.error(`[FAIL] ${name}`); failed++; }
+            };
+            const scenario = { landingZone: { type: "RUNWAY", x: 0, z: 0, headingRad: 0, width: 91.44, length: 4572 } };
+            const stateFor = (overrides = {}) => {
+                const state = new RigidBodyState();
+                state.pos = new Vector3(0, 0, 0);
+                state.vel = new Vector3(0, -1, 95);
+                state.ori = Quaternion.fromEulerZXY(0, -15 * APP_CONSTANTS.DEG_TO_RAD, 0);
+                return Object.assign(state, overrides);
+            };
+            try {
+                const valid = LandingAssessment.evaluate(stateFor(), scenario, true);
+                assert(valid.passed, "Landing assessment accepts a touchdown inside configured simulator targets");
+                assert(valid.checks.runway && valid.checks.gear, "Runway capture and gear-down state are evaluated independently");
+                const hardSinkState = stateFor({ vel: new Vector3(0, -8, 95) });
+                const hardSink = LandingAssessment.evaluate(hardSinkState, scenario, true);
+                assert(!hardSink.checks.sink && !hardSink.passed, "Excessive sink rate causes landing assessment failure");
+                const outsideState = stateFor({ pos: new Vector3(60, 0, 0) });
+                const outside = LandingAssessment.evaluate(outsideState, scenario, true);
+                assert(!outside.checks.drift && !outside.checks.runway, "Touchdown outside runway width fails lateral and runway checks");
+                const gearUp = LandingAssessment.evaluate(stateFor(), scenario, false);
+                assert(!gearUp.checks.gear && !gearUp.passed, "Touchdown with landing gear retracted fails assessment");
+                const fastState = stateFor({ vel: new Vector3(0, -1, 140) });
+                const fast = LandingAssessment.evaluate(fastState, scenario, true);
+                assert(!fast.checks.speed, "Excessive touchdown speed causes landing assessment failure");
+                assert(LandingAssessment.evaluate(stateFor({ pos: new Vector3(0, 0, -3000) }), scenario, true).checks.runway === false,
+                    "Touchdown beyond runway longitudinal bounds fails runway-capture check");
+            } catch (error) {
+                failed++;
+                console.error("[FATAL EXCEPTION] Landing assessment tests crashed:", error);
+            }
+            console.log(`=== LANDING ASSESSMENT TESTS: ${passed} PASSED, ${failed} FAILED ===`);
+            return { passed, failed };
+        }
+    }
+
+    // Demo-only gear schedule: deploys once below a simulator-defined AGL threshold.
+    // It does not model gear-door timing or physical landing-gear geometry.
+    class ApproachGearController {
+        static update(avionics) {
+            if (!avionics || !avionics.physics || !avionics.physics.scenario) return false;
+            const scenario = avionics.getScenario();
+            if (scenario.guidanceLabel !== APPROACH_CONFIG.APPROACH_LABEL) return false;
+            const altitudeAGL = avionics.getPosY() - avionics.physics.env.groundY;
+            if (!avionics.isGearDown() && altitudeAGL <= APPROACH_CONFIG.GEAR_DEPLOY_ALTITUDE_M) {
+                avionics.operateGear();
+                return true;
+            }
+            return false;
+        }
+    }
+
+    class LandingGearVisualTester {
+        static runAll() {
+            let passed = 0;
+            let failed = 0;
+            const assert = (condition, label) => {
+                if (condition) { console.log(`[OK] ${label}`); passed++; }
+                else { console.error(`[FAIL] ${label}`); failed++; }
+            };
+            const cfg = LANDING_GEAR_VISUAL_CONFIG;
+            assert(cfg.WHEEL_RADIUS_M > 0, "Wheel visual radius is positive");
+            assert(cfg.CIRCLE_SEGMENTS >= 8, "Wheel circle has sufficient segments");
+            assert(AIRCRAFT_PROFILE.gearConfig.initialDown === false, "Gear starts stowed");
+            assert(AIRCRAFT_PROFILE.aerodynamicsConfig.CDgear === 0.02, "Gear drag remains at restrained baseline");
+            console.log(`=== LANDING GEAR VISUAL TESTS: ${passed} PASSED, ${failed} FAILED ===`);
+            return { passed, failed };
+        }
+    }
+
+    class ApproachGuidanceTester {
+        static runAll() {
+            let passed = 0;
+            let failed = 0;
+            const assert = (condition, name) => {
+                if (condition) { console.log(`[OK] ${name}`); passed++; }
+                else { console.error(`[FAIL] ${name}`); failed++; }
+            };
+            const left = ApproachScenarioFactory.create(() => 0.1);
+            const right = ApproachScenarioFactory.create(() => 0.9);
+            assert(left.approachSide === "LEFT" && left.startX < 0, "Approach scenario supports left entry");
+            assert(right.approachSide === "RIGHT" && right.startX > 0, "Approach scenario supports right entry");
+            assert(Math.abs(left.startYawRad) >= 40 * APP_CONSTANTS.DEG_TO_RAD
+                && Math.abs(right.startYawRad) >= 40 * APP_CONSTANTS.DEG_TO_RAD,
+                "HAC-terminal entries begin with a substantial runway heading offset");
+            const leftRange = Math.hypot(left.startX - left.landingZone.x, left.startZ - left.landingZone.z);
+            const rightRange = Math.hypot(right.startX - right.landingZone.x, right.startZ - right.landingZone.z);
+            assert(leftRange >= 23000 && rightRange >= 23000,
+                "HAC-terminal start leaves sufficient horizontal range for turn and descent");
+            assert(left.startY >= 5900 && right.startY >= 5900,
+                "HAC-terminal start altitude is high enough for an extended approach");
+            assert(Math.abs(left.startRollRad) > APP_CONSTANTS.PHYSICS.VECTOR_EPSILON
+                && Math.abs(right.startRollRad) > APP_CONSTANTS.PHYSICS.VECTOR_EPSILON,
+                "HAC-terminal entries include an initial bank angle");
+            assert(left.approachPhase === "HAC_TERMINAL" && right.approachPhase === "HAC_TERMINAL",
+                "Scenario identifies the HAC-terminal phase");
+            assert(left.landingZone === SCENARIOS.EARTH_KSC_RUNWAY.landingZone,
+                "Approach scenario preserves runway geometry");
+            const physics = new AircraftAeroPhysics(AIRCRAFT_PROFILE, left.environment);
+            physics.initSimulation(left);
+            const commands = new ApproachGuidanceController().calculate(new Avionics(physics));
+            const bounded = [commands.pitch, commands.roll, commands.yaw, commands.speedbrake]
+                .every(Number.isFinite)
+                && Math.abs(commands.pitch) <= APPROACH_CONFIG.MAX_PITCH_COMMAND
+                && Math.abs(commands.roll) <= APPROACH_CONFIG.MAX_ROLL_COMMAND
+                && Math.abs(commands.yaw) <= APPROACH_CONFIG.MAX_YAW_COMMAND
+                && commands.speedbrake >= 0 && commands.speedbrake <= 1;
+            assert(bounded, "Guidance commands remain finite and within limits");
+            physics.state.pos.y = APPROACH_CONFIG.GEAR_DEPLOY_ALTITUDE_M - 1;
+            const deployed = ApproachGearController.update(new Avionics(physics));
+            assert(deployed && physics.gearDown, "Demo gear schedule deploys gear below configured altitude");
+            const repeatedDeployment = ApproachGearController.update(new Avionics(physics));
+            assert(!repeatedDeployment && physics.gearDown, "Demo gear schedule does not toggle deployed gear back up");
+            console.log(`=== APPROACH GUIDANCE TESTS: ${passed} PASSED, ${failed} FAILED ===`);
+            return { passed, failed };
+        }
+    }
+
+    const GAME_STATE = { MENU: "MENU", PLAYING: "PLAYING" };
+    const CONTROL_MODE = { MANUAL: "MANUAL", DEMO: "DEMO" };
+    const CAMERA_MODE = { COCKPIT: "COCKPIT", CHASE: "CHASE" };
+    const GAMEPAD_STATUS = { NOT_CONNECTED: "not_connected", LOST: "lost", CONNECTED: "connected" };
+    const CONFIG_ITEM_TYPE = { AXIS: "axis", BUTTON: "button" };
+
+    const CONFIG = {
+        SYSTEM: { cameraFOVRad: 60 * APP_CONSTANTS.DEG_TO_RAD, defaultChaseDistance: 80, defaultChaseHeight: 20, COCKPIT_EYE_HEIGHT_ABOVE_RUNWAY_M: 35.0 * APP_CONSTANTS.FT_TO_M, GROUND_CAMERA_ANGULAR_RESPONSE_PER_SEC: 7.0, storageKeys: { gamepadMap: 'HLT_gamepadMap', gamepadActionMap: 'HLT_gamepadActionMap' } },
+        INPUT: {
+            inputSmoothing: 3.0, speedbrakeRate: 0.5, axisAssignThreshold: 0.5, keyPrefixesToStrip: ['Arrow', 'Key'],
+            keyMap: { pitchDown: 'ArrowUp', pitchUp: 'ArrowDown', rollLeft: 'ArrowLeft', rollRight: 'ArrowRight', yawLeft: 'KeyZ', yawRight: 'KeyX', speedbrakeExtend: 'KeyQ', speedbrakeRetract: 'KeyA' },
+            actionMap: { GEAR: 'KeyG', BRAKE: 'KeyB', CAMERA: 'KeyC', PAUSE: 'KeyP', RESTART: 'KeyR' },
+            gamepadMap: { pitchAxis: 1, rollAxis: 0, yawAxis: 3, speedbrakeExtend: 5, speedbrakeRetract: 4 },
+            gamepadActionMap: { GEAR: 0, BRAKE: 2, CAMERA: 1, PAUSE: 9, RESTART: 8 }, gamepadDeadzone: 0.05
+        },
+        GRAPHICS: { defaultLineWidth: 1, clipping: { nearPlane: 10, frustumMargin: 1000 } },
+        WORLD_RENDERER: { groundY: 0, gridSize: 1000, groundColor: '#005500', runwayColor: '#0f0', runwayLineWidth: 2, aircraftColor: '#fff', aircraftLineWidth: 2, drawDistance: { zBack: 25000, zForward: 25000, xSide: 15000 } },
+        HUD_FORMAT: { floatDecimals: 1, debugDecimals: 2, hdgPadLength: 3, hdgPadChar: '0', rightPanelValuePad: 5, windValuePad: 2, labelPadLength: 8, surfaceValPad: 5, spdbValPad: 3, controlsKeyPad: 15 },
+        HUD_RENDERER: {
+            marginX: 20, lineSpacingMain: 30, lineSpacingInfo: 20, topRightExtraSpacing: 5, lineWidthNormal: 1, lineWidthThick: 2,
+            pitchLadderMin: -90, pitchLadderMax: 90, pitchLadderStep: 5, pitchLadderShortWidth: 40, pitchLadderLongWidth: 100, pitchLadderTickHeight: 10, pitchLadderTextOffset: 5,
+            lineDashNegativePitch: [5, 5], lineDashSolid: [], aircraftSymbolWidth: 20, aircraftSymbolCenterGap: 5, aircraftSymbolDrop: 10,
+            flightPathMarker: Object.freeze({ minSpeedMPS: 1.0, maxOffsetRatio: 0.85, horizontalHalfSpan: 12, verticalHalfLength: 6, centerRadius: 3, lineWidth: 2, smoothingTimeConstantSeconds: 0.075 }),
+            vVecMinSpeedSq: 1.0, vVecRadius: 8, vVecLineSide: 16, vVecLineTop: 12, vVecProjectionDistance: 10000, centerPitchOffsetY: 15,
+            criteriaBlockOffsetBlocks: 8, criteriaBlockOffsetPixels: 10, tapeWidth: 70, tapeHeight: 300, tapeOffsetX: 220, tapeTickSpacing: 40, tapeSpeedStep: 10, tapeAltStep: 100,
+            tapeBoxWidth: 54, tapeBoxHeight: 24, tapeTickLength: 12, tapeTextOffset: 18, tapeCenterClearance: 5, tapeTextYOffset: 2,
+            rightPanelOffsetX: 260, topRightMarginX: 20, debugOffsetX: 450, debugOffsetBottom: 80, debugAxesChunkSize: 4,
+            fontMain: '24px monospace', fontSub: '16px monospace', fontInfo: '20px monospace', fontSmall: '14px monospace', fontLarge: '32px monospace',
+            colorNormal: '#0f0', colorWarning: '#f00', colorHighlight: '#ff0', colorTapeBg: '#000'
+        }
+    };
+
+    const HUD_TEXT_RESOURCE = {
+        LEFT_PANEL: [ { id: "spd", label: "SPD :", unit: "KTS" }, { id: "hdg", label: "HDG :", unit: "°" }, { id: "aoa", label: "AOA :", unit: "°" }, { id: "fpa", label: "FPA :", unit: "°" }, { id: "roll", label: "ROLL:", unit: "°" } ],
+        RIGHT_PANEL: [ { id: "alt", label: "ALT :", unit: "FT" }, { id: "sink", label: "SINK:", unit: "fps" }, { id: "wind", label: "WIND:" }, { id: "gear", label: "GEAR:" } ],
+        WIND_STATE: { CALM: "  CALM", RIGHT_SUFFIX: " KTS --->", LEFT_PREFIX: "<--- ", LEFT_SUFFIX: " KTS", INDENT: "  " },
+        GEAR_STATE: { DOWN: "  DOWN", UP: "  UP" },
+        TOP_RIGHT: { modePrefix: "*** ", modeSuffix: " MODE ***", guidance: "GUIDANCE", aircraft: "AIRCRAFT" },
+        SURFACES: { title: "[ SURFACES ]", spdbPrefix: "  ", items: [ { id: "elev", label: "ELEV", unit: "°" }, { id: "ail", label: "AIL ", unit: "°" }, { id: "rud", label: "RUD ", unit: "°" }, { id: "spdb", label: "SPDB", unit: "%" } ] },
+        CONTROLS: { title: "[ CONTROLS ]", camLabel: "CAM :", items: [ { id: "cam", label: "Toggle Camera" }, { id: "pitch", label: "Pitch" }, { id: "roll", label: "Roll (AIL)" }, { id: "yaw", label: "Yaw (RUD)" }, { id: "spdb", label: "Spdbrk Ext/Ret" }, { id: "gear", label: "Gear Deploy" }, { id: "brake", label: "Wheel Brake" }, { id: "restart", label: "Return to Menu" }, { id: "pause", label: "Pause" } ] },
+        CRITERIA: { title: "[ LANDING CRITERIA ]", rangeSeparator: " to ", lessOrEqualPrefix: "<= ", lessOrEqualPlusMinusPrefix: "<= ±", unitKts: " KTS", unitFps: " fps", unitDeg: "°", items: [ { id: "speed", label: "Speed      :" }, { id: "sink", label: "Sink Rate  :" }, { id: "drift", label: "Lat Drift  :" }, { id: "pitch", label: "Pitch Angle:" }, { id: "yaw", label: "Yaw Align  :" }, { id: "roll", label: "Roll Angle :" }, { id: "rollout", label: "Rollout    :" } ] },
+        DEBUG: { gamepad: "JOYSTICK:", notConnected: "NOT CONNECTED (Press any button on joystick)", lost: "LOST", connected: "CONNECTED", p: "P:", r: "R:", y: "Y:", rawAxes: "RAW AXES:", rawBtns: "PRESSED BTNS:", none: "NONE", axisPrefix: "AX", indent: "  " },
+        CONFIG_UI: { headers: ["FUNCTION", "TYPE", "CURRENT ASSIGNMENT", "ACTION"], axisPrefix: "AXIS ", buttonPrefix: "BUTTON ", none: "NONE", waitingInput: "<span style='color:#ff0;'>WAITING INPUT...</span>", btnAssign: "ASSIGN", btnCancel: "CANCEL", classAssign: "btn-assign", classCancel: "btn-cancel" },
+        PAUSED: "PAUSED", PURGED: "PURGED", DATA_PURGED: "[ DATA PURGED ]"
+    };
+
+    // DATA QUALITY NOTE: mass, inertia, virtual control torques and aerodynamic coefficients
+    // below are simulation placeholders unless separately tied to a cited Orbiter data source.
+    // Do not treat them as verified Shuttle flight-test data.
+    const AIRCRAFT_PROFILE = {
+        name: "SPACE SHUTTLE (RIGID BODY)",
+        gearConfig: { initialDown: false, retractable: false },
+        massConfig: {
+            // Reference configuration from NASA TP-1011, Table I (1977 study): 83,001 kg.
+            // This is a documented reference mass, not a claim that every landing has this mass.
+            massKG: 83001.0,
+            // NASA TP-1011 Table I moments mapped to this simulator's x=lateral, y=vertical,
+            // z=longitudinal axes: pitch/yaw/roll axes respectively. Units: kg m^2.
+            // The source product of inertia is not applied until its coordinate transform is verified.
+            Ixx: 7816290.0, Iyy: 8015596.0, Izz: 1029066.0, Ixz: 0.0,
+
+            // Legacy AircraftRigidBodyPhysics fallback only; the active AircraftAeroPhysics path uses controlMomentConfig below. Values are not measured data.
+            virtualTorquePitch: 20000000.0, 
+            virtualTorqueRoll:   5000000.0, 
+            virtualTorqueYaw:    5000000.0,
+            
+            controlAuthorityFactor: 0.1, 
+            dampingFactor: 3.0,   // Increased damping to improve attitude settling.
+            aeroStability: 10.0
+        },
+        aeroConfig: {
+            wingAreaM2: 249.91, // NASA TP-1011 Table I reference wing area (2690 ft^2).
+            // Low-speed approach model from NASA TR-1187, Appendix A (M <= 0.5):
+            // CL = -0.05 + 0.045/deg * alpha; CD = 0.067 + 0.173 * CL^2.
+            CL0: -0.05, CLalpha: 0.045 * APP_CONSTANTS.RAD_TO_DEG,
+            CD0: 0.067, CDinduced: 0.173,
+            // Full-range speedbrake increment approximated from 0.00068/deg * 87.5 deg;
+            // gear-down increment 0.02 is from the same NASA appendix.
+            CDspeedbrake: 0.0595, CDgear: 0.02,
+            // Approximation outside the cited linear low-speed envelope; not measured stall data.
+            maxLinearAoaRad: 15.0 * APP_CONSTANTS.DEG_TO_RAD,
+            postStallLiftFactor: 0.25,
+            postStallDragFactor: 0.8
+            // Atmospheric properties are defined in ENVIRONMENTS.
+        },
+        // Explicitly approximate simulation tuning values, NOT verified Shuttle control derivatives.
+        // Moments are generated from dynamic pressure and reference geometry, rather than direct virtual torque.
+        controlMomentConfig: {
+            meanAerodynamicChordM: 8.0,
+            wingspanM: 23.8,
+            pitchMomentPerElevonRad: 0.15,
+            rollMomentPerAileronRad: 0.05,
+            yawMomentPerRudderRad: 0.03,
+            maxDeflectionRad: 25.0 * APP_CONSTANTS.DEG_TO_RAD,
+            elevonRateRadPerSec: 35.0 * APP_CONSTANTS.DEG_TO_RAD,
+            rudderRateRadPerSec: 30.0 * APP_CONSTANTS.DEG_TO_RAD,
+            speedbrakeRatePerSec: 0.5
+        },
+        kinematicsConfig: {
+            baseSpeedMPS: 150.0, minSpeedMPS: 60.0, maxSpeedMPS: 320.0,
+            pitchSpeedAccelMPS2: 40.0, stickSpeedAccelMPS2: 25.0, speedbrakeDecelMPS2: 35.0,
+            pitchRateRad: 45.0 * APP_CONSTANTS.DEG_TO_RAD, rollRateRad: 90.0 * APP_CONSTANTS.DEG_TO_RAD, yawRateRad: 30.0 * APP_CONSTANTS.DEG_TO_RAD,
+            maxPitchRad: 85.0 * APP_CONSTANTS.DEG_TO_RAD, maxDeflectionRad: 25.0 * APP_CONSTANTS.DEG_TO_RAD,
+            gammaFollowRate: 2.5, pitchToAoaRatio: 0.3, stickDirectAoaRad: 10.0 * APP_CONSTANTS.DEG_TO_RAD,
+            // Derived nominal low-speed approach AoA (~10 deg) from NASA TR-1187 approach conditions;
+            // this is an initialization target, not a universal flight value.
+            initialApproachAoaRad: 10.0 * APP_CONSTANTS.DEG_TO_RAD
+        },
+        model3D: [
+            { x:   0.0, y: -1.0, z:  18.0 }, { x:   0.0, y:  1.5, z:  12.0 }, { x:  -1.8, y:  2.5, z:   8.0 }, { x:   1.8, y:  2.5, z:   8.0 },
+            { x:  -2.2, y: -2.0, z:  10.0 }, { x:   2.2, y: -2.0, z:  10.0 }, { x:  -2.5, y:  2.5, z:   6.0 }, { x:   2.5, y:  2.5, z:   6.0 },
+            { x:  -2.5, y:  2.5, z: -12.0 }, { x:   2.5, y:  2.5, z: -12.0 }, { x:  -2.8, y: -2.0, z: -15.0 }, { x:   2.8, y: -2.0, z: -15.0 },
+            { x:  -2.0, y:  2.0, z: -18.0 }, { x:   2.0, y:  2.0, z: -18.0 }, { x:  -2.5, y: -1.8, z:   6.0 }, { x:   2.5, y: -1.8, z:   6.0 },
+            { x:  -5.5, y: -1.8, z:  -2.0 }, { x:   5.5, y: -1.8, z:  -2.0 }, { x: -12.0, y: -1.5, z: -10.0 }, { x:  12.0, y: -1.5, z: -10.0 },
+            { x: -12.0, y: -1.5, z: -14.5 }, { x:  12.0, y: -1.5, z: -14.5 }, { x:   0.0, y:  2.5, z: -10.0 }, { x:   0.0, y:  2.0, z: -18.0 },
+            { x:   0.0, y: 10.5, z: -15.0 }, { x:   0.0, y: 10.5, z: -18.5 }, { x:  -2.2, y: -2.2, z: -18.5 }, { x:   2.2, y: -2.2, z: -18.5 }
+        ],
+        model3DLines: [
+            [0,1], [0,4], [0,5], [4,5], [1,2], [1,3], [2,3], [1,4], [1,5], [2,4], [3,5], [2,6], [3,7], [6,7],
+            [4,14], [5,15], [6,14], [7,15], [6,8], [7,9], [8,9], [14,10], [15,11], [10,11], [8,10], [9,11],
+            [8,12], [9,13], [12,13], [10,12], [11,13], [10,26], [11,27], [26,27], [12,26], [13,27],
+            [14,16], [16,18], [18,20], [20,10], [16,10], [15,17], [17,19], [19,21], [21,11], [17,11],
+            [22,23], [22,24], [24,25], [25,23], [8,22], [9,22], [12,23], [13,23]
+        ]
+    };
+
+    // ==========================================
+    // 2. MATH UTILITIES
+    // ==========================================
+    
+	class Vector3 {
+        constructor(x=0, y=0, z=0) { this.x=x; this.y=y; this.z=z; }
+        add(v) { return new Vector3(this.x+v.x, this.y+v.y, this.z+v.z); }
+        sub(v) { return new Vector3(this.x-v.x, this.y-v.y, this.z-v.z); }
+        mul(s) { return new Vector3(this.x*s, this.y*s, this.z*s); }
+        dot(v) { return this.x*v.x + this.y*v.y + this.z*v.z; }
+        cross(v) { return new Vector3(this.y*v.z - this.z*v.y, this.z*v.x - this.x*v.z, this.x*v.y - this.y*v.x); }
+        mag() { return Math.sqrt(this.x*this.x + this.y*this.y + this.z*this.z); }
+        normalize() { let m = this.mag(); return m > 0 ? this.mul(1.0/m) : new Vector3(); }
+        clone() { return new Vector3(this.x, this.y, this.z); }
+    }
+
+    class Quaternion {
+        constructor(w=1, x=0, y=0, z=0) { this.w=w; this.x=x; this.y=y; this.z=z; }
+        normalize() {
+            let m = Math.sqrt(this.w*this.w + this.x*this.x + this.y*this.y + this.z*this.z);
+            if (m > 0) { this.w/=m; this.x/=m; this.y/=m; this.z/=m; }
+            return this;
+        }
+        multiply(q) {
+            return new Quaternion(
+                this.w*q.w - this.x*q.x - this.y*q.y - this.z*q.z,
+                this.w*q.x + this.x*q.w + this.y*q.z - this.z*q.y,
+                this.w*q.y - this.x*q.z + this.y*q.w + this.z*q.x,
+                this.w*q.z + this.x*q.y - this.y*q.x + this.z*q.w
+            );
+        }
+        rotateVector(v) {
+            let qVec = new Vector3(this.x, this.y, this.z);
+            let uv = qVec.cross(v);
+            let uuv = qVec.cross(uv);
+            return v.add(uv.mul(2.0 * this.w)).add(uuv.mul(2.0));
+        }
+        toEulerRad() {
+            let m10 = 2*(this.x*this.y + this.z*this.w);
+            let m11 = 1 - 2*(this.x*this.x + this.z*this.z);
+            let m02 = 2*(this.x*this.z + this.y*this.w);
+            let m12 = 2*(this.y*this.z - this.x*this.w);
+            let m22 = 1 - 2*(this.x*this.x + this.y*this.y);
+            let pitch = Math.asin(MathUtils.clamp(-m12, -1.0, 1.0));
+            let yaw = Math.atan2(m02, m22);
+            let roll = Math.atan2(-m10, m11); 
+            return { roll: roll, pitch: pitch, yaw: yaw };
+        }
+        static fromEulerZXY(roll, pitch, yaw) {
+            let cy = Math.cos(yaw * APP_CONSTANTS.HALF), sy = Math.sin(yaw * APP_CONSTANTS.HALF);
+            let cp = Math.cos(pitch * APP_CONSTANTS.HALF), sp = Math.sin(pitch * APP_CONSTANTS.HALF);
+            let cr = Math.cos(roll * APP_CONSTANTS.HALF), sr = Math.sin(roll * APP_CONSTANTS.HALF);
+            return new Quaternion(
+                cy*cp*cr + sy*sp*sr,
+                cy*sp*cr + sy*cp*sr,
+                sy*cp*cr - cy*sp*sr,
+                cy*cp*sr - sy*sp*cr
+            );
+        }
+        clone() { return new Quaternion(this.w, this.x, this.y, this.z); }
+    }
+
+    class Matrix3x3 {
+        constructor(m = [1,0,0, 0,1,0, 0,0,1]) { this.m = m; }
+        mulVec(v) {
+            return new Vector3(
+                this.m[0]*v.x + this.m[1]*v.y + this.m[2]*v.z,
+                this.m[3]*v.x + this.m[4]*v.y + this.m[5]*v.z,
+                this.m[6]*v.x + this.m[7]*v.y + this.m[8]*v.z
+            );
+        }
+        inverse() {
+            let [m00, m01, m02, m10, m11, m12, m20, m21, m22] = this.m;
+            let det = m00*(m11*m22 - m12*m21) - m01*(m10*m22 - m12*m20) + m02*(m10*m21 - m11*m20);
+            if (det === 0) return new Matrix3x3();
+            let invDet = 1.0 / det;
+            return new Matrix3x3([
+                (m11*m22 - m12*m21)*invDet, (m02*m21 - m01*m22)*invDet, (m01*m12 - m02*m11)*invDet,
+                (m12*m20 - m10*m22)*invDet, (m00*m22 - m02*m20)*invDet, (m02*m10 - m00*m12)*invDet,
+                (m10*m21 - m11*m20)*invDet, (m01*m20 - m00*m21)*invDet, (m00*m11 - m01*m10)*invDet
+            ]);
+        }
+    }
+	
+	class MathUtils {
+        static normalize360(angleDeg) { let a = angleDeg % APP_CONSTANTS.CIRCLE_DEG; return a < 0 ? a + APP_CONSTANTS.CIRCLE_DEG : a; }
+        
+        // Angle normalization helpers.
+        static normalizeRad2PI(angleRad) { let a = angleRad % APP_CONSTANTS.CIRCLE_RAD; return a < 0 ? a + APP_CONSTANTS.CIRCLE_RAD : a; }
+        static normalizeRadPI(angleRad) {
+            let a = (angleRad + APP_CONSTANTS.PI) % APP_CONSTANTS.CIRCLE_RAD;
+            if (a < 0) a += APP_CONSTANTS.CIRCLE_RAD;
+            return a - APP_CONSTANTS.PI;
+        }
+        // End component initialization.------------
+
+        static clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+        static localToWorld(localX, localZ, originX, originZ, headingRad, outObj = { x: 0, z: 0 }) {
+            let cosH = Math.cos(headingRad), sinH = Math.sin(headingRad);
+            outObj.x = originX + localX * cosH + localZ * sinH;
+            outObj.z = originZ - localX * sinH + localZ * cosH;
+            return outObj;
+        }
+        static localToWorld3D(lx, ly, lz, posX, posY, posZ, pitchRad, rollRad, yawRad, outObj = { x: 0, y: 0, z: 0 }) {
+            let cr = Math.cos(rollRad), sr = Math.sin(rollRad);
+            let cp = Math.cos(pitchRad), sp = Math.sin(pitchRad);
+            let cy = Math.cos(yawRad), sy = Math.sin(yawRad);
+            let x1 = lx * cr + ly * sr, y1 = -lx * sr + ly * cr, z1 = lz;
+            let x2 = x1, y2 = y1 * cp + z1 * sp, z2 = -y1 * sp + z1 * cp;
+            let x3 = x2 * cy + z2 * sy, y3 = y2, z3 = -x2 * sy + z2 * cy;
+            outObj.x = posX + x3; outObj.y = posY + y3; outObj.z = posZ + z3;
+            return outObj;
+        }
+    }
+
+    class FormatUtils {
+        static formatFloat1(value) { return value.toFixed(CONFIG.HUD_FORMAT.floatDecimals).replace(/^-0\.0$/, '0.0'); }
+    }
+
+    // ==========================================
+    // 3. INPUT SYSTEM
+    // ==========================================
+    const CONFIG_ITEMS = [
+        { id: 'pitchAxis', label: 'Pitch', type: CONFIG_ITEM_TYPE.AXIS, mapName: 'gamepadMap' },
+        { id: 'rollAxis', label: 'Roll (AIL)', type: CONFIG_ITEM_TYPE.AXIS, mapName: 'gamepadMap' },
+        { id: 'yawAxis', label: 'Yaw (RUD)', type: CONFIG_ITEM_TYPE.AXIS, mapName: 'gamepadMap' },
+        { id: 'speedbrakeExtend', label: 'Spdbrk Extend', type: CONFIG_ITEM_TYPE.BUTTON, mapName: 'gamepadMap' },
+        { id: 'speedbrakeRetract', label: 'Spdbrk Retract', type: CONFIG_ITEM_TYPE.BUTTON, mapName: 'gamepadMap' },
+        { id: 'GEAR', label: 'Gear Deploy', type: CONFIG_ITEM_TYPE.BUTTON, mapName: 'gamepadActionMap' },
+        { id: 'BRAKE', label: 'Wheel Brake', type: CONFIG_ITEM_TYPE.BUTTON, mapName: 'gamepadActionMap' },
+        { id: 'CAMERA', label: 'Toggle Camera', type: CONFIG_ITEM_TYPE.BUTTON, mapName: 'gamepadActionMap' },
+        { id: 'PAUSE', label: 'Pause', type: CONFIG_ITEM_TYPE.BUTTON, mapName: 'gamepadActionMap' },
+        { id: 'RESTART', label: 'Return to Menu', type: CONFIG_ITEM_TYPE.BUTTON, mapName: 'gamepadActionMap' }
+    ];
+
+    class ConfigManager {
+        constructor() {
+            this.el = document.getElementById('configUI');
+            this.container = document.getElementById('config-container');
+            this.container.addEventListener('click', (event) => {
+                const button = event.target.closest('[data-config-id]');
+                if (button) this.toggleAssign(button.dataset.configId);
+            });
+            this.active = false;
+            this.awaiting = null; 
+            this.baselineAxes = [];
+        }
+        loadFromStorage() {
+            try {
+                let gm = localStorage.getItem(CONFIG.SYSTEM.storageKeys.gamepadMap);
+                let gam = localStorage.getItem(CONFIG.SYSTEM.storageKeys.gamepadActionMap);
+                if (gm) Object.assign(CONFIG.INPUT.gamepadMap, JSON.parse(gm));
+                if (gam) Object.assign(CONFIG.INPUT.gamepadActionMap, JSON.parse(gam));
+            } catch(e) { }
+        }
+        saveToStorage() {
+            try {
+                localStorage.setItem(CONFIG.SYSTEM.storageKeys.gamepadMap, JSON.stringify(CONFIG.INPUT.gamepadMap));
+                localStorage.setItem(CONFIG.SYSTEM.storageKeys.gamepadActionMap, JSON.stringify(CONFIG.INPUT.gamepadActionMap));
+            } catch(e) {}
+        }
+        open() { this.active = true; this.el.style.display = "block"; this.render(); }
+        close() { this.active = false; this.el.style.display = "none"; this.awaiting = null; this.saveToStorage(); }
+        render() {
+            let ui = HUD_TEXT_RESOURCE.CONFIG_UI;
+            let html = `<table class="config-table"><tr>${ui.headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
+            CONFIG_ITEMS.forEach(item => {
+                let currentVal = CONFIG.INPUT[item.mapName][item.id];
+                let displayVal = currentVal !== undefined ? (item.type === CONFIG_ITEM_TYPE.AXIS ? `${ui.axisPrefix}${currentVal}` : `${ui.buttonPrefix}${currentVal}`) : ui.none;
+                let btnText = ui.btnAssign, btnClass = ui.classAssign;
+                if (this.awaiting && this.awaiting.id === item.id) {
+                    displayVal = ui.waitingInput; btnText = ui.btnCancel; btnClass = ui.classCancel;
+                }
+                html += `<tr><td>${item.label}</td><td>${item.type.toUpperCase()}</td><td>${displayVal}</td><td><button class="${btnClass}" data-config-id="${item.id}">${btnText}</button></td></tr>`;
+            });
+            this.container.innerHTML = html + `</table>`;
+        }
+        toggleAssign(id) {
+            if (this.awaiting && this.awaiting.id === id) { this.awaiting = null; } 
+            else {
+                this.awaiting = CONFIG_ITEMS.find(i => i.id === id);
+                let gps = navigator.getGamepads ? navigator.getGamepads() : [];
+                for (let i = 0; i < gps.length; i++) { if (gps[i]) { this.baselineAxes = [...gps[i].axes]; break; } }
+            }
+            this.render();
+        }
+        update() {
+            if (!this.active || !this.awaiting) return;
+            let gps = navigator.getGamepads ? navigator.getGamepads() : [];
+            for (let gp of gps) {
+                if (!gp) continue;
+                if (this.awaiting.type === CONFIG_ITEM_TYPE.AXIS) {
+                    for (let i = 0; i < gp.axes.length; i++) {
+                        let base = this.baselineAxes[i] || 0;
+                        if (Math.abs(gp.axes[i] - base) > CONFIG.INPUT.axisAssignThreshold) {
+                            CONFIG.INPUT[this.awaiting.mapName][this.awaiting.id] = i;
+                            this.awaiting = null; this.render(); return;
+                        }
+                    }
+                } else if (this.awaiting.type === CONFIG_ITEM_TYPE.BUTTON) {
+                    for (let i = 0; i < gp.buttons.length; i++) {
+                        if (gp.buttons[i].pressed) {
+                            CONFIG.INPUT[this.awaiting.mapName][this.awaiting.id] = i;
+                            this.awaiting = null; this.render(); return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    class KeyboardDevice {
+        constructor(config) {
+            this.keys = {}; this.config = config; this.axes = { pitch: 0, roll: 0, yaw: 0, speedbrakeDir: 0 };
+            this.handleKeyDown = this.handleKeyDown.bind(this); this.handleKeyUp = this.handleKeyUp.bind(this);
+            window.addEventListener('keydown', this.handleKeyDown); window.addEventListener('keyup', this.handleKeyUp);
+        }
+        handleKeyDown(e) { if (Object.values(this.config.keyMap).includes(e.code) || Object.values(this.config.actionMap).includes(e.code)) e.preventDefault(); this.keys[e.code] = true; }
+        handleKeyUp(e) { this.keys[e.code] = false; }
+        update(dt) {
+            let km = this.config.keyMap;
+            // 修正：引く（ArrowDown等）とプラスになるよう統一
+            let targetPitch = (this.keys[km.pitchUp] ? 1 : 0) - (this.keys[km.pitchDown] ? 1 : 0);
+            let targetRoll  = (this.keys[km.rollRight] ? 1 : 0) - (this.keys[km.rollLeft] ? 1 : 0);
+            let targetYaw   = (this.keys[km.yawRight] ? 1 : 0) - (this.keys[km.yawLeft] ? 1 : 0);
+            let factor = MathUtils.clamp(this.config.inputSmoothing * dt, 0.0, 1.0);
+            this.axes.pitch += (targetPitch - this.axes.pitch) * factor;
+            this.axes.roll  += (targetRoll - this.axes.roll) * factor;
+            this.axes.yaw   += (targetYaw - this.axes.yaw) * factor;
+            this.axes.speedbrakeDir = (this.keys[km.speedbrakeExtend] ? 1 : 0) - (this.keys[km.speedbrakeRetract] ? 1 : 0);
+        }
+        getAxes() { return this.axes; }
+        isActionPressed(actionName) { return !!this.keys[this.config.actionMap[actionName]]; }
+        getBinding(id) {
+            let am = this.config.actionMap, km = this.config.keyMap;
+            switch(id) {
+                case "cam": return am.CAMERA; case "pitch": return km.pitchDown + '/' + km.pitchUp;
+                case "roll": return km.rollLeft + '/' + km.rollRight; case "yaw": return km.yawLeft + '/' + km.yawRight;
+                case "spdb": return km.speedbrakeExtend + '/' + km.speedbrakeRetract; case "gear": return am.GEAR; case "brake": return am.BRAKE;
+                case "restart": return am.RESTART; case "pause": return am.PAUSE;
+            }
+            return null;
+        }
+    }
+
+    class GamepadDevice {
+        constructor(config) {
+            this.config = config; this.axes = { pitch: 0, roll: 0, yaw: 0, speedbrakeDir: 0 };
+            this.gamepadIndex = null;
+            this.handleConnect = this.handleConnect.bind(this); this.handleDisconnect = this.handleDisconnect.bind(this);
+            window.addEventListener("gamepadconnected", this.handleConnect); window.addEventListener("gamepaddisconnected", this.handleDisconnect);
+        }
+        handleConnect(e) { if (this.gamepadIndex === null) this.gamepadIndex = e.gamepad.index; }
+        handleDisconnect(e) { if (this.gamepadIndex === e.gamepad.index) this.gamepadIndex = null; }
+        _applyDeadzone(value, deadzone) { return Math.abs(value) < deadzone ? 0 : Math.sign(value) * ((Math.abs(value) - deadzone) / (1.0 - deadzone)); }
+        _getActiveGamepad() { return (this.gamepadIndex !== null && navigator.getGamepads) ? navigator.getGamepads()[this.gamepadIndex] || null : null; }
+        update(dt) { 
+            let gp = this._getActiveGamepad(); if (!gp) return;
+            let gm = this.config.gamepadMap, dz = this.config.gamepadDeadzone;
+            // 修正：マイナス反転を外し、引くとプラスの標準仕様に統一
+            if (gm.pitchAxis !== undefined && gm.pitchAxis < gp.axes.length) this.axes.pitch = this._applyDeadzone(gp.axes[gm.pitchAxis], dz);
+            if (gm.rollAxis !== undefined && gm.rollAxis < gp.axes.length)  this.axes.roll  = this._applyDeadzone(gp.axes[gm.rollAxis], dz);
+            if (gm.yawAxis !== undefined && gm.yawAxis < gp.axes.length)   this.axes.yaw   = this._applyDeadzone(gp.axes[gm.yawAxis], dz);
+            let ext = (gm.speedbrakeExtend !== undefined && gm.speedbrakeExtend < gp.buttons.length && gp.buttons[gm.speedbrakeExtend].pressed) ? 1 : 0;
+            let ret = (gm.speedbrakeRetract !== undefined && gm.speedbrakeRetract < gp.buttons.length && gp.buttons[gm.speedbrakeRetract].pressed) ? 1 : 0;
+            this.axes.speedbrakeDir = ext - ret;
+        }
+        getAxes() { return this.axes; }
+        isActionPressed(actionName) {
+            let gp = this._getActiveGamepad(); if (!gp) return false;
+            let btnIndex = this.config.gamepadActionMap[actionName];
+            return (btnIndex !== undefined && btnIndex < gp.buttons.length && gp.buttons[btnIndex]) ? gp.buttons[btnIndex].pressed : false;
+        }
+        getGamepadState() {
+            if (this.gamepadIndex === null) return { status: GAMEPAD_STATUS.NOT_CONNECTED };
+            let gp = this._getActiveGamepad(); if (!gp) return { status: GAMEPAD_STATUS.LOST };
+            let pressedButtons = [];
+            for (let i = 0; i < gp.buttons.length; i++) { if (gp.buttons[i].pressed) pressedButtons.push(i); }
+            return { status: GAMEPAD_STATUS.CONNECTED, p: this.axes.pitch, r: this.axes.roll, y: this.axes.yaw, rawAxes: gp.axes, pressedButtons: pressedButtons };
+        }
+    }
+
+    class InputManager {
+        constructor(config) {
+            this.config = config; this.devices = []; this.axes = { pitch: 0, roll: 0, yaw: 0, speedbrake: 0 };
+            this.actionStates = {}; this.prevActionStates = {};
+        }
+        addDevice(device) { this.devices.push(device); }
+        
+        // Fully resets everything (used upon starting a new scenario)
+        resetState() { 
+            this.axes.pitch = 0; this.axes.roll = 0; this.axes.yaw = 0; this.axes.speedbrake = 0; 
+            for (let key in this.actionStates) {
+                this.actionStates[key] = false;
+                this.prevActionStates[key] = false;
+            }
+        }
+        
+        // Clears only aircraft control axes (used every frame in DEMO mode)
+        clearAxes() {
+            this.axes.pitch = 0; this.axes.roll = 0; this.axes.yaw = 0; this.axes.speedbrake = 0;
+        }
+
+        updateActionStates() {
+            for (let actionName of Object.keys(this.config.actionMap)) {
+                this.prevActionStates[actionName] = !!this.actionStates[actionName];
+                this.actionStates[actionName] = this.devices.some(device => device.isActionPressed(actionName));
+            }
+        }
+        isActionPressed(actionName) { return !!this.actionStates[actionName]; }
+        isActionJustPressed(actionName) { return !!this.actionStates[actionName] && !this.prevActionStates[actionName]; }
+        update(dt) {
+            let p = 0, r = 0, y = 0, sbDir = 0;
+            for (let device of this.devices) {
+                device.update(dt); let devAxes = device.getAxes();
+                if (Math.abs(devAxes.pitch) > Math.abs(p)) p = devAxes.pitch;
+                if (Math.abs(devAxes.roll) > Math.abs(r)) r = devAxes.roll;
+                if (Math.abs(devAxes.yaw) > Math.abs(y)) y = devAxes.yaw;
+                if (Math.abs(devAxes.speedbrakeDir) > Math.abs(sbDir)) sbDir = devAxes.speedbrakeDir;
+            }
+            this.axes.pitch = p; this.axes.roll = r; this.axes.yaw = y;
+            this.axes.speedbrake = MathUtils.clamp(this.axes.speedbrake + sbDir * this.config.speedbrakeRate * dt, 0.0, 1.0);
+        }
+        getAxes() { return this.axes; }
+        getGamepadState() { let gpDevice = this.devices.find(d => d instanceof GamepadDevice); return gpDevice ? gpDevice.getGamepadState() : null; }
+        getKeyboardDevice() { return this.devices.find(d => d instanceof KeyboardDevice); }
+    }
+
+    // ==========================================
+    // 4. DUMMY DATA PROVIDER (For Testing Interface)
+    // ==========================================
+    class DummyAvionics {
+        constructor() {
+            this.reset();
+        }
+        reset() {
+            this.time = 0;
+            this.cameraMode = CAMERA_MODE.COCKPIT;
+            let gc = this.getProfile().gearConfig;
+            this.gearDown = gc ? !!gc.initialDown : false;
+        }
+        update(dt) { this.time += dt; }
+        operateGear() {
+            let gc = this.getProfile().gearConfig;
+            if (!this.gearDown) {
+                this.gearDown = true;
+            } else if (gc && gc.retractable) {
+                this.gearDown = false;
+            }
+        }
+        getPosX() { return 0; }
+        getPosY() { return 2000; }
+        getPosZ() { return -5000; }
+        getVelocityMPS() { return 100; } 
+        getVerticalVelocityMPS() { return -5; } 
+        // Test animation
+        getPitchRad() { return Math.sin(this.time * 0.5) * 0.2; }
+        getRollRad() { return Math.cos(this.time * 0.3) * 0.3; }
+        getYawRad() { return this.time * 0.1; }
+        getGammaRad() { return this.getPitchRad() - 0.05; }
+        getPitchDeg() { return this.getPitchRad() * APP_CONSTANTS.RAD_TO_DEG; }
+        getRollDeg() { return this.getRollRad() * APP_CONSTANTS.RAD_TO_DEG; }
+        getYawDeg() { return MathUtils.normalize360(this.getYawRad() * APP_CONSTANTS.RAD_TO_DEG); }
+        getGammaDeg() { return this.getGammaRad() * APP_CONSTANTS.RAD_TO_DEG; }
+        getAltitudeFt() { return this.getPosY() * APP_CONSTANTS.M_TO_FT; }
+        getVelocityKts() { return this.getVelocityMPS() * APP_CONSTANTS.MPS_TO_KNOTS; }
+        getVerticalVelocityFps() { return this.getVerticalVelocityMPS() * APP_CONSTANTS.MPS_TO_FPS; }
+        getCrosswindKts() { return 0; }
+        isGearDown() { return this.gearDown; }
+        getProfile() { return AIRCRAFT_PROFILE; }
+        getScenario() { return { runway: { x: 0, z: 0, headingRad: 0, width: 90, length: 4000, centerLineSpacing: 100, centerLineDashLength: 50, approachLightsLength: 3000, approachLightsSpacing: 100, approachLightsWidth: 15 } }; }
+        getControlSurfaces() { return { elevator: 0, aileron: 0, rudder: 0, speedbrake: 0 }; }
+        getVelocityVectorWorld() { return { x: 0, y: -5, z: 100 }; }
+    }
+
+    class HUDDataProvider {
+        constructor() { this.avionics = null; this.input = null; this.appState = { mode: "TEST", isPaused: false, cameraMode: CAMERA_MODE.COCKPIT }; }
+        bindContext(avionics, inputManager, isPaused, cameraMode, controlMode) {
+            this.avionics = avionics; this.input = inputManager;
+            this.appState.isPaused = isPaused; this.appState.cameraMode = cameraMode;
+            this.appState.mode = controlMode;
+        }
+        getLeftPanel() {
+            let fmt = CONFIG.HUD_FORMAT;
+            return HUD_TEXT_RESOURCE.LEFT_PANEL.map(t => {
+                let val = "0";
+                if (t.id === "spd") val = `${Math.floor(this.avionics.getVelocityKts())} ${t.unit}`;
+                else if (t.id === "hdg") val = `${Math.floor(this.avionics.getYawDeg()).toString().padStart(fmt.hdgPadLength, fmt.hdgPadChar)}${t.unit}`;
+                else if (t.id === "aoa") val = `${FormatUtils.formatFloat1(this.avionics.getPitchDeg() - this.avionics.getGammaDeg())}${t.unit}`;
+                else if (t.id === "fpa") val = `${FormatUtils.formatFloat1(this.avionics.getGammaDeg())}${t.unit}`;
+                else if (t.id === "roll") val = `${FormatUtils.formatFloat1(this.avionics.getRollDeg())}${t.unit}`;
+                return { label: t.label, value: val };
+            });
+        }
+        getRightPanel() {
+            let fmt = CONFIG.HUD_FORMAT;
+            return HUD_TEXT_RESOURCE.RIGHT_PANEL.map(t => {
+                let val = "0";
+                if (t.id === "alt") val = `${String(Math.floor(this.avionics.getAltitudeFt())).padStart(fmt.rightPanelValuePad, ' ')} ${t.unit}`;
+                else if (t.id === "sink") val = `${FormatUtils.formatFloat1(-this.avionics.getVerticalVelocityFps()).padStart(fmt.rightPanelValuePad, ' ')} ${t.unit}`;
+                else if (t.id === "wind") {
+                    const windKts = this.avionics.getCrosswindKts();
+                    if (Math.abs(windKts) < 0.5) val = HUD_TEXT_RESOURCE.WIND_STATE.CALM;
+                    else if (windKts > 0) val = `${Math.round(Math.abs(windKts)).toString().padStart(fmt.windValuePad, ' ')}${HUD_TEXT_RESOURCE.WIND_STATE.RIGHT_SUFFIX}`;
+                    else val = `${HUD_TEXT_RESOURCE.WIND_STATE.LEFT_PREFIX}${Math.round(Math.abs(windKts)).toString().padStart(fmt.windValuePad, ' ')}${HUD_TEXT_RESOURCE.WIND_STATE.LEFT_SUFFIX}`;
+                }
+                else if (t.id === "gear") val = this.avionics.isGearDown() ? HUD_TEXT_RESOURCE.GEAR_STATE.DOWN : HUD_TEXT_RESOURCE.GEAR_STATE.UP;
+                return { label: t.label, value: val };
+            });
+        }
+        getTopRightInfo() {
+            let tr = HUD_TEXT_RESOURCE.TOP_RIGHT, pad = CONFIG.HUD_FORMAT.labelPadLength;
+            return {
+                mode: `${tr.modePrefix}${this.appState.mode}${tr.modeSuffix}`,
+                guidance: `${tr.guidance.padEnd(pad, ' ')}: ${this.avionics.getScenario()?.guidanceLabel || "MANUAL"}`,
+                aircraft: `${tr.aircraft.padEnd(pad, ' ')}: ${AIRCRAFT_PROFILE.name.replace(/\s*\(RIGID BODY\)/i, '')}`
+            };
+        }
+        getSurfaces() {
+            let sfc = this.avionics.getControlSurfaces();
+            let items = HUD_TEXT_RESOURCE.SURFACES.items.map(t => {
+                let valStr = "0.0";
+                if (t.id === "elev") {
+                    valStr = FormatUtils.formatFloat1(sfc.elevator * APP_CONSTANTS.RAD_TO_DEG);
+                } else if (t.id === "ail") {
+                    valStr = FormatUtils.formatFloat1(sfc.aileron * APP_CONSTANTS.RAD_TO_DEG);
+                } else if (t.id === "rud") {
+                    valStr = FormatUtils.formatFloat1(sfc.rudder * APP_CONSTANTS.RAD_TO_DEG);
+                } else if (t.id === "spdb") {
+                    // Convert the speedbrake fraction to a percentage for display.
+                    valStr = Math.floor(sfc.speedbrake * APP_CONSTANTS.PERCENT_SCALE).toString();
+                }
+                return { 
+                    label: `${t.label.padEnd(CONFIG.HUD_FORMAT.labelPadLength, ' ')}:`, 
+                    value: valStr 
+                };
+            });
+            return { title: HUD_TEXT_RESOURCE.SURFACES.title, items: items };
+        }
+        getControls() {
+            let ctrlRes = HUD_TEXT_RESOURCE.CONTROLS, prefixes = CONFIG.INPUT.keyPrefixesToStrip;
+            let res = { title: ctrlRes.title, camLabel: `${ctrlRes.camLabel} ${this.appState.cameraMode}`, items: [] };
+            let kbDevice = this.input.getKeyboardDevice();
+            ctrlRes.items.forEach(c => {
+                let rawKey = kbDevice ? kbDevice.getBinding(c.id) : null;
+                let formattedKey = rawKey || "";
+                for (let prefix of prefixes) formattedKey = formattedKey.replaceAll(prefix, '');
+                res.items.push({ label: c.label, keyStr: formattedKey });
+            });
+            return res;
+        }
+        getCriteria() {
+            const record = this.avionics?.physics?.touchdownRecord;
+            if (!record) {
+                return { title: `${HUD_TEXT_RESOURCE.CRITERIA.title} - AIRBORNE`,
+                    items: HUD_TEXT_RESOURCE.CRITERIA.items.map(c => ({ label: c.label, value: c.id === "rollout" ? "N/A" : "--" })) };
+            }
+            const format = (value, digits = 1) => Number.isFinite(value) ? value.toFixed(digits) : "N/A";
+            if (record.crash) {
+                const crashValues = {
+                    speed: `${format(record.speedKts, 0)} KTS FAIL`,
+                    sink: `${format(record.sinkRateFps, 1)} fps FAIL`,
+                    drift: `${format(record.lateralOffsetM, 1)} m FAIL`,
+                    pitch: `${format(record.pitchDeg, 1)}° FAIL`,
+                    yaw: `${format(record.yawAlignmentDeg, 1)}° FAIL`,
+                    roll: `${format(record.rollDeg, 1)}° FAIL`,
+                    rollout: `IMPACT ${format(record.timestampSeconds, 1)} s`
+                };
+                return {
+                    title: `${HUD_TEXT_RESOURCE.CRITERIA.title} - CRASH / LANDING FAILED`,
+                    subtitle: record.crashReason || record.contactType || "IMPACT",
+                    items: HUD_TEXT_RESOURCE.CRITERIA.items.map(item => ({
+                        label: item.label,
+                        value: crashValues[item.id] || "FAIL",
+                        // A crash marks assessment rows as failed; IMPACT is informational.
+                        failed: item.id !== "rollout"
+                    }))
+                };
+            }
+            const status = passed => passed ? "PASS" : "FAIL";
+            const c = record.checks;
+            const rollout = this.avionics?.physics?.rolloutController;
+            const rolloutLabel = rollout?.landed ? (rollout.stopped ? "STOPPED" : "ROLLOUT") : "";
+            const title = `${HUD_TEXT_RESOURCE.CRITERIA.title} - ${record.passed ? "PASS" : "FAIL"}${rolloutLabel ? " / " + rolloutLabel : ""}`;
+            const values = {
+                speed: `${format(record.speedKts, 0)} KTS ${status(c.speed)}`,
+                sink: `${format(record.sinkRateFps, 1)} fps ${status(c.sink)}`,
+                drift: `${format(record.lateralOffsetM, 1)} m ${status(c.drift && c.runway)}`,
+                pitch: `${format(record.pitchDeg, 1)}° ${status(c.pitch)}`,
+                yaw: `${format(record.yawAlignmentDeg, 1)}° ${status(c.yaw)}`,
+                roll: `${format(record.rollDeg, 1)}° ${status(c.roll)}`,
+                rollout: rollout?.landed ? `${format(rollout.distanceM, 0)} m${rollout.stopped ? " STOPPED" : ""}` : "--"
+            };
+            const failedChecks = {
+                speed: !c.speed,
+                sink: !c.sink,
+                drift: !(c.drift && c.runway),
+                pitch: !c.pitch,
+                yaw: !c.yaw,
+                roll: !c.roll
+            };
+            return { title, items: HUD_TEXT_RESOURCE.CRITERIA.items.map(item => ({
+                label: item.label,
+                value: values[item.id] || "N/A",
+                failed: failedChecks[item.id] === true
+            })) };
+        }
+        getDebugInfo() {
+            // Joystick diagnostics are intentionally omitted from the flight HUD.
+            return [];
+            let infos = [], gpState = this.input.getGamepadState();
+            if (gpState) {
+                let res = HUD_TEXT_RESOURCE.DEBUG, dec = CONFIG.HUD_FORMAT.debugDecimals;
+                let text = `${res.gamepad} `;
+                if (gpState.status === GAMEPAD_STATUS.NOT_CONNECTED) infos.push(text + res.notConnected);
+                else if (gpState.status === GAMEPAD_STATUS.LOST) infos.push(text + res.lost);
+                else if (gpState.status === GAMEPAD_STATUS.CONNECTED) {
+                    text += `${res.connected} | ${res.p}${gpState.p.toFixed(dec)} ${res.r}${gpState.r.toFixed(dec)} ${res.y}${gpState.y.toFixed(dec)}`;
+                    infos.push(text);
+                    if (gpState.rawAxes && gpState.rawAxes.length > 0) {
+                        infos.push(res.rawAxes);
+                        let axes = Array.from(gpState.rawAxes), chunkSize = CONFIG.HUD_RENDERER.debugAxesChunkSize;
+                        for (let i = 0; i < axes.length; i += chunkSize) {
+                            let chunk = axes.slice(i, i + chunkSize);
+                            infos.push(res.indent + chunk.map((v, idx) => `${res.axisPrefix}${i + idx}:${(v >= 0 ? '+' : '') + v.toFixed(dec)}`).join(res.indent));
+                        }
+                    }
+                    infos.push(gpState.pressedButtons && gpState.pressedButtons.length > 0 ? `${res.rawBtns} [${gpState.pressedButtons.join(', ')}]` : `${res.rawBtns} ${res.none}`);
+                }
+            }
+            return infos;
+        }
+    }
+
+// ==========================================
+    // BLOCK 2: KINEMATICS (UFO PHYSICS) & AVIONICS WRAPPER
+    // ==========================================
+    class AircraftKinematics {
+        constructor(profile) {
+            this.profile = profile;
+            this.pos = { x: 0, y: APP_CONSTANTS.PHYSICS.DEFAULT_START_ALTITUDE_M, z: APP_CONSTANTS.PHYSICS.DEFAULT_START_DOWNRANGE_M }; // Starting position based on scenario
+            this.pitch = 0;
+            this.roll = 0;
+            this.yaw = 0;
+            this.gammaRad = 0;
+            this.velocityMPS = profile.kinematicsConfig ? profile.kinematicsConfig.baseSpeedMPS : 150;
+            this.velWorld = { x: 0, y: 0, z: 0 };
+            this.controlSurfaces = { elevator: 0, aileron: 0, rudder: 0, speedbrake: 0 };
+            this.gearDown = profile.gearConfig ? !!profile.gearConfig.initialDown : false;
+            
+            // Initialize the velocity vector from the current flight state.
+            this._updateVelocityVector();
+        }
+
+        operateGear() {
+            let gc = this.profile.gearConfig;
+            if (!this.gearDown) {
+                this.gearDown = true;
+            } else if (gc && gc.retractable) {
+                this.gearDown = false;
+            }
+        }
+
+        _updateVelocityVector() {
+            let cosG = Math.cos(this.gammaRad), sinG = Math.sin(this.gammaRad);
+            let cosY = Math.cos(this.yaw), sinY = Math.sin(this.yaw);
+            this.velWorld.x = this.velocityMPS * cosG * sinY;
+            this.velWorld.y = this.velocityMPS * sinG;
+            this.velWorld.z = this.velocityMPS * cosG * cosY;
+        }
+
+        update(dt, axes) {
+            // Stop safely when input axes or kinematics configuration are missing.
+            if (!axes || !this.profile.kinematicsConfig) return;
+            let kin = this.profile.kinematicsConfig;
+
+            // Direct attitude rotation from inputs (UFO behavior)
+            this.pitch = MathUtils.clamp(this.pitch + axes.pitch * kin.pitchRateRad * dt, -kin.maxPitchRad, kin.maxPitchRad);
+            this.roll  = MathUtils.normalizeRadPI(this.roll + axes.roll * kin.rollRateRad * dt);
+            this.yaw   = MathUtils.normalizeRad2PI(this.yaw + axes.yaw * kin.yawRateRad * dt);
+
+            // Flight path angle follows pitch with a delay to simulate AOA
+            let targetGamma = this.pitch * (1.0 - kin.pitchToAoaRatio) - axes.pitch * kin.stickDirectAoaRad;
+            let gammaFollow = MathUtils.clamp(kin.gammaFollowRate * dt, 0.0, 1.0);
+            this.gammaRad = MathUtils.clamp(this.gammaRad + (targetGamma - this.gammaRad) * gammaFollow, -kin.maxPitchRad, kin.maxPitchRad);
+
+            // Control surface deflections for HUD
+            this.controlSurfaces.elevator   = axes.pitch * kin.maxDeflectionRad;
+            this.controlSurfaces.aileron    = axes.roll * kin.maxDeflectionRad;
+            this.controlSurfaces.rudder     = axes.yaw * kin.maxDeflectionRad;
+            this.controlSurfaces.speedbrake = axes.speedbrake;
+
+            // Speed responds dynamically to pitch and speedbrake
+            let pitchAccel = -Math.sin(this.pitch) * kin.pitchSpeedAccelMPS2 - axes.pitch * kin.stickSpeedAccelMPS2;
+            let spdbDecel  = -axes.speedbrake * kin.speedbrakeDecelMPS2;
+            this.velocityMPS = MathUtils.clamp(
+                this.velocityMPS + (pitchAccel + spdbDecel) * dt,
+                kin.minSpeedMPS,
+                kin.maxSpeedMPS
+            );
+
+            this._updateVelocityVector();
+
+            // Update position
+            this.pos.x += this.velWorld.x * dt;
+            this.pos.y += this.velWorld.y * dt;
+            this.pos.z += this.velWorld.z * dt;
+        }
+    }
+
+    // Adapter exposing physics state to avionics and HUD consumers.
+    class Avionics {
+        constructor(physics) { 
+            this.physics = physics; 
+            this.cameraMode = CAMERA_MODE.COCKPIT;
+        }
+        
+        _safeGet(obj, key, fallback = 0) { return (obj && obj[key] !== undefined) ? obj[key] : fallback; }
+        update(dt, axes) { this.physics.update(dt, axes); }
+        operateGear() { this.physics.operateGear(); }
+        
+        getPosX() { return this.physics.state ? this.physics.state.pos.x : this.physics.pos.x; }
+        getPosY() { return this.physics.state ? this.physics.state.pos.y : this.physics.pos.y; }
+        getPosZ() { return this.physics.state ? this.physics.state.pos.z : this.physics.pos.z; }
+        getVelocityMPS() { return this.physics.velocityMPS; }
+        getVerticalVelocityMPS() { return this.physics.velWorld.y; }
+        
+        // Invert pitch to match conventional HUD attitude presentation.
+        getPitchRad() { return -this.physics.pitch; }
+        getRollRad() { return this.physics.roll; }
+        getYawRad() { return this.physics.yaw; }
+        
+        getGammaRad() { return this.physics.gammaRad; }
+        getPitchDeg() { return this.getPitchRad() * APP_CONSTANTS.RAD_TO_DEG; }
+        getRollDeg() { return this.getRollRad() * APP_CONSTANTS.RAD_TO_DEG; }
+        getYawDeg() { return MathUtils.normalize360(this.getYawRad() * APP_CONSTANTS.RAD_TO_DEG); }
+        getGammaDeg() { return this.getGammaRad() * APP_CONSTANTS.RAD_TO_DEG; }
+        getAltitudeFt() {
+            // ALT is ground clearance of the lowest main-gear contact point (AGL),
+            // not the commander's eye height. It therefore reads 0 ft when the gear
+            // is resting on the runway, while the cockpit camera remains at eye height.
+            const state = this.physics.state;
+            const positionY = state ? state.pos.y : this.physics.pos.y;
+            const groundY = this.physics.env?.groundY ?? 0;
+            if (!state?.ori?.rotateVector) {
+                return Math.max(0, positionY - groundY) * APP_CONSTANTS.M_TO_FT;
+            }
+            const gearClearanceOffsetY = Math.min(...LANDING_GEAR_CONFIG.MAIN_GEAR_OFFSETS_M.map(offset =>
+                state.ori.rotateVector(new Vector3(offset.x, offset.y, offset.z)).y
+            ));
+            return Math.max(0, positionY + gearClearanceOffsetY - groundY) * APP_CONSTANTS.M_TO_FT;
+        }
+        getVelocityKts() { return this.getVelocityMPS() * APP_CONSTANTS.MPS_TO_KNOTS; }
+        getVerticalVelocityFps() { return this.getVerticalVelocityMPS() * APP_CONSTANTS.MPS_TO_FPS; }
+        getCrosswindKts() { return (this.physics.windWorld?.x || 0) * APP_CONSTANTS.MPS_TO_KNOTS; }
+        isGearDown() { return this.physics.gearDown; }
+        getProfile() { return this.physics.profile; }
+        // 外部から物理エンジンに注入されたシナリオデータをそのままHUDやレンダラーへ横流しする
+	getScenario() { return this.physics.scenario; }
+        getControlSurfaces() { return this.physics.controlSurfaces; }
+        getVelocityVectorWorld() { return this.physics.velWorld; }
+    }
+
+    // ブロック2専用の自動テストスクリプト
+    class KinematicsTester {
+        static runAll() {
+            console.log("=== STARTING AUTOMATED TESTS (BLOCK 2: KINEMATICS) ===");
+            let passed = 0, failed = 0;
+            function assert(condition, testName) {
+                if (condition) { console.log(`[OK] ${testName}`); passed++; } 
+                else { console.error(`[FAIL] ${testName}`); failed++; }
+            }
+
+            try {
+                let testPhys = new AircraftKinematics(AIRCRAFT_PROFILE);
+                let testDt = 1.0; 
+                let testAxes = { pitch: 1.0, roll: 0, yaw: 0, speedbrake: 0 };
+                
+                testPhys.update(testDt, testAxes);
+                
+                let expectedPitch = 1.0 * AIRCRAFT_PROFILE.kinematicsConfig.pitchRateRad * testDt;
+                assert(Math.abs(testPhys.pitch - expectedPitch) < 0.001, "Pitch rate correctly applied based on input 1.0");
+                
+                let expectedElevator = 1.0 * AIRCRAFT_PROFILE.kinematicsConfig.maxDeflectionRad;
+                assert(Math.abs(testPhys.controlSurfaces.elevator - expectedElevator) < 0.001, "Elevator surface correctly responds to pitch input");
+
+                console.log(`%c=== TEST RESULTS: ${passed} PASSED, ${failed} FAILED ===`, failed === 0 ? "color: #0f0; font-weight: bold;" : "color: #f00; font-weight: bold;");
+            } catch(e) { console.error("[FATAL EXCEPTION] Kinematics tests crashed:", e); }
+        }
+    }
+
+// ==========================================
+    // BLOCK 3: RIGID BODY DYNAMICS (VACUUM & GRAVITY)
+    // ==========================================
+    class RigidBodyState {
+        constructor() {
+            this.pos = new Vector3(); this.vel = new Vector3();
+            this.ori = new Quaternion(); this.angVel = new Vector3();
+        }
+        clone() {
+            let s = new RigidBodyState();
+            s.pos = this.pos.clone(); s.vel = this.vel.clone();
+            s.ori = this.ori.clone(); s.angVel = this.angVel.clone();
+            return s;
+        }
+    }
+
+    class RigidBodyDynamics {
+        constructor(massConfig) {
+            this.mass = massConfig.massKG;
+            this.inertia = new Matrix3x3([
+                massConfig.Ixx, 0, -massConfig.Ixz,
+                0, massConfig.Iyy, 0,
+                -massConfig.Ixz, 0, massConfig.Izz
+            ]);
+            this.invInertia = this.inertia.inverse();
+        }
+        evaluate(state, forceWorld, torqueBody) {
+            let dPos = state.vel.clone(), dVel = forceWorld.mul(1.0 / this.mass);
+            let w = state.angVel, q = state.ori;
+            let dOri = new Quaternion(
+                0.5 * (-q.x*w.x - q.y*w.y - q.z*w.z),
+                0.5 * ( q.w*w.x + q.y*w.z - q.z*w.y),
+                0.5 * ( q.w*w.y - q.x*w.z + q.z*w.x),
+                0.5 * ( q.w*w.z + q.x*w.y - q.y*w.x)
+            );
+            let totalTorque = torqueBody.sub(w.cross(this.inertia.mulVec(w)));
+            let dAngVel = this.invInertia.mulVec(totalTorque);
+            return { dPos, dVel, dOri, dAngVel };
+        }
+    }
+
+    class RK4Integrator {
+        static integrate(state, dynamics, loadsOrForceWorld, torqueBodyOrDt, optionalDt) {
+            // Backward-compatible overload: integrate(state, dynamics, force, torque, dt).
+            // Preferred API: integrate(state, dynamics, state => ({ forceWorld, torqueBody }), dt).
+            const isLoadProvider = typeof loadsOrForceWorld === "function";
+            const dt = isLoadProvider ? torqueBodyOrDt : optionalDt;
+            const getLoads = isLoadProvider
+                ? loadsOrForceWorld
+                : () => ({ forceWorld: loadsOrForceWorld, torqueBody: torqueBodyOrDt });
+            const evaluate = stageState => {
+                const loads = getLoads(stageState);
+                return dynamics.evaluate(stageState, loads.forceWorld, loads.torqueBody);
+            };
+            const halfDt = dt * APP_CONSTANTS.PHYSICS.HALF;
+            const k1 = evaluate(state);
+
+            const s2 = state.clone();
+            s2.pos = state.pos.add(k1.dPos.mul(halfDt));
+            s2.vel = state.vel.add(k1.dVel.mul(halfDt));
+            s2.ori = new Quaternion(
+                state.ori.w + k1.dOri.w * halfDt, state.ori.x + k1.dOri.x * halfDt,
+                state.ori.y + k1.dOri.y * halfDt, state.ori.z + k1.dOri.z * halfDt
+            ).normalize();
+            s2.angVel = state.angVel.add(k1.dAngVel.mul(halfDt));
+            const k2 = evaluate(s2);
+
+            const s3 = state.clone();
+            s3.pos = state.pos.add(k2.dPos.mul(halfDt));
+            s3.vel = state.vel.add(k2.dVel.mul(halfDt));
+            s3.ori = new Quaternion(
+                state.ori.w + k2.dOri.w * halfDt, state.ori.x + k2.dOri.x * halfDt,
+                state.ori.y + k2.dOri.y * halfDt, state.ori.z + k2.dOri.z * halfDt
+            ).normalize();
+            s3.angVel = state.angVel.add(k2.dAngVel.mul(halfDt));
+            const k3 = evaluate(s3);
+
+            const s4 = state.clone();
+            s4.pos = state.pos.add(k3.dPos.mul(dt));
+            s4.vel = state.vel.add(k3.dVel.mul(dt));
+            s4.ori = new Quaternion(
+                state.ori.w + k3.dOri.w * dt, state.ori.x + k3.dOri.x * dt,
+                state.ori.y + k3.dOri.y * dt, state.ori.z + k3.dOri.z * dt
+            ).normalize();
+            s4.angVel = state.angVel.add(k3.dAngVel.mul(dt));
+            const k4 = evaluate(s4);
+
+            const dtSixth = dt / 6.0;
+            state.pos = state.pos.add(k1.dPos.add(k2.dPos.mul(2)).add(k3.dPos.mul(2)).add(k4.dPos).mul(dtSixth));
+            state.vel = state.vel.add(k1.dVel.add(k2.dVel.mul(2)).add(k3.dVel.mul(2)).add(k4.dVel).mul(dtSixth));
+            state.ori.w += (k1.dOri.w + 2*k2.dOri.w + 2*k3.dOri.w + k4.dOri.w) * dtSixth;
+            state.ori.x += (k1.dOri.x + 2*k2.dOri.x + 2*k3.dOri.x + k4.dOri.x) * dtSixth;
+            state.ori.y += (k1.dOri.y + 2*k2.dOri.y + 2*k3.dOri.y + k4.dOri.y) * dtSixth;
+            state.ori.z += (k1.dOri.z + 2*k2.dOri.z + 2*k3.dOri.z + k4.dOri.z) * dtSixth;
+            state.ori.normalize();
+            state.angVel = state.angVel.add(k1.dAngVel.add(k2.dAngVel.mul(2)).add(k3.dAngVel.mul(2)).add(k4.dAngVel).mul(dtSixth));
+        }
+    }
+
+    // ブロック2(AircraftKinematics)と同等のインターフェースを持つ、剛体物理用の機体ラッパークラス
+    // ==========================================
+    // 汎用機体ラッパークラス（地球・月・他プログラム移植完全対応）
+    // ==========================================
+    class AircraftRigidBodyPhysics {
+        constructor(profile, env) {
+            this.profile = profile;
+            this.env = env || ENVIRONMENTS.EARTH; // 外部注入された環境データ
+            this.state = new RigidBodyState();
+            this.dynamics = new RigidBodyDynamics(profile.massConfig);
+            this.pitch = 0; this.roll = 0; this.yaw = 0; this.gammaRad = 0;
+            this.velocityMPS = 0; this.velWorld = new Vector3();
+            this.controlSurfaces = { elevator: 0, aileron: 0, rudder: 0, speedbrake: 0 };
+            this.gearDown = profile.gearConfig ? !!profile.gearConfig.initialDown : false;
+            this.scenario = null;
+        }
+        
+        initSimulation(scenario) {
+            this.scenario = scenario;
+            this.state.pos = new Vector3(scenario.startX, scenario.startY, scenario.startZ);
+            let initSpeed = this.profile.kinematicsConfig ? this.profile.kinematicsConfig.baseSpeedMPS : 0.0;
+            this.state.vel = new Vector3(initSpeed * Math.sin(scenario.startYawRad), 0, initSpeed * Math.cos(scenario.startYawRad));
+            this.state.ori = Quaternion.fromEulerZXY(0, 0, scenario.startYawRad);
+            this.state.angVel = new Vector3();
+            this.updateLegacyAvionicsVariables();
+            this.gearDown = this.profile.gearConfig ? !!this.profile.gearConfig.initialDown : false;
+        }
+        
+        operateGear() {
+            if (!this.gearDown) this.gearDown = true;
+            else if (this.profile.gearConfig && this.profile.gearConfig.retractable) this.gearDown = false;
+        }
+        
+        updateLegacyAvionicsVariables() {
+            let euler = this.state.ori.toEulerRad();
+            this.pitch = euler.pitch; this.roll = euler.roll; this.yaw = euler.yaw;
+            this.velocityMPS = this.state.vel.mag();
+            this.velWorld = this.state.vel.clone();
+            let horizontalVelMag = Math.sqrt(this.velWorld.x*this.velWorld.x + this.velWorld.z*this.velWorld.z);
+            if (horizontalVelMag > APP_CONSTANTS.PHYSICS.VELOCITY_EPSILON) this.gammaRad = Math.atan2(this.velWorld.y, horizontalVelMag);
+            else this.gammaRad = this.pitch;
+        }
+        
+        update(dt, axes) {
+            if (!axes || !this.profile.massConfig) return;
+            let mc = this.profile.massConfig, kc = this.profile.kinematicsConfig, env = this.env;
+
+            // マジックナンバーを排除し、プロフィールデータ層から読み込む
+            let ctrlAuth = mc.controlAuthorityFactor || 1.0;
+            let damping = mc.dampingFactor || 0.0;
+
+            let tx = -axes.pitch * (mc.virtualTorquePitch * ctrlAuth) - this.state.angVel.x * mc.Ixx * damping;
+            let ty =  axes.yaw   * (mc.virtualTorqueYaw   * ctrlAuth) - this.state.angVel.y * mc.Iyy * damping;
+            let tz = -axes.roll  * (mc.virtualTorqueRoll  * ctrlAuth) - this.state.angVel.z * mc.Izz * damping;
+            let torqueBody = new Vector3(tx, ty, tz);
+
+            // 環境データ(env.gravity)を使用して重力を計算
+            let forceWorld = new Vector3(0, -mc.massKG * env.gravity, 0);
+
+            RK4Integrator.integrate(this.state, this.dynamics, forceWorld, torqueBody, dt);
+
+            // 環境データ(env.groundY, bounceFactor等)を使用して地面との干渉を計算
+            if (this.state.pos.y <= env.groundY) {
+                this.state.pos.y = env.groundY;
+                if (this.state.vel.y < -APP_CONSTANTS.PHYSICS.GROUND_BOUNCE_SPEED_MPS) {
+                    this.state.vel.y = -this.state.vel.y * env.bounceFactor;
+                    this.state.vel.x *= env.frictionFactor; 
+                    this.state.vel.z *= env.frictionFactor;
+                    this.state.angVel = this.state.angVel.mul(APP_CONSTANTS.HALF); // ここは数学公式の半分
+                } else if (this.state.vel.y < 0) {
+                    this.state.vel.y = 0;
+                    this.state.vel.x *= env.frictionFactor; 
+                    this.state.vel.z *= env.frictionFactor;
+                    this.state.angVel = this.state.angVel.mul(env.groundAngularFriction);
+                }
+            }
+
+            this.updateLegacyAvionicsVariables();
+            if (kc) {
+                this.controlSurfaces.elevator = axes.pitch * kc.maxDeflectionRad; 
+                this.controlSurfaces.aileron = axes.roll * kc.maxDeflectionRad;
+                this.controlSurfaces.rudder = axes.yaw * kc.maxDeflectionRad; 
+                this.controlSurfaces.speedbrake = axes.speedbrake;
+            }
+        }
+    }
+
+    class RigidBodyTester {
+        static runAll() {
+            console.log("=== STARTING AUTOMATED TESTS (BLOCK 3: RIGID BODY DYNAMICS) ===");
+            let passed = 0, failed = 0;
+            function assert(condition, testName) { if (condition) { console.log(`[OK] ${testName}`); passed++; } else { console.error(`[FAIL] ${testName}`); failed++; } }
+            try {
+                let env = ENVIRONMENTS.EARTH; // Inject the test environment.
+                let mc = { massKG: 1000, Ixx: 1000, Iyy: 1000, Izz: 1000, Ixz: 0 };
+                let dyn = new RigidBodyDynamics(mc);
+                let state = new RigidBodyState();
+                state.pos = new Vector3(0, 4000, 0);
+                
+                RK4Integrator.integrate(state, dyn, new Vector3(0, -1000 * env.gravity, 0), new Vector3(0,0,0), 1.0);
+                assert(Math.abs(state.vel.y - (-env.gravity)) < 0.0001, "RK4 Free fall velocity matches environment gravity");
+
+                state = new RigidBodyState();
+                RK4Integrator.integrate(state, dyn, new Vector3(), new Vector3(1000, 0, 0), 1.0);
+                assert(Math.abs(state.angVel.x - 1.0) < 0.0001, "RK4 Angular velocity correctly respects Inertia Tensor");
+
+                console.log(`%c=== TEST RESULTS: ${passed} PASSED, ${failed} FAILED ===`, failed === 0 ? "color: #0f0; font-weight: bold;" : "color: #f00; font-weight: bold;");
+            } catch(e) { console.error("[FATAL EXCEPTION] Rigid Body tests crashed:", e); }
+        }
+    }
+	
+    // Owns actual (not commanded) surface positions. Commands are rate- and position-limited.
+    // The coefficients/rates are simulator tuning values until validated against authoritative data.
+    class ControlSurfaceActuator {
+        constructor(config) {
+            this.config = config || {};
+            this.actual = { elevator: 0, aileron: 0, rudder: 0, speedbrake: 0 };
+        }
+        _approach(current, target, maxDelta) {
+            return current + MathUtils.clamp(target - current, -maxDelta, maxDelta);
+        }
+        update(commands, dt) {
+            if (!Number.isFinite(dt) || dt <= 0) return this.actual;
+            const cfg = this.config;
+            const limit = Math.max(0, cfg.maxDeflectionRad || 0);
+            const safe = {
+                elevator: MathUtils.clamp(Number(commands.elevator) || 0, -limit, limit),
+                aileron: MathUtils.clamp(Number(commands.aileron) || 0, -limit, limit),
+                rudder: MathUtils.clamp(Number(commands.rudder) || 0, -limit, limit),
+                speedbrake: MathUtils.clamp(Number(commands.speedbrake) || 0, 0, 1)
+            };
+            this.actual.elevator = this._approach(this.actual.elevator, safe.elevator, Math.max(0, cfg.elevonRateRadPerSec || 0) * dt);
+            this.actual.aileron = this._approach(this.actual.aileron, safe.aileron, Math.max(0, cfg.elevonRateRadPerSec || 0) * dt);
+            this.actual.rudder = this._approach(this.actual.rudder, safe.rudder, Math.max(0, cfg.rudderRateRadPerSec || 0) * dt);
+            this.actual.speedbrake = this._approach(this.actual.speedbrake, safe.speedbrake, Math.max(0, cfg.speedbrakeRatePerSec || 0) * dt);
+            return this.actual;
+        }
+    }
+
+    // Computes contact geometry independently from aerodynamic flight dynamics.
+    // Offsets are provisional geometry for this simulator, not measured Shuttle gear dimensions.
+    class LandingGearContactModel {
+        getWorldPoint(state, offset) {
+            const rotated = state.ori.rotateVector(new Vector3(offset.x, offset.y, offset.z));
+            return new Vector3(state.pos.x + rotated.x, state.pos.y + rotated.y, state.pos.z + rotated.z);
+        }
+
+        resolveMainGearContact(state, groundY) {
+            const contacts = LANDING_GEAR_CONFIG.MAIN_GEAR_OFFSETS_M.map(offset => this.getWorldPoint(state, offset));
+            const lowest = contacts.reduce((a, b) => a.y <= b.y ? a : b);
+            if (lowest.y > groundY) return null;
+
+            const rotatedOffsets = LANDING_GEAR_CONFIG.MAIN_GEAR_OFFSETS_M.map(offset =>
+                state.ori.rotateVector(new Vector3(offset.x, offset.y, offset.z)));
+            const lowestOffsetY = Math.min(...rotatedOffsets.map(offset => offset.y));
+            state.pos.y = groundY - lowestOffsetY;
+            const correctedContacts = LANDING_GEAR_CONFIG.MAIN_GEAR_OFFSETS_M.map(offset => this.getWorldPoint(state, offset));
+            return {
+                touchdownPosition: new Vector3(
+                    (correctedContacts[0].x + correctedContacts[1].x) * APP_CONSTANTS.HALF,
+                    groundY,
+                    (correctedContacts[0].z + correctedContacts[1].z) * APP_CONSTANTS.HALF
+                ),
+                mainGearContact: true
+            };
+        }
+
+        isNoseGearContact(state, groundY) {
+            return this.getWorldPoint(state, LANDING_GEAR_CONFIG.NOSE_GEAR_OFFSET_M).y <= groundY + 1e-4;
+        }
+    }
+
+    // Integrates ground travel and braking after main-gear contact; it never applies airborne forces.
+    class LandingRolloutController {
+        constructor() { this.reset(); }
+        reset() {
+            this.landed = false;
+            this.noseGearContact = false;
+            this.stopped = false;
+            this.distanceM = 0;
+            this.elapsedSeconds = 0;
+            this.touchdownSpeedMps = 0;
+            this.touchdownPitchRad = 0;
+        }
+        beginTouchdown(state = null) {
+            this.landed = true;
+            if (state) {
+                this.touchdownSpeedMps = Math.hypot(state.vel.x, state.vel.z);
+                this.touchdownPitchRad = state.ori.toEulerRad().pitch;
+            }
+        }
+        update(state, dt, wheelBrake, groundY, yawCommand = 0) {
+            if (!this.landed || !Number.isFinite(dt) || dt <= 0) return;
+            const horizontalSpeed = Math.hypot(state.vel.x, state.vel.z);
+            if (this.touchdownSpeedMps <= 1e-6) {
+                this.touchdownSpeedMps = horizontalSpeed;
+                this.touchdownPitchRad = state.ori.toEulerRad().pitch;
+            }
+            // Ground steering is available only while rolling; it fades out near standstill.
+            const steeringAuthority = Math.min(1, horizontalSpeed / LANDING_GEAR_CONFIG.ROLLOUT_STEERING_MIN_SPEED_MPS);
+            if (horizontalSpeed > 1e-9 && Math.abs(yawCommand) > 1e-6) {
+                const currentTrack = Math.atan2(state.vel.x, state.vel.z);
+                const nextTrack = currentTrack + yawCommand
+                    * LANDING_GEAR_CONFIG.ROLLOUT_STEERING_RATE_RAD_PER_SEC
+                    * steeringAuthority * dt;
+                state.vel.x = Math.sin(nextTrack) * horizontalSpeed;
+                state.vel.z = Math.cos(nextTrack) * horizontalSpeed;
+                const euler = state.ori.toEulerRad();
+                state.ori = Quaternion.fromEulerZXY(euler.roll, euler.pitch, nextTrack);
+            }
+            const braking = wheelBrake ? LANDING_GEAR_CONFIG.MAX_WHEEL_BRAKE_DECEL_MPS2 : 0;
+            const deceleration = LANDING_GEAR_CONFIG.ROLLING_RESISTANCE_MPS2 + braking;
+            const nextSpeed = Math.max(0, horizontalSpeed - deceleration * dt);
+            const scale = horizontalSpeed > 1e-9 ? nextSpeed / horizontalSpeed : 0;
+            const travel = (horizontalSpeed + nextSpeed) * APP_CONSTANTS.HALF * dt;
+            if (horizontalSpeed > 1e-9) {
+                state.pos.x += state.vel.x / horizontalSpeed * travel;
+                state.pos.z += state.vel.z / horizontalSpeed * travel;
+            }
+            state.vel.x *= scale;
+            state.vel.z *= scale;
+            state.vel.y = 0;
+            state.pos.y = groundY - Math.min(...LANDING_GEAR_CONFIG.MAIN_GEAR_OFFSETS_M.map(offset =>
+                state.ori.rotateVector(new Vector3(offset.x, offset.y, offset.z)).y));
+            const angularScale = Math.exp(-LANDING_GEAR_CONFIG.ANGULAR_DAMPING_PER_SECOND * dt);
+            state.angVel = state.angVel.mul(angularScale);
+
+            // Ground rollout has no modeled aerodynamic attitude authority. Dampen residual
+            // bank and progressively settle the flare pitch toward the runway-ground reference.
+            // The reference-point height is recomputed from main-gear geometry above, so the
+            // main gear remains supported while attitude settles. Heading remains independent.
+            const groundAttitude = state.ori.toEulerRad();
+            const rollScale = Math.exp(-LANDING_GEAR_CONFIG.GROUND_ROLL_STABILIZATION_PER_SECOND * dt);
+            // Approximate the gradual unloading of the flare attitude after main-gear contact.
+            // Dynamic pressure scales with speed squared, while a smooth time envelope prevents
+            // the nose from remaining raised until near standstill. This is a tuned simulator
+            // approximation, not a full Shuttle lift/moment/landing-gear dynamics model.
+            const speedRatio = this.touchdownSpeedMps > 1e-6
+                ? Math.min(1, horizontalSpeed / this.touchdownSpeedMps) : 0;
+            const dynamicPressureFraction = speedRatio * speedRatio;
+            const unloadProgress = Math.min(1,
+                this.elapsedSeconds / LANDING_GEAR_CONFIG.GROUND_PITCH_UNLOAD_DURATION_SECONDS);
+            const smoothUnload = unloadProgress * unloadProgress * (3 - 2 * unloadProgress);
+            const timeBasedTargetPitch = this.touchdownPitchRad * (1 - smoothUnload);
+            const targetPitch = timeBasedTargetPitch * dynamicPressureFraction;
+            const pitchResponse = 1 - Math.exp(-LANDING_GEAR_CONFIG.GROUND_PITCH_RESPONSE_PER_SECOND * dt);
+            const nextPitch = groundAttitude.pitch + (targetPitch - groundAttitude.pitch) * pitchResponse;
+            state.ori = Quaternion.fromEulerZXY(
+                groundAttitude.roll * rollScale,
+                nextPitch,
+                groundAttitude.yaw
+            );
+            // Re-align the lowest main-gear contact point after changing the attitude.
+            state.pos.y = groundY - Math.min(...LANDING_GEAR_CONFIG.MAIN_GEAR_OFFSETS_M.map(offset =>
+                state.ori.rotateVector(new Vector3(offset.x, offset.y, offset.z)).y));
+
+            this.distanceM += travel;
+            this.elapsedSeconds += dt;
+            this.stopped = nextSpeed <= LANDING_GEAR_CONFIG.STOP_SPEED_MPS;
+            if (this.stopped) {
+                state.vel.x = 0;
+                state.vel.z = 0;
+                // At standstill, settle to level roll and pitch while preserving runway heading.
+                const settledAttitude = state.ori.toEulerRad();
+                state.ori = Quaternion.fromEulerZXY(0, 0, settledAttitude.yaw);
+                state.pos.y = groundY - Math.min(...LANDING_GEAR_CONFIG.MAIN_GEAR_OFFSETS_M.map(offset =>
+                    state.ori.rotateVector(new Vector3(offset.x, offset.y, offset.z)).y));
+                state.angVel = new Vector3(0, 0, 0);
+            }
+        }
+    }
+
+    class LandingGearRolloutTester {
+        static runAll() {
+            let passed = 0, failed = 0;
+            const assert = (condition, label) => { if (condition) { console.log(`[OK] ${label}`); passed++; } else { console.error(`[FAIL] ${label}`); failed++; } };
+            try {
+                const model = new LandingGearContactModel();
+                const state = new RigidBodyState();
+                state.pos = new Vector3(0, 1.4, 0);
+                state.ori = Quaternion.fromEulerZXY(0, 0, 0);
+                const contact = model.resolveMainGearContact(state, 0);
+                assert(!!contact && contact.mainGearContact, "Main gear contact is detected independently of aircraft reference-point height");
+                assert(Math.abs(contact.touchdownPosition.y) < 1e-9, "Touchdown position is reported at runway ground level");
+                const rollout = new LandingRolloutController();
+                rollout.beginTouchdown();
+                const moving = new RigidBodyState();
+                moving.pos = new Vector3(0, 1.5, 0);
+                moving.vel = new Vector3(0, -4, 90);
+                moving.ori = Quaternion.fromEulerZXY(0, 0, 0);
+                moving.angVel = new Vector3(0.1, 0.1, 0.1);
+                rollout.update(moving, 1, false, 0);
+                assert(moving.vel.y === 0 && Math.hypot(moving.vel.x, moving.vel.z) < 90, "Rollout removes vertical velocity and applies rolling resistance");
+                const speedBeforeBrake = Math.hypot(moving.vel.x, moving.vel.z);
+                rollout.update(moving, 1, true, 0);
+                assert(Math.hypot(moving.vel.x, moving.vel.z) < speedBeforeBrake, "Wheel brakes add ground deceleration");
+                const tilted = new RigidBodyState();
+                tilted.pos = new Vector3(0, 1.5, 0);
+                tilted.vel = new Vector3(0, 0, 20);
+                tilted.ori = Quaternion.fromEulerZXY(0.2, -0.05, 0);
+                const initialAbsRoll = Math.abs(tilted.ori.toEulerRad().roll);
+                const stabilization = new LandingRolloutController();
+                stabilization.beginTouchdown(tilted);
+                stabilization.update(tilted, 1, false, 0, 0.5);
+                assert(Math.abs(tilted.ori.toEulerRad().roll) < initialAbsRoll,
+                    "Ground rollout progressively damps residual roll without disabling yaw steering");
+                const pitchAfterOneSecond = tilted.ori.toEulerRad().pitch;
+                assert(Math.abs(pitchAfterOneSecond) < 0.05 && Math.abs(pitchAfterOneSecond - (-0.05)) > 1e-5,
+                    "Pitch begins settling smoothly as ground speed decreases");
+                const pitchBeforeBraking = tilted.ori.toEulerRad().pitch;
+                stabilization.update(tilted, 0.5, true, 0, 0);
+                assert(Math.abs(tilted.ori.toEulerRad().pitch) < Math.abs(pitchBeforeBraking),
+                    "Stronger speed loss progressively reduces the pitch target");
+                tilted.vel.x = 0; tilted.vel.z = 0;
+                stabilization.update(tilted, 1 / 60, false, 0, 0);
+                assert(Math.abs(tilted.ori.toEulerRad().roll) < 1e-9,
+                    "Stopped orbiter settles to zero roll");
+                assert(Math.abs(tilted.ori.toEulerRad().pitch) < 1e-9,
+                    "Stopped orbiter settles to zero pitch");
+                const distanceBeforeInvalidStep = rollout.distanceM;
+                rollout.update(moving, 0, true, 0);
+                assert(rollout.distanceM === distanceBeforeInvalidStep, "Rollout rejects non-positive time steps");
+                const noContactState = new RigidBodyState();
+                noContactState.pos = new Vector3(0, 10, 0);
+                noContactState.ori = Quaternion.fromEulerZXY(0, 0, 0);
+                assert(model.resolveMainGearContact(noContactState, 0) === null, "Main gear contact is not reported while gear points remain airborne");
+            } catch (error) { failed++; console.error("[FATAL EXCEPTION] Landing gear/rollout tests crashed:", error); }
+            console.log(`=== LANDING GEAR & ROLLOUT TESTS: ${passed} PASSED, ${failed} FAILED ===`);
+            return { passed, failed };
+        }
+    }
+
+    class AircraftAeroPhysics {
+        constructor(profile, env) {
+            this.profile = profile;
+            this.env = env || ENVIRONMENTS.EARTH;
+            this.state = new RigidBodyState();
+            this.dynamics = new RigidBodyDynamics(profile.massConfig);
+            this.pitch = 0; this.roll = 0; this.yaw = 0; this.gammaRad = 0;
+            this.velocityMPS = 0; this.velWorld = new Vector3();
+            this.controlCommands = { elevator: 0, aileron: 0, rudder: 0, speedbrake: 0 };
+            this.actuator = new ControlSurfaceActuator(profile.controlMomentConfig);
+            // Read-only compatibility view for HUD/rendering; actuator.actual is the single state owner.
+            this.controlSurfaces = this.actuator.actual;
+            this.gearDown = profile.gearConfig ? !!profile.gearConfig.initialDown : false;
+            this.scenario = null;
+            this.windWorld = new Vector3();
+            this.touchdownRecord = null;
+            this.isCrashed = false;
+            this.crashReason = "";
+            this.simulationTimeSeconds = 0;
+            this.gearContactModel = new LandingGearContactModel();
+            this.rolloutController = new LandingRolloutController();
+        }
+
+        initSimulation(scenario) {
+            this.scenario = scenario;
+            this.touchdownRecord = null;
+            this.isCrashed = false;
+            this.crashReason = "";
+            this.simulationTimeSeconds = 0;
+            this.rolloutController.reset();
+            this.windWorld = new Vector3(
+                scenario.windWorld?.x || 0, scenario.windWorld?.y || 0, scenario.windWorld?.z || 0
+            );
+            this.state.pos = new Vector3(scenario.startX, scenario.startY, scenario.startZ);
+            const initialSpeed = this.profile.kinematicsConfig ? this.profile.kinematicsConfig.baseSpeedMPS : 0;
+            const landingZone = scenario.landingZone || { x: scenario.startX, z: 0 };
+            const horizontalRange = Math.hypot(landingZone.x - scenario.startX, landingZone.z - scenario.startZ);
+            // Start velocity must agree with the approach geometry. A zero vertical speed at 4 km
+            // altitude and 14 km from the runway creates a nearly level path, not a landing approach.
+            const initialFlightPathAngle = horizontalRange > APP_CONSTANTS.PHYSICS.VECTOR_EPSILON
+                ? Math.atan2((this.env.groundY ?? 0) - scenario.startY, horizontalRange) : 0;
+            const horizontalSpeed = initialSpeed * Math.cos(initialFlightPathAngle);
+            this.state.vel = new Vector3(
+                horizontalSpeed * Math.sin(scenario.startYawRad),
+                initialSpeed * Math.sin(initialFlightPathAngle),
+                horizontalSpeed * Math.cos(scenario.startYawRad)
+            );
+            const aero = this.profile.aeroConfig;
+            let targetAoa = this.profile.kinematicsConfig?.initialApproachAoaRad ?? 0;
+            const airVelocity = this.state.vel.sub(this.windWorld);
+            const airSpeed = airVelocity.mag();
+            const altitude = Math.max(0, scenario.startY - (this.env.groundY ?? 0));
+            const density = this.env.airDensitySeaLevel > 0
+                ? this.env.airDensitySeaLevel * Math.exp(-altitude / this.env.scaleHeight) : 0;
+            const dynamicPressure = APP_CONSTANTS.PHYSICS.HALF * density * airSpeed * airSpeed;
+            if (aero && dynamicPressure > APP_CONSTANTS.PHYSICS.VECTOR_EPSILON
+                && aero.wingAreaM2 > 0 && aero.CLalpha > 0) {
+                // Trim initial lift to the normal component of gravity for this approach geometry.
+                // This is a calculated initial condition, not an autopilot or a claim of exact trim.
+                const requiredLiftCoefficient = this.profile.massConfig.massKG * this.env.gravity
+                    * Math.cos(initialFlightPathAngle) / (dynamicPressure * aero.wingAreaM2);
+                targetAoa = (requiredLiftCoefficient - aero.CL0) / aero.CLalpha;
+            } else if (density <= 0) {
+                targetAoa = 0;
+            }
+            targetAoa = MathUtils.clamp(targetAoa,
+                -(aero?.maxLinearAoaRad || APP_CONSTANTS.PI / 4),
+                aero?.maxLinearAoaRad || APP_CONSTANTS.PI / 4);
+            // Quaternion pitch uses the opposite sign of the conventional HUD pitch in this codebase.
+            const initialPitch = -(initialFlightPathAngle + targetAoa);
+            const initialRoll = Number.isFinite(scenario.startRollRad) ? scenario.startRollRad : 0;
+            this.state.ori = Quaternion.fromEulerZXY(initialRoll, initialPitch, scenario.startYawRad);
+            this.state.angVel = new Vector3();
+            this.controlCommands = { elevator: 0, aileron: 0, rudder: 0, speedbrake: 0 };
+            this.actuator = new ControlSurfaceActuator(this.profile.controlMomentConfig);
+            this.controlSurfaces = this.actuator.actual;
+            this.updateLegacyAvionicsVariables();
+            this.gearDown = this.profile.gearConfig ? !!this.profile.gearConfig.initialDown : false;
+        }
+
+        operateGear() {
+            if (!this.gearDown) this.gearDown = true;
+            else if (this.profile.gearConfig && this.profile.gearConfig.retractable) this.gearDown = false;
+        }
+
+        updateLegacyAvionicsVariables() {
+            const euler = this.state.ori.toEulerRad();
+            this.pitch = euler.pitch; this.roll = euler.roll; this.yaw = euler.yaw;
+            this.velocityMPS = this.state.vel.mag();
+            this.velWorld = this.state.vel.clone();
+            const horizontalSpeed = Math.hypot(this.velWorld.x, this.velWorld.z);
+            this.gammaRad = horizontalSpeed > APP_CONSTANTS.PHYSICS.VELOCITY_EPSILON
+                ? Math.atan2(this.velWorld.y, horizontalSpeed) : this.pitch;
+        }
+
+        _calculateLoads(state, axes) {
+            const mc = this.profile.massConfig;
+            const ac = this.profile.aeroConfig;
+            const env = this.env;
+            const altitude = Math.max(0, state.pos.y - env.groundY);
+            const density = env.airDensitySeaLevel > 0
+                ? env.airDensitySeaLevel * Math.exp(-altitude / env.scaleHeight) : 0;
+            const airVelocity = state.vel.sub(this.windWorld);
+            const airSpeed = airVelocity.mag();
+            const dynamicPressure = APP_CONSTANTS.PHYSICS.HALF * density * airSpeed * airSpeed;
+            const inverseOrientation = new Quaternion(state.ori.w, -state.ori.x, -state.ori.y, -state.ori.z);
+            const bodyAirVelocity = inverseOrientation.rotateVector(airVelocity);
+            const damping = mc.dampingFactor ?? 0.0;
+            const stability = mc.aeroStability ?? 0.0;
+            const control = this.profile.controlMomentConfig || {};
+            const surfaces = this.actuator.actual;
+
+            let yawStabilityTorque = 0;
+            let rollStabilityTorque = 0;
+            if (bodyAirVelocity.z > APP_CONSTANTS.PHYSICS.AERO_SPEED_THRESHOLD_MPS) {
+                yawStabilityTorque = bodyAirVelocity.x * dynamicPressure * stability;
+                rollStabilityTorque = bodyAirVelocity.x * dynamicPressure * stability * APP_CONSTANTS.PHYSICS.HALF;
+            }
+            // Body-axis convention in this model: x=pitch, y=yaw, z=roll.
+            // These are coefficient-based approximate aerodynamic moments, not flight-test derivatives.
+            const pitchControlMoment = dynamicPressure * (ac?.wingAreaM2 || 0)
+                * (control.meanAerodynamicChordM || 0) * (control.pitchMomentPerElevonRad || 0) * surfaces.elevator;
+            const rollControlMoment = dynamicPressure * (ac?.wingAreaM2 || 0)
+                * (control.wingspanM || 0) * (control.rollMomentPerAileronRad || 0) * surfaces.aileron;
+            const yawControlMoment = dynamicPressure * (ac?.wingAreaM2 || 0)
+                * (control.wingspanM || 0) * (control.yawMomentPerRudderRad || 0) * surfaces.rudder;
+            const torqueBody = new Vector3(
+                -pitchControlMoment - state.angVel.x * mc.Ixx * damping,
+                yawControlMoment - state.angVel.y * mc.Iyy * damping + yawStabilityTorque,
+                -rollControlMoment - state.angVel.z * mc.Izz * damping + rollStabilityTorque
+            );
+
+            let liftWorld = new Vector3();
+            let dragWorld = new Vector3();
+            if (ac && density > 0 && airSpeed > APP_CONSTANTS.PHYSICS.AOA_SPEED_THRESHOLD_MPS) {
+                const rawAoa = bodyAirVelocity.z > 0
+                    ? Math.atan2(-bodyAirVelocity.y, bodyAirVelocity.z) : 0;
+                const stallAoa = ac.maxLinearAoaRad || (15 * APP_CONSTANTS.DEG_TO_RAD);
+                const effectiveAoa = MathUtils.clamp(rawAoa, -stallAoa, stallAoa);
+                const absAoa = Math.abs(rawAoa);
+                let liftCoefficient = ac.CL0 + ac.CLalpha * effectiveAoa;
+                let dragCoefficient = ac.CD0 + (ac.CDinduced ?? 0) * liftCoefficient * liftCoefficient
+                    + ac.CDspeedbrake * MathUtils.clamp(this.actuator.actual.speedbrake, 0, 1);
+                if (this.gearDown) dragCoefficient += ac.CDgear;
+                if (absAoa > stallAoa) {
+                    const postStallRatio = MathUtils.clamp((absAoa - stallAoa) / (Math.PI / 2 - stallAoa), 0, 1);
+                    const liftRetention = ac.postStallLiftFactor ?? 0.25;
+                    liftCoefficient *= 1 - (1 - liftRetention) * postStallRatio;
+                    dragCoefficient += (ac.postStallDragFactor ?? 0.8) * postStallRatio * postStallRatio;
+                }
+                const liftMagnitude = dynamicPressure * ac.wingAreaM2 * liftCoefficient;
+                const dragMagnitude = dynamicPressure * ac.wingAreaM2 * Math.max(0, dragCoefficient);
+                const airDirection = airVelocity.mul(1 / airSpeed);
+                dragWorld = airDirection.mul(-dragMagnitude);
+                const bodyUpWorld = state.ori.rotateVector(new Vector3(0, 1, 0));
+                let liftDirection = bodyUpWorld.sub(airDirection.mul(bodyUpWorld.dot(airDirection)));
+                liftDirection = liftDirection.mag() > APP_CONSTANTS.PHYSICS.VECTOR_EPSILON
+                    ? liftDirection.normalize() : new Vector3(0, 1, 0);
+                liftWorld = liftDirection.mul(liftMagnitude);
+            }
+
+            const gravityForce = new Vector3(0, -mc.massKG * env.gravity, 0);
+            return { forceWorld: gravityForce.add(liftWorld).add(dragWorld), torqueBody };
+        }
+
+        _freezeAsCrash(contactType, reason) {
+            if (this.isCrashed) return;
+            this.isCrashed = true;
+            this.crashReason = reason;
+            this.rolloutController.landed = false;
+            const assessment = this.scenario?.landingZone
+                ? LandingAssessment.evaluate(this.state, this.scenario, this.gearDown)
+                : null;
+            this.touchdownRecord = {
+                ...(assessment || { checks: {}, speedKts: NaN, sinkRateFps: NaN, lateralOffsetM: NaN,
+                    pitchDeg: NaN, yawAlignmentDeg: NaN, rollDeg: NaN }),
+                passed: false,
+                crash: true,
+                crashReason: reason,
+                timestampSeconds: this.simulationTimeSeconds,
+                contactType
+            };
+        }
+
+        _isTouchdownWithinRunway(touchdownPosition) {
+            const runway = this.scenario?.landingZone;
+            if (!runway || runway.type !== "RUNWAY") return false;
+
+            const runwayWidth = Number(runway.width);
+            const runwayLength = Number(runway.length);
+            if (!(runwayWidth > 0) || !(runwayLength > 0)) return false;
+
+            const deltaX = touchdownPosition.x - runway.x;
+            const deltaZ = touchdownPosition.z - runway.z;
+            const heading = Number(runway.headingRad) || 0;
+
+            // Project world displacement into runway-local lateral/longitudinal axes.
+            const lateralOffset = deltaX * Math.cos(heading) - deltaZ * Math.sin(heading);
+            const longitudinalOffset = deltaX * Math.sin(heading) + deltaZ * Math.cos(heading);
+
+            return Math.abs(lateralOffset) <= runwayWidth * APP_CONSTANTS.HALF
+                && Math.abs(longitudinalOffset) <= runwayLength * APP_CONSTANTS.HALF;
+        }
+
+        _resolveGroundContact() {
+            const env = this.env;
+            if (this.rolloutController.landed || this.isCrashed) return;
+
+            // If the nose gear reaches the runway before the main gear, stop at first impact.
+            // Do not let a nose-first fall turn into an apparently normal ground roll.
+            if (this.gearDown && this.gearContactModel.isNoseGearContact(this.state, env.groundY ?? 0)) {
+                const mainPoints = LANDING_GEAR_CONFIG.MAIN_GEAR_OFFSETS_M.map(offset =>
+                    this.gearContactModel.getWorldPoint(this.state, offset));
+                if (mainPoints.every(point => point.y > (env.groundY ?? 0) + APP_CONSTANTS.PHYSICS.VECTOR_EPSILON)) {
+                    this._freezeAsCrash("NOSE_GEAR_FIRST", "Nose gear contacted before the main gear");
+                    return;
+                }
+            }
+
+            if (this.gearDown) {
+                const contact = this.gearContactModel.resolveMainGearContact(this.state, env.groundY ?? 0);
+                if (contact) {
+                    // A main-gear contact outside the runway is an off-field impact,
+                    // not a valid rollout. Prevent the rollout controller from
+                    // converting a crash into endless vehicle-like ground travel.
+                    if (!this._isTouchdownWithinRunway(contact.touchdownPosition)) {
+                        this.state.pos = contact.touchdownPosition.clone();
+                        this.state.vel.y = 0;
+                        this._freezeAsCrash(
+                            "MAIN_GEAR_OFF_RUNWAY",
+                            "Main gear contacted the ground outside the runway"
+                        );
+                        return;
+                    }
+
+                    const touchdownState = new RigidBodyState();
+                    touchdownState.pos = contact.touchdownPosition;
+                    touchdownState.vel = this.state.vel.clone();
+                    touchdownState.ori = this.state.ori;
+                    touchdownState.angVel = this.state.angVel.clone();
+                    this.touchdownRecord = {
+                        ...LandingAssessment.evaluate(touchdownState, this.scenario, true),
+                        timestampSeconds: this.simulationTimeSeconds,
+                        contactType: "MAIN_GEAR"
+                    };
+                    this.state.vel.y = 0;
+                    this.rolloutController.beginTouchdown(this.state);
+                    this.rolloutController.noseGearContact = this.gearContactModel.isNoseGearContact(this.state, env.groundY ?? 0);
+                    return;
+                }
+            }
+
+            // Any body-reference-point ground strike without a valid main-gear touchdown is a crash.
+            if (this.state.pos.y > env.groundY) return;
+            this._freezeAsCrash("REFERENCE_POINT_IMPACT", this.gearDown
+                ? "Fuselage/ nose-first ground impact before main-gear touchdown"
+                : "Ground impact with landing gear retracted");
+            return;
+        }
+
+        update(dt, axes) {
+            if (this.isCrashed || !axes || !this.profile.massConfig || !Number.isFinite(dt) || dt <= 0) return;
+            const safeAxes = {
+                pitch: MathUtils.clamp(Number(axes.pitch) || 0, -1, 1),
+                roll: MathUtils.clamp(Number(axes.roll) || 0, -1, 1),
+                yaw: MathUtils.clamp(Number(axes.yaw) || 0, -1, 1),
+                speedbrake: MathUtils.clamp(Number(axes.speedbrake) || 0, 0, 1),
+                wheelBrake: MathUtils.clamp(Number(axes.wheelBrake) || 0, 0, 1)
+            };
+            const surfaceLimit = this.profile.controlMomentConfig?.maxDeflectionRad
+                ?? this.profile.kinematicsConfig?.maxDeflectionRad ?? 0;
+            this.controlCommands = {
+                elevator: safeAxes.pitch * surfaceLimit,
+                aileron: safeAxes.roll * surfaceLimit,
+                rudder: safeAxes.yaw * surfaceLimit,
+                speedbrake: safeAxes.speedbrake
+            };
+            let remaining = Math.min(dt, APP_CONSTANTS.PHYSICS.MAX_FRAME_DELTA_SECONDS);
+            const maxStep = APP_CONSTANTS.PHYSICS.MAX_PHYSICS_SUBSTEP_SECONDS;
+            while (remaining > 1e-9) {
+                const step = Math.min(remaining, maxStep);
+                this.simulationTimeSeconds += step;
+                if (this.rolloutController.landed) {
+                    this.rolloutController.update(this.state, step, safeAxes.wheelBrake > 0.5, this.env.groundY ?? 0, safeAxes.yaw);
+                    this.rolloutController.noseGearContact = this.gearContactModel.isNoseGearContact(this.state, this.env.groundY ?? 0);
+                } else {
+                    this.actuator.update(this.controlCommands, step);
+                    RK4Integrator.integrate(this.state, this.dynamics, stageState => this._calculateLoads(stageState, safeAxes), step);
+                    this._resolveGroundContact();
+                }
+                remaining -= step;
+            }
+            this.updateLegacyAvionicsVariables();
+        }
+    }
+
+    class AeroTester {
+        static runAll() {
+            console.log("=== STARTING AUTOMATED TESTS (BLOCK 4: AERODYNAMICS) ===");
+            let passed = 0, failed = 0;
+            function assert(condition, testName) { if (condition) { console.log(`[OK] ${testName}`); passed++; } else { console.error(`[FAIL] ${testName}`); failed++; } }
+            try {
+                let env = ENVIRONMENTS.EARTH;
+                let prof = Object.assign({}, AIRCRAFT_PROFILE);
+                const testScenario = { startX: 0, startY: 4000, startZ: -10000, startYawRad: 0,
+                    landingZone: { x: 0, z: 0 }, windWorld: { x: 0, y: 0, z: 0 } };
+                const aeroPhys = new AircraftAeroPhysics(prof, env);
+                aeroPhys.initSimulation(testScenario);
+                const initialVerticalVelocity = aeroPhys.state.vel.y;
+                const testDt = APP_CONSTANTS.PHYSICS.MAX_FRAME_DELTA_SECONDS;
+                aeroPhys.update(testDt, { pitch: 0, roll: 0, yaw: 0, speedbrake: 0 });
+                const ballisticVerticalVelocity = initialVerticalVelocity - env.gravity * testDt;
+                assert(aeroPhys.state.vel.y > ballisticVerticalVelocity,
+                    "Lift generated: descent is reduced relative to same-initial-state free fall");
+
+                const brakedPhysics = new AircraftAeroPhysics(prof, env);
+                brakedPhysics.initSimulation(testScenario);
+                const unbrakedPhysics = new AircraftAeroPhysics(prof, env);
+                unbrakedPhysics.initSimulation(testScenario);
+                brakedPhysics.update(testDt, { pitch: 0, roll: 0, yaw: 0, speedbrake: 1 });
+                unbrakedPhysics.update(testDt, { pitch: 0, roll: 0, yaw: 0, speedbrake: 0 });
+                assert(brakedPhysics.velocityMPS < unbrakedPhysics.velocityMPS,
+                    "Speedbrake increases drag and reduces total airspeed relative to retracted brake");
+
+                console.log(`%c=== BLOCK 4 RESULTS: ${passed} PASSED, ${failed} FAILED ===`, failed === 0 ? "color: #0f0; font-weight: bold;" : "color: #f00; font-weight: bold;");
+            } catch(e) { console.error("[FATAL EXCEPTION] Aero tests crashed:", e); }
+        }
+    }
+
+    class PhysicsRegressionTester {
+        static runAll() {
+            console.log("=== STARTING PHYSICS REGRESSION TESTS ===");
+            let passed = 0;
+            let failed = 0;
+            const assert = (condition, label) => {
+                if (condition) { console.log(`[OK] ${label}`); passed++; }
+                else { console.error(`[FAIL] ${label}`); failed++; }
+            };
+            try {
+                const profile = AIRCRAFT_PROFILE;
+                const environment = ENVIRONMENTS.EARTH;
+                const state = new RigidBodyState();
+                const dynamics = new RigidBodyDynamics(profile.massConfig);
+                let loadEvaluations = 0;
+                RK4Integrator.integrate(state, dynamics, () => {
+                    loadEvaluations++;
+                    return { forceWorld: new Vector3(0, -profile.massConfig.massKG * environment.gravity, 0), torqueBody: new Vector3() };
+                }, 0.1);
+                assert(loadEvaluations === 4, "RK4 reevaluates state-dependent loads at all four stages");
+
+                const calmPhysics = new AircraftAeroPhysics(profile, environment);
+                calmPhysics.initSimulation({ ...SCENARIOS.EARTH_KSC_RUNWAY, windWorld: { x: 0, y: 0, z: 0 } });
+                calmPhysics.update(1 / 60, { pitch: 0, roll: 0, yaw: 0, speedbrake: 0 });
+                assert(Math.abs(calmPhysics.state.vel.x) < 1e-8, "Calm-air flight does not acquire unintended lateral velocity");
+                assert(calmPhysics.state.vel.y < 0 && Math.abs(calmPhysics.gammaRad) > 10 * APP_CONSTANTS.DEG_TO_RAD,
+                    "Initial velocity follows the descending approach geometry rather than starting level");
+
+                const crosswindPhysics = new AircraftAeroPhysics(profile, environment);
+                crosswindPhysics.initSimulation({ ...SCENARIOS.EARTH_KSC_RUNWAY, windWorld: { x: 10, y: 0, z: 0 } });
+                crosswindPhysics.update(1 / 60, { pitch: 0, roll: 0, yaw: 0, speedbrake: 0 });
+                assert(Math.abs(crosswindPhysics.state.vel.x) > 1e-8, "Crosswind changes the wind-relative aerodynamic response");
+
+                const guardedPhysics = new AircraftAeroPhysics(profile, environment);
+                guardedPhysics.initSimulation(SCENARIOS.EARTH_KSC_RUNWAY);
+                const initialY = guardedPhysics.state.pos.y;
+                guardedPhysics.update(Number.NaN, { pitch: 1, roll: 0, yaw: 0, speedbrake: 0 });
+                assert(guardedPhysics.state.pos.y === initialY, "Invalid timestep is rejected without changing the state");
+
+                const contactPhysics = new AircraftAeroPhysics(profile, environment);
+                contactPhysics.initSimulation(SCENARIOS.EARTH_KSC_RUNWAY);
+                contactPhysics.state.pos.y = 0.1;
+                contactPhysics.state.vel.y = -20;
+                contactPhysics.update(0.1, { pitch: 0, roll: 0, yaw: 0, speedbrake: 0 });
+                assert(contactPhysics.state.pos.y >= environment.groundY, "Ground contact prevents the reference point passing below ground");
+
+                const actuator = new ControlSurfaceActuator(profile.controlMomentConfig);
+                const actuatorCfg = profile.controlMomentConfig;
+                actuator.update({ elevator: actuatorCfg.maxDeflectionRad * 4, aileron: 0, rudder: 0, speedbrake: 1 }, 0.1);
+                assert(actuator.actual.elevator <= actuatorCfg.elevonRateRadPerSec * 0.1 + 1e-10,
+                    "Elevon actuator respects its deflection-rate limit");
+                assert(actuator.actual.elevator <= actuatorCfg.maxDeflectionRad,
+                    "Elevon actuator respects its position limit");
+                assert(actuator.actual.speedbrake <= actuatorCfg.speedbrakeRatePerSec * 0.1 + 1e-10,
+                    "Speedbrake actuator respects its extension-rate limit");
+
+                const controlPhysics = new AircraftAeroPhysics(profile, environment);
+                controlPhysics.initSimulation({ ...SCENARIOS.EARTH_KSC_RUNWAY, windWorld: { x: 0, y: 0, z: 0 } });
+                controlPhysics.update(0.1, { pitch: 1, roll: 0, yaw: 0, speedbrake: 0 });
+                assert(Math.abs(controlPhysics.controlSurfaces.elevator) > 0,
+                    "Pilot pitch command moves the elevator/elevon actuator");
+                const controlLoads = controlPhysics._calculateLoads(controlPhysics.state, { pitch: 1, roll: 0, yaw: 0, speedbrake: 0 });
+                assert(Number.isFinite(controlLoads.torqueBody.x) && Math.abs(controlLoads.torqueBody.x) > 0,
+                    "Control-surface deflection produces a finite aerodynamic pitch moment");
+                assert(controlLoads.torqueBody.x < 0,
+                    "Positive pilot pitch input preserves the existing pitch-moment direction");
+                assert(controlPhysics.controlSurfaces === controlPhysics.actuator.actual,
+                    "Actuator owns the single actual control-surface state used by the HUD compatibility view");
+            } catch (error) {
+                failed++;
+                console.error("[FATAL EXCEPTION] Physics regression tests crashed:", error);
+            }
+            console.log(`=== PHYSICS REGRESSION RESULTS: ${passed} PASSED, ${failed} FAILED ===`);
+            return { passed, failed };
+        }
+    }
+
+    // ==========================================
+    // 5. RENDERER ARCHITECTURE
+    // ==========================================
+    class Graphics3D {
+        constructor(ctx, config) {
+            this.ctx = ctx; this.config = config; this.width = 0; this.height = 0; this.focalLength = 0;
+            this.camX = 0; this.camY = 0; this.camZ = 0; this.camPitch = 0; this.camRoll = 0; this.camYaw = 0;
+            this._p1 = { x: 0, y: 0, z: 0 }; this._p2 = { x: 0, y: 0, z: 0 };
+            this._proj1 = { x: 0, y: 0 }; this._proj2 = { x: 0, y: 0 };
+        }
+        updateDimensions(width, height, fov) { this.width = width; this.height = height; this.focalLength = (height * APP_CONSTANTS.HALF) / Math.tan(fov * APP_CONSTANTS.HALF); }
+        setCamera(x, y, z, pitch, roll, yaw) { this.camX = x; this.camY = y; this.camZ = z; this.camPitch = pitch; this.camRoll = roll; this.camYaw = yaw; }
+        transform(x, y, z, outObj = { x: 0, y: 0, z: 0 }) {
+            let dx = x - this.camX, dy = y - this.camY, dz = z - this.camZ;
+            let cy = Math.cos(this.camYaw), sy = Math.sin(this.camYaw);
+            let cp = Math.cos(this.camPitch), sp = Math.sin(this.camPitch);
+            let cr = Math.cos(this.camRoll), sr = Math.sin(this.camRoll);
+            let dx1 = dx * cy - dz * sy, dz1 = dx * sy + dz * cy;
+            let dy2 = dy * cp - dz1 * sp, dz2 = dy * sp + dz1 * cp;
+            outObj.x = dx1 * cr - dy2 * sr; outObj.y = dx1 * sr + dy2 * cr; outObj.z = dz2;
+            return outObj;
+        }
+        projectCameraSpace(cx, cy, cz, outObj = { x: 0, y: 0 }) {
+            let scale = this.focalLength / cz;
+            outObj.x = this.width * APP_CONSTANTS.HALF + cx * scale;
+            outObj.y = this.height * APP_CONSTANTS.HALF - cy * scale;
+            return outObj;
+        }
+        drawLine3D(x1, y1, z1, x2, y2, z2, color, lineWidth = this.config.defaultLineWidth) {
+            let p1 = this.transform(x1, y1, z1, this._p1), p2 = this.transform(x2, y2, z2, this._p2);
+            let nearZ = this.config.clipping.nearPlane;
+            if (p1.z < nearZ && p2.z < nearZ) return; 
+            if (p1.z < nearZ) { let t = (nearZ - p1.z) / (p2.z - p1.z); p1.x += (p2.x - p1.x) * t; p1.y += (p2.y - p1.y) * t; p1.z = nearZ; } 
+            else if (p2.z < nearZ) { let t = (nearZ - p2.z) / (p1.z - p2.z); p2.x += (p1.x - p2.x) * t; p2.y += (p1.y - p2.y) * t; p2.z = nearZ; }
+            let proj1 = this.projectCameraSpace(p1.x, p1.y, p1.z, this._proj1), proj2 = this.projectCameraSpace(p2.x, p2.y, p2.z, this._proj2);
+            this.ctx.beginPath(); this.ctx.moveTo(proj1.x, proj1.y); this.ctx.lineTo(proj2.x, proj2.y);
+            this.ctx.strokeStyle = color; this.ctx.lineWidth = lineWidth; this.ctx.stroke();
+        }
+    }
+
+    class LandingGearRenderer {
+        constructor(gfx, config) {
+            this.gfx = gfx;
+            this.config = config;
+            this._worldStart = { x: 0, y: 0, z: 0 };
+            this._worldEnd = { x: 0, y: 0, z: 0 };
+        }
+
+        _drawLocalLine(start, end, aircraft, color) {
+            const position = aircraft.position;
+            const attitude = aircraft.attitude;
+            MathUtils.localToWorld3D(
+                start.x, start.y, start.z,
+                position.x, position.y, position.z,
+                attitude.pitch, attitude.roll, attitude.yaw,
+                this._worldStart
+            );
+            MathUtils.localToWorld3D(
+                end.x, end.y, end.z,
+                position.x, position.y, position.z,
+                attitude.pitch, attitude.roll, attitude.yaw,
+                this._worldEnd
+            );
+            this.gfx.drawLine3D(
+                this._worldStart.x, this._worldStart.y, this._worldStart.z,
+                this._worldEnd.x, this._worldEnd.y, this._worldEnd.z,
+                color
+            );
+        }
+
+        _drawWheel(center, aircraft, color, lateralOffset = 0) {
+            const cfg = LANDING_GEAR_VISUAL_CONFIG;
+            const radius = cfg.WHEEL_RADIUS_M;
+            const segments = cfg.CIRCLE_SEGMENTS;
+            const wheelCenter = { x: center.x + lateralOffset, y: center.y, z: center.z };
+            let previous = null;
+
+            for (let index = 0; index <= segments; index += 1) {
+                const angle = (index / segments) * Math.PI * 2;
+                const current = {
+                    // Rotate the wheel plane by 90 degrees around its center.
+                    // The axle runs laterally (local X); the wheel circle lies in Y-Z.
+                    x: wheelCenter.x,
+                    y: wheelCenter.y + Math.cos(angle) * radius,
+                    z: wheelCenter.z + Math.sin(angle) * radius
+                };
+                if (previous) this._drawLocalLine(previous, current, aircraft, color);
+                previous = current;
+            }
+        }
+
+        render(avionics) {
+            if (!avionics.isGearDown()) return;
+
+            const cfg = LANDING_GEAR_VISUAL_CONFIG;
+            const aircraft = {
+                position: {
+                    x: avionics.getPosX(),
+                    y: avionics.getPosY(),
+                    z: avionics.getPosZ()
+                },
+                attitude: {
+                    pitch: avionics.getPitchRad(),
+                    roll: avionics.getRollRad(),
+                    yaw: avionics.getYawRad()
+                }
+            };
+            const color = this.config.aircraftColor;
+            const mainWheelX = cfg.MAIN_GEAR_X_M;
+            const mainWheelZ = cfg.MAIN_GEAR_Z_M;
+            const axleY = cfg.AXLE_Y_M;
+            const strutTopY = cfg.STRUT_ATTACH_Y_M;
+
+            // Main landing gear: dual wheels share a transverse axle.
+            // Place the two wheel centers along the local lateral (X) axis,
+            // not along the aircraft longitudinal (Z) axis.
+            for (const side of [-1, 1]) {
+                const legX = side * mainWheelX;
+                const center = { x: legX, y: axleY, z: mainWheelZ };
+                const strutTop = {
+                    // Keep X and Z aligned with the axle center so the main strut
+                    // extends straight down in the orbiter's local coordinate frame.
+                    x: legX,
+                    y: strutTopY,
+                    z: mainWheelZ
+                };
+                const wheelInner = {
+                    x: legX - side * cfg.MAIN_WHEEL_LATERAL_SPACING_M / 2,
+                    y: axleY,
+                    z: mainWheelZ
+                };
+                const wheelOuter = {
+                    x: legX + side * cfg.MAIN_WHEEL_LATERAL_SPACING_M / 2,
+                    y: axleY,
+                    z: mainWheelZ
+                };
+
+                this._drawLocalLine(strutTop, center, aircraft, color);
+                this._drawLocalLine(wheelInner, wheelOuter, aircraft, color);
+                this._drawWheel(wheelInner, aircraft, color);
+                this._drawWheel(wheelOuter, aircraft, color);
+            }
+
+            // Nose landing gear: twin wheels on a centered forward strut.
+            const noseCenter = { x: 0, y: axleY, z: cfg.NOSE_GEAR_Z_M };
+            const noseTop = { x: 0, y: strutTopY, z: cfg.NOSE_STRUT_ATTACH_Z_M };
+            this._drawLocalLine(noseTop, noseCenter, aircraft, color);
+            this._drawLocalLine(
+                { x: -cfg.NOSE_WHEEL_LATERAL_SPACING_M, y: axleY, z: cfg.NOSE_GEAR_Z_M },
+                { x: cfg.NOSE_WHEEL_LATERAL_SPACING_M, y: axleY, z: cfg.NOSE_GEAR_Z_M },
+                aircraft,
+                color
+            );
+            this._drawWheel({ ...noseCenter, x: noseCenter.x - cfg.NOSE_WHEEL_LATERAL_SPACING_M }, aircraft, color);
+            this._drawWheel({ ...noseCenter, x: noseCenter.x + cfg.NOSE_WHEEL_LATERAL_SPACING_M }, aircraft, color);
+        }
+    }
+
+    class WorldRenderer {
+        constructor(gfx, config) { this.gfx = gfx; this.config = config; this.landingGearRenderer = new LandingGearRenderer(gfx, config); this._temp1 = { x: 0, z: 0 }; this._temp2 = { x: 0, z: 0 }; this._tempW1 = { x: 0, y: 0, z: 0 }; this._tempW2 = { x: 0, y: 0, z: 0 }; }
+        renderAircraft(avionics) {
+            let prof = avionics.getProfile(); if (!prof) return;
+            let v = prof.model3D, lines = prof.model3DLines, px = avionics.getPosX(), py = avionics.getPosY(), pz = avionics.getPosZ();
+            let pitch = avionics.getPitchRad(), roll = avionics.getRollRad(), yaw = avionics.getYawRad();
+            for (let i = 0; i < lines.length; i++) {
+                let v1 = v[lines[i][0]], v2 = v[lines[i][1]];
+                if (v1 && v2) {
+                    MathUtils.localToWorld3D(v1.x, v1.y, v1.z, px, py, pz, pitch, roll, yaw, this._tempW1);
+                    MathUtils.localToWorld3D(v2.x, v2.y, v2.z, px, py, pz, pitch, roll, yaw, this._tempW2);
+                    this.gfx.drawLine3D(this._tempW1.x, this._tempW1.y, this._tempW1.z, this._tempW2.x, this._tempW2.y, this._tempW2.z, this.config.aircraftColor, this.config.aircraftLineWidth);
+                }
+            }
+            this.landingGearRenderer.render(avionics);
+        }
+        render(avionics, isChase) {
+            let scenario = avionics.getScenario();
+            if (!scenario || !scenario.landingZone) return;
+            
+            let lz = scenario.landingZone;
+            let currentZ = avionics.getPosZ(), currentX = avionics.getPosX();
+            let gridSize = this.config.gridSize, gY = scenario.environment.groundY;
+            
+            // 地面のグリッド描画（色はシナリオデータから取得）
+            // Keep the ground grid centered on the landing zone, not on the aircraft.
+            // This makes the runway appear near the middle of the ground area during HAC entry.
+            const groundCenterX = Number.isFinite(lz.x) ? lz.x : 0;
+            const groundCenterZ = Number.isFinite(lz.z) ? lz.z : 0;
+            let startZ = Math.floor(groundCenterZ / gridSize) * gridSize - this.config.drawDistance.zBack;
+            let endZ = Math.floor(groundCenterZ / gridSize) * gridSize + this.config.drawDistance.zForward;
+            let startX = Math.floor(groundCenterX / gridSize) * gridSize - this.config.drawDistance.xSide;
+            let endX = Math.floor(groundCenterX / gridSize) * gridSize + this.config.drawDistance.xSide;
+
+            for (let z = startZ; z <= endZ; z += gridSize) this.gfx.drawLine3D(startX, gY, z, endX, gY, z, lz.groundColor);
+            for (let x = startX; x <= endX; x += gridSize) this.gfx.drawLine3D(x, gY, startZ, x, gY, endZ, lz.groundColor);
+
+            // 着陸地点の動的描画（形状タイプに応じた分岐）
+            let rW = this.config.runwayLineWidth;
+            
+            if (lz.type === "RUNWAY") {
+                let halfW = lz.width * APP_CONSTANTS.HALF, rLen = lz.length, rwRad = lz.headingRad;
+                MathUtils.localToWorld(-halfW, gY, lz.x, lz.z, rwRad, this._temp1); let blx = this._temp1.x, blz = this._temp1.z;
+                MathUtils.localToWorld(halfW, gY, lz.x, lz.z, rwRad, this._temp2); let brx = this._temp2.x, brz = this._temp2.z;
+                MathUtils.localToWorld(-halfW, rLen, lz.x, lz.z, rwRad, this._temp1); let tlx = this._temp1.x, tlz = this._temp1.z;
+                MathUtils.localToWorld(halfW, rLen, lz.x, lz.z, rwRad, this._temp2); let trx = this._temp2.x, trz = this._temp2.z;
+
+                this.gfx.drawLine3D(blx, gY, blz, tlx, gY, tlz, lz.color, rW); 
+                this.gfx.drawLine3D(brx, gY, brz, trx, gY, trz, lz.color, rW); 
+                this.gfx.drawLine3D(blx, gY, blz, brx, gY, brz, lz.color, rW); 
+                this.gfx.drawLine3D(tlx, gY, tlz, trx, gY, trz, lz.color, rW); 
+            } 
+            else if (lz.type === "CROSSMARK") {
+                let halfS = lz.size * APP_CONSTANTS.HALF;
+                // 大きなバツ印 (X) を描画
+                this.gfx.drawLine3D(lz.x - halfS, gY, lz.z - halfS, lz.x + halfS, gY, lz.z + halfS, lz.color, rW);
+                this.gfx.drawLine3D(lz.x - halfS, gY, lz.z + halfS, lz.x + halfS, gY, lz.z - halfS, lz.color, rW);
+            }
+
+            if (isChase) this.renderAircraft(avionics);
+        }
+    }
+
+    // Draws the flight-path marker from the actual world-velocity vector, separately from the fixed aircraft-attitude symbol.
+    class FlightPathMarkerRenderer {
+        constructor(ctx, layout, gfx) {
+            this.ctx = ctx;
+            this.layout = layout;
+            this.gfx = gfx;
+            this.smoothedPosition = null;
+            this.lastRenderTimeMs = null;
+        }
+
+        static smoothPosition(current, target, deltaSeconds, timeConstantSeconds) {
+            if (!current) return { x: target.x, y: target.y };
+            const safeDelta = Math.max(0, Math.min(deltaSeconds, 0.1));
+            const alpha = 1 - Math.exp(-safeDelta / timeConstantSeconds);
+            return {
+                x: current.x + (target.x - current.x) * alpha,
+                y: current.y + (target.y - current.y) * alpha
+            };
+        }
+
+        static projectVelocity(velocity, yawRad, pitchRad, rollRad, focalLength) {
+            const horizontalSpeed = Math.hypot(velocity.x, velocity.z);
+            const speed = Math.hypot(horizontalSpeed, velocity.y);
+            if (!Number.isFinite(speed) || speed < CONFIG.HUD_RENDERER.flightPathMarker.minSpeedMPS) return null;
+            const trackRad = Math.atan2(velocity.x, velocity.z);
+            const flightPathRad = Math.atan2(velocity.y, horizontalSpeed);
+            const trackError = Math.atan2(Math.sin(trackRad - yawRad), Math.cos(trackRad - yawRad));
+            const verticalError = flightPathRad - pitchRad;
+            let x = Math.tan(trackError) * focalLength;
+            let y = -Math.tan(verticalError) * focalLength;
+            const cosRoll = Math.cos(rollRad), sinRoll = Math.sin(rollRad);
+            const rotatedX = x * cosRoll + y * sinRoll;
+            const rotatedY = -x * sinRoll + y * cosRoll;
+            return { x: rotatedX, y: rotatedY };
+        }
+
+        render(avionics, centerX, centerY) {
+            const physics = avionics.physics;
+            const state = physics.state;
+            const velocity = state && state.vel ? state.vel : physics.velWorld;
+            if (!velocity || ![velocity.x, velocity.y, velocity.z].every(Number.isFinite)) {
+                this.smoothedPosition = null;
+                this.lastRenderTimeMs = null;
+                return;
+            }
+            const marker = this.layout.flightPathMarker;
+            const projected = FlightPathMarkerRenderer.projectVelocity(
+                velocity, avionics.getYawRad(), avionics.getPitchRad(), avionics.getRollRad(), this.gfx.focalLength
+            );
+            if (!projected) {
+                this.smoothedPosition = null;
+                this.lastRenderTimeMs = null;
+                return;
+            }
+            const limitX = this.gfx.width * marker.maxOffsetRatio * 0.5;
+            const limitY = this.gfx.height * marker.maxOffsetRatio * 0.5;
+            const target = {
+                x: centerX + Math.max(-limitX, Math.min(limitX, projected.x)),
+                y: centerY + Math.max(-limitY, Math.min(limitY, projected.y))
+            };
+            const nowMs = performance.now();
+            const deltaSeconds = this.lastRenderTimeMs === null ? 0 : (nowMs - this.lastRenderTimeMs) / 1000;
+            this.lastRenderTimeMs = nowMs;
+            this.smoothedPosition = FlightPathMarkerRenderer.smoothPosition(
+                this.smoothedPosition, target, deltaSeconds,
+                CONFIG.HUD_RENDERER.flightPathMarker.smoothingTimeConstantSeconds
+            );
+            const x = this.smoothedPosition.x;
+            const y = this.smoothedPosition.y;
+            const ctx = this.ctx;
+            ctx.save();
+            ctx.strokeStyle = this.layout.colorHighlight;
+            ctx.lineWidth = marker.lineWidth;
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            // Conventional flight-path symbol: horizontal wings, short vertical line, and a centered circle.
+            ctx.moveTo(x - marker.horizontalHalfSpan, y);
+            ctx.lineTo(x + marker.horizontalHalfSpan, y);
+            ctx.moveTo(x, y - marker.verticalHalfLength);
+            ctx.lineTo(x, y + marker.verticalHalfLength);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(x, y, marker.centerRadius, 0, APP_CONSTANTS.CIRCLE_RAD);
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    class FlightPathMarkerTester {
+        static runAll() {
+            let passed = 0, failed = 0;
+            const assert = (condition, name) => {
+                if (condition) { passed++; console.log(`[OK] ${name}`); }
+                else { failed++; console.error(`[FAIL] ${name}`); }
+            };
+            const aligned = FlightPathMarkerRenderer.projectVelocity({ x: 0, y: 0, z: 100 }, 0, 0, 0, 500);
+            assert(aligned && Math.abs(aligned.x) < 1e-9 && Math.abs(aligned.y) < 1e-9, "Aligned velocity marker remains at HUD center");
+            const rightTrack = FlightPathMarkerRenderer.projectVelocity({ x: 10, y: 0, z: 100 }, 0, 0, 0, 500);
+            assert(rightTrack && rightTrack.x > 0, "Rightward track deviation moves marker right");
+            const climb = FlightPathMarkerRenderer.projectVelocity({ x: 0, y: 10, z: 100 }, 0, 0, 0, 500);
+            assert(climb && climb.y < 0, "Upward flight path moves marker upward");
+            const noseUpLevelTrack = FlightPathMarkerRenderer.projectVelocity(
+                { x: 0, y: 0, z: 100 }, 0, 10 * APP_CONSTANTS.DEG_TO_RAD, 0, 500);
+            assert(noseUpLevelTrack && noseUpLevelTrack.y > 0,
+                "Level flight path with nose-up attitude appears below the nose reference");
+            const matchingNoseAndPath = FlightPathMarkerRenderer.projectVelocity(
+                { x: 0, y: 10 * Math.tan(10 * APP_CONSTANTS.DEG_TO_RAD), z: 100 },
+                0, 10 * APP_CONSTANTS.DEG_TO_RAD, 0, 500);
+            assert(matchingNoseAndPath && Math.abs(matchingNoseAndPath.y) < 1e-9,
+                "FPM centers when flight-path angle matches HUD pitch angle");
+            assert(FlightPathMarkerRenderer.projectVelocity({ x: 0, y: 0, z: 0 }, 0, 0, 0, 500) === null, "Stationary marker is suppressed");
+            assert(Number.isFinite(rightTrack.x) && Number.isFinite(climb.y), "Projected marker coordinates remain finite");
+            const smoothed = FlightPathMarkerRenderer.smoothPosition({ x: 0, y: 0 }, { x: 100, y: -50 }, 0.016, 0.075);
+            assert(smoothed.x > 0 && smoothed.x < 100 && smoothed.y < 0 && smoothed.y > -50, "FPM screen position eases toward a changed target");
+            const initial = FlightPathMarkerRenderer.smoothPosition(null, { x: 12, y: 8 }, 0.016, 0.075);
+            assert(initial.x === 12 && initial.y === 8, "FPM smoothing initializes at first valid target");
+            console.log(`=== FLIGHT-PATH HUD TESTS: ${passed} PASSED, ${failed} FAILED ===`);
+            return { passed, failed };
+        }
+    }
+
+    class HUDRenderer {
+        constructor(ctx, layout, gfx) {
+            this.ctx = ctx; this.layout = layout; this.gfx = gfx; this.dataProvider = new HUDDataProvider();
+            this.flightPathMarkerRenderer = new FlightPathMarkerRenderer(ctx, layout, gfx);
+        }
+        drawTape(x, y, currentValue, stepValue, isLeft) {
+            let l = this.layout, halfW = l.tapeWidth * 0.5, halfH = l.tapeHeight * 0.5, boxW = l.tapeBoxWidth, boxH = l.tapeBoxHeight, halfBoxW = boxW * 0.5, halfBoxH = boxH * 0.5;
+            this.ctx.save(); this.ctx.beginPath(); this.ctx.rect(x - halfW, y - halfH, l.tapeWidth, l.tapeHeight); this.ctx.clip();
+            this.ctx.strokeStyle = l.colorNormal; this.ctx.lineWidth = l.lineWidthThick; this.ctx.fillStyle = l.colorTapeBg;
+            this.ctx.fillRect(x - halfBoxW, y - halfBoxH, boxW, boxH); this.ctx.strokeRect(x - halfBoxW, y - halfBoxH, boxW, boxH);
+            this.ctx.fillStyle = l.colorNormal; this.ctx.font = l.fontSub; this.ctx.textAlign = 'center'; this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(Math.floor(currentValue), x, y + l.tapeTextYOffset); 
+            this.ctx.lineWidth = l.lineWidthNormal; this.ctx.font = l.fontSmall;
+            let startValue = Math.floor(currentValue / stepValue) * stepValue, numTicks = Math.ceil(halfH / l.tapeTickSpacing) + 1;
+            for (let i = -numTicks; i <= numTicks; i++) {
+                let tickValue = startValue + i * stepValue; if (tickValue < 0 && isLeft) continue; 
+                let yOffset = y - (tickValue - currentValue) * (l.tapeTickSpacing / stepValue);
+                if (Math.abs(yOffset - y) < halfBoxH + l.tapeCenterClearance) continue; 
+                this.ctx.beginPath();
+                if (isLeft) { this.ctx.moveTo(x + halfW, yOffset); this.ctx.lineTo(x + halfW - l.tapeTickLength, yOffset); this.ctx.textAlign = 'right'; this.ctx.fillText(tickValue, x + halfW - l.tapeTextOffset, yOffset); } 
+                else { this.ctx.moveTo(x - halfW, yOffset); this.ctx.lineTo(x - halfW + l.tapeTickLength, yOffset); this.ctx.textAlign = 'left'; this.ctx.fillText(tickValue, x - halfW + l.tapeTextOffset, yOffset); }
+                this.ctx.stroke();
+            }
+            this.ctx.restore();
+        }
+        render(avionics, isPaused, inputManager, controlMode) {
+            let cx = this.gfx.width * 0.5, cy = this.gfx.height * 0.5, l = this.layout;
+            if (avionics.cameraMode === CAMERA_MODE.COCKPIT) {
+                this.ctx.save(); this.ctx.translate(cx, cy); this.ctx.rotate(-avionics.getRollRad());
+                for (let i = l.pitchLadderMin; i <= l.pitchLadderMax; i += l.pitchLadderStep) {
+                    let yOffset = -Math.tan((i - avionics.getPitchDeg()) * APP_CONSTANTS.DEG_TO_RAD) * this.gfx.focalLength;
+                    if (Math.abs(yOffset) > this.gfx.height) continue;
+                    this.ctx.beginPath();
+                    if (i > 0) { this.ctx.setLineDash(l.lineDashSolid); this.ctx.moveTo(-l.pitchLadderShortWidth, yOffset); this.ctx.lineTo(l.pitchLadderShortWidth, yOffset); this.ctx.moveTo(-l.pitchLadderShortWidth, yOffset); this.ctx.lineTo(-l.pitchLadderShortWidth, yOffset + l.pitchLadderTickHeight); this.ctx.moveTo(l.pitchLadderShortWidth, yOffset); this.ctx.lineTo(l.pitchLadderShortWidth, yOffset + l.pitchLadderTickHeight); } 
+                    else if (i < 0) { this.ctx.setLineDash(l.lineDashNegativePitch); this.ctx.moveTo(-l.pitchLadderShortWidth, yOffset); this.ctx.lineTo(l.pitchLadderShortWidth, yOffset); this.ctx.moveTo(-l.pitchLadderShortWidth, yOffset); this.ctx.lineTo(-l.pitchLadderShortWidth, yOffset - l.pitchLadderTickHeight); this.ctx.moveTo(l.pitchLadderShortWidth, yOffset); this.ctx.lineTo(l.pitchLadderShortWidth, yOffset - l.pitchLadderTickHeight); } 
+                    else { this.ctx.setLineDash(l.lineDashSolid); this.ctx.lineWidth = l.lineWidthThick; this.ctx.moveTo(-l.pitchLadderLongWidth, yOffset); this.ctx.lineTo(l.pitchLadderLongWidth, yOffset); this.ctx.lineWidth = l.lineWidthNormal; }
+                    this.ctx.strokeStyle = l.colorNormal; this.ctx.stroke();
+                    if (i !== 0) { this.ctx.font = l.fontSmall; this.ctx.fillStyle = l.colorNormal; this.ctx.textAlign = 'right'; this.ctx.fillText(i, -l.pitchLadderShortWidth - l.pitchLadderTextOffset, yOffset + l.pitchLadderTextOffset); this.ctx.textAlign = 'left'; this.ctx.fillText(i, l.pitchLadderShortWidth + l.pitchLadderTextOffset, yOffset + l.pitchLadderTextOffset); }
+                }
+                this.ctx.restore(); 
+                this.ctx.strokeStyle = l.colorNormal; this.ctx.lineWidth = l.lineWidthThick; this.ctx.setLineDash(l.lineDashSolid);
+                this.ctx.beginPath(); this.ctx.moveTo(cx - l.aircraftSymbolWidth, cy); this.ctx.lineTo(cx - l.aircraftSymbolCenterGap, cy); this.ctx.lineTo(cx, cy + l.aircraftSymbolDrop); this.ctx.lineTo(cx + l.aircraftSymbolCenterGap, cy); this.ctx.lineTo(cx + l.aircraftSymbolWidth, cy); this.ctx.stroke();
+                this.flightPathMarkerRenderer.render(avionics, cx, cy);
+                this.drawTape(cx - l.tapeOffsetX, cy, avionics.getVelocityKts(), l.tapeSpeedStep, true);
+                this.drawTape(cx + l.tapeOffsetX, cy, avionics.getAltitudeFt(), l.tapeAltStep, false);   
+            }
+
+            this.dataProvider.bindContext(avionics, inputManager, isPaused, avionics.cameraMode, controlMode);
+            let p = this.dataProvider, mX = l.marginX, rX = this.gfx.width - l.rightPanelOffsetX, y = cy;
+            this.ctx.font = l.fontMain; this.ctx.fillStyle = l.colorNormal; this.ctx.textAlign = 'left';
+            p.getLeftPanel().forEach(i => { this.ctx.fillText(`${i.label} ${i.value}`, mX, y); y += l.lineSpacingMain; }); y = cy;
+            p.getRightPanel().forEach(i => { this.ctx.fillText(`${i.label} ${i.value}`, rX, y); y += l.lineSpacingMain; });
+
+            y = l.lineSpacingMain; this.ctx.font = l.fontInfo; let tr = p.getTopRightInfo();
+            const topRightX = this.gfx.width - l.topRightMarginX;
+            this.ctx.save();
+            // Keep the GUIDANCE row at its existing right-aligned position.
+            // Align the MODE and AIRCRAFT rows to the measured left edge of GUIDANCE.
+            this.ctx.textAlign = 'right';
+            const guidanceLeftX = topRightX - this.ctx.measureText(tr.guidance).width;
+            this.ctx.textAlign = 'left';
+            this.ctx.fillStyle = l.colorHighlight; this.ctx.fillText(tr.mode, guidanceLeftX, y); y += l.lineSpacingInfo + l.topRightExtraSpacing;
+            this.ctx.fillStyle = l.colorNormal; this.ctx.fillText(tr.guidance, guidanceLeftX, y); y += l.lineSpacingInfo + l.topRightExtraSpacing;
+            this.ctx.font = l.fontSub; this.ctx.fillText(tr.aircraft, guidanceLeftX, y); y += l.lineSpacingMain + l.topRightExtraSpacing;
+            this.ctx.restore();
+
+            let sfc = p.getSurfaces(); this.ctx.fillText(sfc.title, rX, y); y += l.lineSpacingInfo;
+            sfc.items.forEach(i => { this.ctx.fillText(`${i.label} ${i.value}`, rX, y); y += l.lineSpacingInfo; });
+
+            y = l.lineSpacingMain; this.ctx.textAlign = 'left'; let ctrl = p.getControls();
+            this.ctx.fillText(ctrl.camLabel, mX, y); y += l.lineSpacingInfo; this.ctx.fillText(ctrl.title, mX, y); y += l.lineSpacingInfo;
+            ctrl.items.forEach(i => { this.ctx.fillText(`${i.keyStr.padEnd(CONFIG.HUD_FORMAT.controlsKeyPad, ' ')} : ${i.label}`, mX, y); y += l.lineSpacingInfo; });
+
+            y = this.gfx.height - (l.lineSpacingInfo * l.criteriaBlockOffsetBlocks + l.criteriaBlockOffsetPixels); let crit = p.getCriteria();
+            this.ctx.fillStyle = l.colorNormal;
+            this.ctx.fillText(crit.title, mX, y); y += l.lineSpacingInfo;
+            crit.items.forEach(i => {
+                // Render a failed criterion's entire row in red, without changing its value.
+                this.ctx.fillStyle = i.failed === true ? l.colorWarning : l.colorNormal;
+                this.ctx.fillText(`${i.label} ${i.value}`, mX, y);
+                y += l.lineSpacingInfo;
+            });
+            this.ctx.fillStyle = l.colorNormal;
+
+            let dbgInfos = p.getDebugInfo(), dbgX = this.gfx.width - l.debugOffsetX, dbgY = this.gfx.height - (l.lineSpacingInfo * dbgInfos.length + l.debugOffsetBottom);
+            this.ctx.fillStyle = l.colorHighlight; this.ctx.font = l.fontSmall;
+            dbgInfos.forEach(info => { this.ctx.fillText(info, dbgX, dbgY); dbgY += l.lineSpacingInfo; });
+
+            if (isPaused) {
+                this.ctx.fillStyle = l.colorNormal;
+                this.ctx.font = l.fontLarge;
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(HUD_TEXT_RESOURCE.PAUSED, cx, cy - l.pitchLadderLongWidth);
+            }
+        }
+    }
+
+    // ==========================================
+    // 6. MAIN APPLICATION LAYER
+    // ==========================================
+    class Application {
+        constructor() {
+            this.canvas = document.getElementById('gameCanvas');
+            this.ctx = this.canvas.getContext('2d');
+            this.menuDiv = document.getElementById('menu');
+            this.bindUIEvents();
+            
+            this.configManager = new ConfigManager();
+            this.configManager.loadFromStorage();
+            this.inputManager = new InputManager(CONFIG.INPUT); 
+            this.inputManager.addDevice(new KeyboardDevice(CONFIG.INPUT));
+            this.inputManager.addDevice(new GamepadDevice(CONFIG.INPUT));
+
+            this.gfx = new Graphics3D(this.ctx, CONFIG.GRAPHICS);
+            this.worldRenderer = new WorldRenderer(this.gfx, CONFIG.WORLD_RENDERER);
+            this.hudRenderer = new HUDRenderer(this.ctx, CONFIG.HUD_RENDERER, this.gfx);
+            
+            // Initialize the selected scenario and physics model.
+            // Connect scenario, physics, and avionics components.
+            this.currentScenario = SCENARIOS.EARTH_KSC_RUNWAY; // Select the Earth runway scenario.
+            this.kinematics = new AircraftAeroPhysics(AIRCRAFT_PROFILE, this.currentScenario.environment);
+            this.dummyAvionics = new Avionics(this.kinematics);
+            // End component initialization.
+
+            this.gameState = GAME_STATE.MENU;
+            this.controlMode = CONTROL_MODE.MANUAL;
+            this.guidanceController = new ApproachGuidanceController();
+            this.isAppPaused = false;
+
+            // Ground-roll cockpit camera stabilization: keep rendering orientation continuous
+            // when the rollout steering updates aircraft yaw at frame rate.
+            this._groundCameraYaw = null;
+            this._groundCameraRoll = null;
+            this._groundCameraPitch = null;
+
+            this.handleResize = this.handleResize.bind(this);
+            window.addEventListener('resize', this.handleResize);
+            this.handleResize();
+
+            this.lastTime = performance.now();
+            this.loop = this.loop.bind(this);
+            requestAnimationFrame(this.loop);
+            
+            AutoTester.runAll();
+            KinematicsTester.runAll();
+		RigidBodyTester.runAll();
+            AeroTester.runAll();
+            PhysicsRegressionTester.runAll();
+            LandingGearVisualTester.runAll();
+            ApproachGuidanceTester.runAll();
+            LandingAssessmentTester.runAll();
+            LandingGearRolloutTester.runAll();
+            FlightPathMarkerTester.runAll();
+        }
+
+        bindUIEvents() {
+            document.addEventListener('click', (event) => {
+                const button = event.target.closest('[data-action]');
+                if (!button) return;
+                switch (button.dataset.action) {
+                    case 'start-manual': this.start(CONTROL_MODE.MANUAL, button.dataset.scenario || 'CALM'); break;
+                    case 'start-demo': this.start(CONTROL_MODE.DEMO); break;
+                    case 'open-config': this.openConfig(); break;
+                    case 'close-config': this.closeConfig(); break;
+                    default: break;
+                }
+            });
+        }
+
+        handleResize() {
+            this.canvas.width = window.innerWidth;
+            this.canvas.height = window.innerHeight;
+            this.gfx.updateDimensions(this.canvas.width, this.canvas.height, CONFIG.SYSTEM.cameraFOVRad);
+        }
+
+        // Start a fresh session in the requested control mode.
+        start(mode, scenarioChoice = "CALM") {
+            this.controlMode = mode;
+            const baseScenario = SCENARIOS.EARTH_KSC_RUNWAY;
+            if (mode === CONTROL_MODE.DEMO) {
+                this.currentScenario = ApproachScenarioFactory.create();
+            } else {
+                // V22's visible CALM entry starts farther out on the terminal HAC segment, with wind fixed at zero.
+                // Crosswind and demo entry points remain in the source for later restoration.
+                const crosswindKts = scenarioChoice === "CROSSWIND"
+                    ? (Math.random() * 2 - 1) * APP_CONSTANTS.PHYSICS.MAX_CROSSWIND_KTS : 0;
+                this.currentScenario = scenarioChoice === "CALM"
+                    ? { ...ApproachScenarioFactory.create(), guidanceLabel: "MANUAL HAC TERMINAL" }
+                    : {
+                        ...baseScenario,
+                        guidanceLabel: "MANUAL",
+                        windWorld: { x: crosswindKts * APP_CONSTANTS.KNOTS_TO_MPS, y: 0, z: 0 }
+                    };
+            }
+            this.menuDiv.style.display = "none";
+            this.inputManager.resetState();
+            
+            // Reset physics state when starting or restarting.
+            this.kinematics = new AircraftAeroPhysics(AIRCRAFT_PROFILE, this.currentScenario.environment);
+            this.kinematics.initSimulation(this.currentScenario); // Initialize position and orientation from scenario data.
+            this.dummyAvionics.physics = this.kinematics;
+            // End component initialization.------------
+
+            this.gameState = GAME_STATE.PLAYING; 
+            this.isAppPaused = false;
+            this.lastTime = performance.now(); 
+        }
+
+        openConfig() { this.configManager.open(); }
+        closeConfig() { this.configManager.close(); }
+
+        loop(time) {
+            let dt = Math.min((time - this.lastTime) / APP_CONSTANTS.MS_PER_SEC, APP_CONSTANTS.PHYSICS.MAX_FRAME_DELTA_SECONDS); 
+            this.lastTime = time;
+
+            if (this.configManager.active) {
+                this.configManager.update();
+                requestAnimationFrame(this.loop); return; 
+            }
+
+            if (this.gameState === GAME_STATE.PLAYING) {
+                this.inputManager.updateActionStates();
+                
+                let isManual = (this.controlMode === CONTROL_MODE.MANUAL);
+
+                if (this.inputManager.isActionJustPressed('RESTART')) {
+                    this.gameState = GAME_STATE.MENU; this.menuDiv.style.display = "block";
+                }
+                if (this.inputManager.isActionJustPressed('PAUSE')) {
+                    this.isAppPaused = !this.isAppPaused;
+                }
+                if (this.inputManager.isActionJustPressed('CAMERA')) {
+                    this.dummyAvionics.cameraMode = (this.dummyAvionics.cameraMode === CAMERA_MODE.COCKPIT) ? CAMERA_MODE.CHASE : CAMERA_MODE.COCKPIT;
+                }
+                
+                let controlAxes;
+                if (isManual) {
+                    if (this.inputManager.isActionJustPressed('GEAR')) {
+                        this.dummyAvionics.operateGear();
+                    }
+                    this.inputManager.update(dt);
+                    controlAxes = this.inputManager.getAxes();
+                    controlAxes.wheelBrake = this.inputManager.isActionPressed('BRAKE') ? 1 : 0;
+                } else {
+                    this.inputManager.update(dt);
+                    this.inputManager.clearAxes();
+                    ApproachGearController.update(this.dummyAvionics);
+                    controlAxes = this.guidanceController.calculate(this.dummyAvionics);
+                    controlAxes.wheelBrake = this.inputManager.isActionPressed('BRAKE') ? 1 : 0;
+                }
+                
+                if (!this.isAppPaused) {
+                    // Guidance produces commands; physics remains responsible for actuator and motion updates.
+                    this.dummyAvionics.update(dt, controlAxes);
+                    // End component initialization.----------------------
+                }
+
+                // Keep the chase camera at a fixed bearing relative to the aircraft.
+                let px = this.dummyAvionics.getPosX(), py = this.dummyAvionics.getPosY(), pz = this.dummyAvionics.getPosZ();
+                let pr = this.dummyAvionics.getPitchRad(), rr = this.dummyAvionics.getRollRad(), yr = this.dummyAvionics.getYawRad();
+                
+                if (this.dummyAvionics.cameraMode === CAMERA_MODE.COCKPIT) {
+                    // The pilot's eye point is 35 ft above the runway at a level, gear-contact
+                    // attitude, matching NASA's documented normal-landing sight geometry.
+                    // The vehicle reference point and gear geometry remain separate from ALT.
+                    const physicsState = this.dummyAvionics.physics?.state;
+                    const minimumGearOffsetY = Math.min(...LANDING_GEAR_CONFIG.MAIN_GEAR_OFFSETS_M.map(offset => offset.y));
+                    const cockpitEyeOffsetLocalY = CONFIG.SYSTEM.COCKPIT_EYE_HEIGHT_ABOVE_RUNWAY_M + minimumGearOffsetY;
+                    const cockpitEyeOffsetWorld = physicsState?.ori?.rotateVector
+                        ? physicsState.ori.rotateVector(new Vector3(0, cockpitEyeOffsetLocalY, 0))
+                        : new Vector3(0, cockpitEyeOffsetLocalY, 0);
+                    const cameraX = px + cockpitEyeOffsetWorld.x;
+                    const cameraY = py + cockpitEyeOffsetWorld.y;
+                    const cameraZ = pz + cockpitEyeOffsetWorld.z;
+                    const rollout = this.dummyAvionics.physics?.rolloutController;
+                    if (rollout?.landed) {
+                        // Smooth angular changes only in the ground-roll cockpit view.
+                        // The aircraft physics and HUD attitude values remain untouched.
+                        const dtSafe = Math.max(0, Math.min(dt, APP_CONSTANTS.PHYSICS.MAX_FRAME_DELTA_SECONDS));
+                        const blend = 1 - Math.exp(-CONFIG.SYSTEM.GROUND_CAMERA_ANGULAR_RESPONSE_PER_SEC * dtSafe);
+                        if (this._groundCameraYaw === null) {
+                            this._groundCameraYaw = yr;
+                            this._groundCameraRoll = rr;
+                            this._groundCameraPitch = pr;
+                        } else {
+                            const yawDelta = Math.atan2(Math.sin(yr - this._groundCameraYaw), Math.cos(yr - this._groundCameraYaw));
+                            this._groundCameraYaw += yawDelta * blend;
+                            this._groundCameraRoll += (rr - this._groundCameraRoll) * blend;
+                            this._groundCameraPitch += (pr - this._groundCameraPitch) * blend;
+                        }
+                        this.gfx.setCamera(cameraX, cameraY, cameraZ, this._groundCameraPitch, this._groundCameraRoll, this._groundCameraYaw);
+                    } else {
+                        this._groundCameraYaw = yr;
+                        this._groundCameraRoll = rr;
+                        this._groundCameraPitch = pr;
+                        this.gfx.setCamera(cameraX, cameraY, cameraZ, pr, rr, yr);
+                    }
+                } else {
+                    let dist = CONFIG.SYSTEM.defaultChaseDistance;
+                    let h = CONFIG.SYSTEM.defaultChaseHeight;
+                    
+                    // Track the aircraft heading so the chase camera stays directly behind it.
+                    const cameraBaseYaw = yr;
+
+                    // Position the camera behind the aircraft in its heading-relative frame.
+                    const camX = px - Math.sin(cameraBaseYaw) * dist;
+                    const camY = py + h;
+                    const camZ = pz - Math.cos(cameraBaseYaw) * dist;
+
+                    const camPitch = -Math.atan2(h, dist);
+
+                    // Keep the camera level while aligning its yaw with the aircraft heading.
+                    this.gfx.setCamera(camX, camY, camZ, camPitch, 0, cameraBaseYaw);
+                }
+                // End component initialization.-----------------------------------------
+                // End component initialization.-----------------------------------------
+
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                this.worldRenderer.render(this.dummyAvionics, this.dummyAvionics.cameraMode === CAMERA_MODE.CHASE);
+                this.hudRenderer.render(this.dummyAvionics, this.isAppPaused, this.inputManager, this.controlMode);
+            }
+            requestAnimationFrame(this.loop);
+        }
+    }
+    
+    window.app = new Application();
+</script>
+</body>
+</html>

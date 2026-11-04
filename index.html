@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Autonomous Arcade</title>
+    <style>
+        body {
+            background-color: #f4f7f6;
+            color: #333333;
+            font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 50px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        h1 {
+            color: #2c3e50;
+            font-size: 2.0rem;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+        }
+        .subtitle-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: center;
+        }
+        p.subtitle {
+            color: #666666;
+            font-size: 0.9rem;
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #e9ecef;
+            padding: 4px 12px;
+            border-radius: 15px;
+            margin: 0;
+            display: inline-block;
+        }
+        .game-list {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+            max-width: 650px;
+        }
+        .game-card {
+            background-color: #ffffff;
+            border-radius: 12px;
+            padding: 20px 25px;
+            text-decoration: none;
+            color: inherit;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+            border-left: 6px solid #3498db;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .game-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            border-left-color: #2980b9;
+        }
+        .game-title {
+            font-size: 1.2rem;
+            color: #2c3e50;
+            margin: 0 0 6px 0;
+        }
+        .game-desc {
+            margin: 0;
+            color: #555555;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        footer {
+            margin-top: 50px;
+            font-size: 0.85rem;
+            color: #999999;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>大人のレトロゲーム館</h1>
+        <div class="subtitle-container">
+            <p class="subtitle">単体で動作するオフラインWebゲーム</p>
+            <p class="subtitle">低スペックPCでもサクサク動く</p>
+        </div>
+    </header>
+
+    <div class="game-list">
+        <!-- Game Links -->
+        <a href="space_shuttle_landing_v40.html" class="game-card">
+            <h2 class="game-title">スペースシャトル・ランディング・シミュレーター</h2>
+            <p class="game-desc">着陸の練習に特化したシミュレーター。</p>
+        </a>
+
+        <a href="helicopter_hover_landing_v18_completed.html" class="game-card">
+            <h2 class="game-title">ヘリコプター・ホバー・ランディング・シミュレーター</h2>
+            <p class="game-desc">ホバリングと着陸に特化したシミュレーター。</p>
+        </a>
+
+        <a href="chess_tactics_academy_v1_2_completed.html" class="game-card">
+            <h2 class="game-title">詰めチェス道場</h2>
+            <p class="game-desc">入門から中級向けの詰めチェス。</p>
+        </a>
+        
+        <a href="poker_five_card_showdown_v6_points.html" class="game-card">
+            <h2 class="game-title">ポーカー［5カード・ショーダウン］</h2>
+            <p class="game-desc">PC対戦型5カード・ショーダウン。</p>
+        </a>
+
+        <a href="poker_five_card_draw_v2_points.html" class="game-card">
+            <h2 class="game-title">ポーカー［5カード・ドロー］</h2>
+            <p class="game-desc">PC対戦型5カード・ドロー。</p>
+        </a>
+
+        <!-- Template for adding new games
+        <a href="new_game.html" class="game-card">
+            <h2 class="game-title">Game Title</h2>
+            <p class="game-desc">Short description of the game.</p>
+        </a>
+        -->
+    </div>
+
+    <footer>
+        &copy; 2026 Yasuhiro Kaizu. All rights reserved.
+    </footer>
+</body>
+</html>

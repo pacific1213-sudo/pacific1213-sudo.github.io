@@ -1,0 +1,976 @@
+<!--
+  ============================================================================
+  Program          : Five Card Showdown Poker
+  Version          : 6.0.0 (V6, Points Scoring Release)
+  Release Date     : 2026-11-04
+  Copyright        : Copyright (c) 2026 [Yasuhiro Kaizu]
+  
+  Development      : Developed with assistance from ChatGPT (OpenAI).
+  Note             : This software is provided as an entertainment game.
+                     Points are awarded to the winner based on hand strength.
+                     No real-money gambling functionality is included.
+  ============================================================================
+-->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#092c28">
+  <title>ポーカー［5カード・ショーダウン］ | Poker V6</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --page-bg: #061b1b;
+      --felt-deep: #07342e;
+      --felt: #0c5948;
+      --gold: #f2cb7e;
+      --gold-strong: #e8b959;
+      --text: #f4f6f0;
+      --muted: #b4cbc3;
+      --thin-border: rgba(255, 255, 255, .16);
+      --card-white: #fffdf6;
+      --card-red: #b6313b;
+      --card-black: #1b2833;
+      --card-width: clamp(43px, 7.4vw, 75px);
+      --card-gap: clamp(5px, .9vw, 10px);
+      --radius: 20px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      min-width: 300px;
+      min-height: 100vh;
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      color: var(--text);
+      background: radial-gradient(ellipse at 50% 12%, #154c43 0%, #082b2a 38%, var(--page-bg) 85%);
+    }
+    button { font: inherit; }
+    button:focus-visible, summary:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+    .app { width: min(980px, calc(100% - 28px)); margin: 0 auto; padding: 12px 0 10px; }
+    .topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; margin-bottom: 10px; }
+    .header { text-align: left; }
+    .eyebrow { color: var(--gold); font-size: .64rem; font-weight: 800; letter-spacing: .21em; }
+    h1 { margin: 3px 0 2px; font-size: clamp(1.35rem, 2.3vw, 1.85rem); letter-spacing: .03em; }
+    .subtitle { margin: 0; color: var(--muted); font-size: .77rem; }
+
+    .scoreboard {
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      flex-wrap: nowrap;
+      gap: 5px;
+      margin: 0;
+    }
+    .score-item {
+      min-width: 96px;
+      padding: 5px 10px;
+      text-align: center;
+      border: 1px solid var(--thin-border);
+      border-radius: 12px;
+      background: rgba(4, 24, 23, .52);
+    }
+    .score-label { display: block; color: var(--muted); font-size: .66rem; white-space: nowrap; }
+    .score-value { display: block; margin-top: 1px; color: var(--gold); font-weight: 800; font-size: 1.22rem; font-variant-numeric: tabular-nums; }
+
+    .table {
+      position: relative;
+      overflow: hidden;
+      padding: 10px 18px;
+      border: 2px solid #8b6f3d;
+      border-radius: 30px;
+      background:
+        radial-gradient(ellipse at center, rgba(20, 126, 96, .45), transparent 70%),
+        repeating-linear-gradient(30deg, transparent 0, transparent 3px, rgba(255, 255, 255, .008) 4px),
+        var(--felt-deep);
+      box-shadow: inset 0 0 0 5px rgba(3, 20, 18, .48), 0 12px 35px rgba(0, 0, 0, .3);
+    }
+    .table::after {
+      content: "";
+      position: absolute;
+      inset: 7px;
+      border: 1px solid rgba(233, 210, 157, .15);
+      border-radius: inherit;
+      pointer-events: none;
+    }
+    .hand-area {
+      position: relative;
+      z-index: 1;
+      border: 1px solid transparent;
+      border-radius: 16px;
+      padding: 3px 5px 5px;
+      transition: background-color .2s, border-color .2s;
+    }
+    .hand-area--winner { background: rgba(255, 218, 127, .09); border-color: rgba(250, 210, 123, .55); }
+    .hand-header { display: flex; gap: 10px; align-items: center; justify-content: center; min-height: 20px; }
+    .hand-title { margin: 0; font-size: .86rem; font-weight: 800; letter-spacing: .04em; }
+    .hand-score { color: var(--gold); font-size: .79rem; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .hand-badge { color: var(--gold); font-size: .75rem; font-weight: 900; letter-spacing: .1em; }
+    .hand-value { margin: 1px 0 5px; min-height: 1.1em; text-align: center; color: #d3e5dd; font-size: .79rem; font-weight: 700; }
+    .hand-area--winner .hand-value { color: var(--gold); }
+    .cards { display: flex; justify-content: center; gap: var(--card-gap); min-height: calc(var(--card-width) * 1.4); }
+    .playing-card {
+      position: relative;
+      flex: 0 0 var(--card-width);
+      width: var(--card-width);
+      aspect-ratio: 5 / 7;
+      border: 1px solid rgba(23, 35, 36, .18);
+      border-radius: clamp(6px, 1vw, 10px);
+      background: var(--card-white);
+      color: var(--card-black);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, .24);
+      user-select: none;
+      animation: card-appear .3s ease both;
+      animation-delay: var(--card-delay, 0ms);
+    }
+    .playing-card--red { color: var(--card-red); }
+    .card-corner {
+      position: absolute;
+      left: 8%;
+      top: 5%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-size: clamp(.72rem, 1.5vw, 1rem);
+      font-weight: 900;
+      line-height: 1;
+    }
+    .corner-suit { font-size: 1em; margin-top: 3px; }
+    .card-center {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      font-size: clamp(1.75rem, 4.5vw, 3.15rem);
+      line-height: 1;
+    }
+    .card-corner--bottom { inset: auto 8% 5% auto; transform: rotate(180deg); }
+    .playing-card--back { background: #173d5f; border: 5px solid #f0ecdf; }
+    .playing-card--back::before {
+      content: "";
+      position: absolute;
+      inset: 3px;
+      border: 1px solid #91b0c4;
+      border-radius: 2px;
+      background: repeating-linear-gradient(45deg, transparent 0 6px, rgba(255,255,255,.1) 6px 8px);
+    }
+    .playing-card--back::after {
+      content: "◆";
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: #efdfb6;
+      font-size: clamp(1.45rem, 4vw, 2.7rem);
+      text-shadow: 0 2px 4px #082137;
+    }
+    .divider {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 5px 0;
+      color: rgba(248, 230, 193, .64);
+      font-size: .77rem;
+      font-weight: 900;
+      letter-spacing: .23em;
+    }
+    .divider::before, .divider::after { content: ""; height: 1px; flex: 1; background: rgba(242, 203, 126, .28); }
+
+    .results {
+      padding: 8px 12px 0;
+      text-align: center;
+    }
+    .result-title { margin: 0; min-height: 1.25em; font-size: clamp(1.12rem, 2.4vw, 1.5rem); font-weight: 900; }
+    .result-points { margin-left: .45em; font-size: .88em; white-space: nowrap; }
+    .result-title--win { color: var(--gold); }
+    .result-title--loss { color: #f3b5b1; }
+    .result-title--tie { color: #d5e7e1; }
+    .result-description { margin: 1px 0 7px; color: var(--muted); font-size: .79rem; }
+    .controls { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
+    .btn { border-radius: 12px; border: 1px solid transparent; cursor: pointer; font-weight: 800; padding: 8px 20px; transition: filter .15s, transform .15s; }
+    .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: linear-gradient(#ffe2a0, var(--gold-strong)); color: #28342e; box-shadow: 0 4px 14px rgba(0, 0, 0, .2); }
+    .btn-secondary { color: #e2f2e9; background: rgba(255, 255, 255, .06); border-color: var(--thin-border); }
+    .note { text-align: center; margin: 8px 0 0; color: var(--muted); font-size: .73rem; }
+    .rules {
+      margin-top: 9px;
+      padding: 7px 16px;
+      border: 1px solid var(--thin-border);
+      border-radius: 16px;
+      background: rgba(0, 0, 0, .16);
+    }
+    .rules summary { font-size: .82rem; font-weight: 800; cursor: pointer; padding: 2px 0; }
+    .rules-content {
+      max-height: min(60vh, 540px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 5px 5px 8px;
+      scrollbar-color: #608d7d transparent;
+    }
+    .rules p { color: #cbddd5; font-size: .84rem; line-height: 1.65; }
+    .rules-intro { margin: 9px 0; }
+    .rule-heading { margin: 15px 0 9px; font-size: .92rem; color: var(--gold); }
+    .rule-basics { display: flex; flex-wrap: wrap; gap: 5px 12px; font-size: .82rem; color: #e0efe8; }
+    .rule-basics strong { color: var(--gold); }
+    .hand-guide { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; padding: 0; margin: 0; list-style: none; }
+    .hand-guide-item {
+      min-width: 0;
+      padding: 11px 12px;
+      border: 1px solid var(--thin-border);
+      border-radius: 12px;
+      background: rgba(255,255,255,.045);
+    }
+    .guide-heading { display: flex; align-items: center; gap: 7px; font-size: .87rem; font-weight: 800; color: #f5f5ed; }
+    .guide-points { margin-left: auto; color: var(--gold); white-space: nowrap; font-size: .77rem; }
+    .guide-position { display: inline-grid; place-items: center; width: 23px; height: 23px; flex: 0 0 23px; border-radius: 50%; background: var(--gold); color: #23372f; font-size: .77rem; }
+    .guide-example { display: flex; flex-wrap: wrap; gap: 4px; margin: 7px 0; }
+    .example-card {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 38px;
+      padding: 4px 6px;
+      border-radius: 5px;
+      background: var(--card-white);
+      color: var(--card-black);
+      font-size: .82rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .example-card--red { color: var(--card-red); }
+    .suit-red { color: #f3a2aa; }
+    .rules .guide-description { margin: 0; font-size: .78rem; line-height: 1.55; }
+    .rule-tip { padding: 8px 10px; border-left: 3px solid var(--gold); background: rgba(255,255,255,.05); border-radius: 0 8px 8px 0; }
+    .rule-tip strong { color: var(--gold); }
+    .footer { text-align: center; color: #96b6a9; font-size: .68rem; padding-top: 7px; }
+    @keyframes card-appear { from { opacity: .4; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @media (max-height: 650px) and (min-width: 781px) {
+      :root { --card-width: 58px; }
+      .app { padding-top: 7px; padding-bottom: 5px; }
+      .topbar { margin-bottom: 6px; }
+      h1 { font-size: 1.45rem; }
+      .table { padding: 7px 14px; }
+      .hand-area { padding: 1px 5px 3px; }
+      .hand-header { min-height: 18px; }
+      .hand-value { margin-bottom: 3px; }
+      .divider { margin: 3px 0; }
+      .results { padding-top: 4px; }
+      .result-description { margin-bottom: 4px; }
+      .btn { padding: 6px 17px; }
+      .note { margin-top: 5px; }
+      .rules { margin-top: 5px; padding: 5px 14px; }
+      .footer { padding-top: 4px; }
+    }
+    @media (min-width: 781px) and (max-width: 900px) {
+      h1 { font-size: 1.13rem; }
+    }
+    @media (max-width: 780px) {
+      .topbar { grid-template-columns: 1fr; gap: 8px; }
+      .header { text-align: center; }
+      .scoreboard { justify-content: center; }
+    }
+    @media (max-width: 580px) {
+      :root { --card-width: clamp(43px, 12.5vw, 57px); }
+      .app { width: calc(100% - 16px); padding-top: 9px; }
+      .topbar { gap: 7px; margin-bottom: 8px; }
+      h1 { font-size: 1.32rem; }
+      .subtitle { font-size: .71rem; }
+      .scoreboard { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+      .score-item { min-width: 0; padding: 3px 6px; }
+      .score-label { font-size: .67rem; }
+      .score-value { font-size: 1.05rem; }
+      .table { padding: 9px 7px; border-radius: 22px; }
+      .hand-area { padding: 2px 3px 4px; }
+      .hand-value { font-size: .75rem; margin-bottom: 4px; }
+      .cards { gap: var(--card-gap); }
+      .playing-card--back { border-width: 3px; }
+      .btn { padding: 8px 15px; font-size: .84rem; }
+      .note { font-size: .69rem; }
+      .hand-guide { grid-template-columns: 1fr; }
+      .rules { padding: 6px 12px; }
+    }
+    @media (max-width: 380px) {
+      h1 { font-size: 1.18rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <div class="topbar">
+    <header class="header">
+      <div class="eyebrow">HEADS UP · FIVE CARD POKER</div>
+      <h1>ポーカー［5カード・ショーダウン］</h1>
+      <p class="subtitle">あなた vs コンピューター｜5枚のカードで一発勝負</p>
+    </header>
+
+    <section class="scoreboard" aria-label="対戦成績">
+      <div class="score-item"><span class="score-label">対戦回数</span><span class="score-value" id="round-count">0</span></div>
+      <div class="score-item"><span class="score-label">あなたの勝ち</span><span class="score-value" id="win-count">0</span></div>
+      <div class="score-item"><span class="score-label">コンピューターの勝ち</span><span class="score-value" id="loss-count">0</span></div>
+      <div class="score-item"><span class="score-label">引き分け</span><span class="score-value" id="tie-count">0</span></div>
+    </section>
+    </div>
+
+    <section class="table" aria-label="ポーカーテーブル">
+      <section class="hand-area" id="computer-area" aria-label="コンピューターの手札">
+        <div class="hand-header"><h2 class="hand-title">COMPUTER</h2><span class="hand-score" id="computer-points">0点</span><span class="hand-badge" id="computer-badge"></span></div>
+        <p class="hand-value" id="computer-rank">まだ配られていません</p>
+        <div class="cards" id="computer-cards" aria-label="コンピューターの5枚"></div>
+      </section>
+      <div class="divider" aria-hidden="true">VS</div>
+      <section class="hand-area" id="player-area" aria-label="あなたの手札">
+        <div class="hand-header"><h2 class="hand-title">YOU</h2><span class="hand-score" id="player-points">0点</span><span class="hand-badge" id="player-badge"></span></div>
+        <p class="hand-value" id="player-rank">まだ配られていません</p>
+        <div class="cards" id="player-cards" aria-label="あなたの5枚"></div>
+      </section>
+    </section>
+
+    <section class="results" aria-live="polite" aria-atomic="true">
+      <h2 class="result-title" id="result-title">準備完了</h2>
+      <p class="result-description" id="result-description">「カードを配る」を押して勝負しよう。</p>
+      <div class="controls">
+        <button class="btn btn-primary" type="button" id="deal-button">カードを配る</button>
+        <button class="btn btn-secondary" type="button" id="reset-button">成績をリセット</button>
+      </div>
+    </section>
+    <p class="note">ジョーカーなし・カード交換なし・ベットなし。配られた5枚で勝敗が決まります。</p>
+
+    <details class="rules">
+      <summary>ルール・役の強さ・得点を見る（初心者向け）</summary>
+      <div class="rules-content">
+        <p class="rules-intro">52枚のトランプから、あなたとコンピューターに5枚ずつ配ります。<strong>強い役を作った方が勝ち</strong>です。カードの交換や賭けはありません。<strong>勝ったときは役に応じた得点</strong>が入り、双方の累計得点を競えます。手札は役が見やすい順番に自動整列します。</p>
+        <div class="rule-basics">
+          <span><strong>数字：</strong>2〜10、J（11）、Q（12）、K（13）、A（14）</span>
+          <span><strong>マーク：</strong>♠ スペード、<span class="suit-red">♥</span> ハート、<span class="suit-red">♦</span> ダイヤ、♣ クラブ</span>
+        </div>
+        <h3 class="rule-heading">役の強さランキングと勝利得点（1位が最強）</h3>
+        <p>勝ったときだけ、その<strong>勝った手札の役</strong>に応じて点数を獲得します。ワンペアは1,000点で、役が1段階強くなるごとに1,000点増えます。ハイカード勝ちは0点、負け・引き分けも0点。両者の累計得点は「成績をリセット」でゼロに戻ります。</p>
+        <ol class="hand-guide">
+          <li class="hand-guide-item">
+            <div class="guide-heading" data-hand-category="ROYAL_FLUSH"><span class="guide-position">1</span>ロイヤルフラッシュ</div>
+            <div class="guide-example" aria-label="カードの組み合わせ例"><span class="example-card">♠10</span><span class="example-card">♠J</span><span class="example-card">♠Q</span><span class="example-card">♠K</span><span class="example-card">♠A</span></div>
+            <p class="guide-description">同じマークで、10・J・Q・K・Aをそろえる。最も強い役。</p>
+          </li>
+          <li class="hand-guide-item">
+            <div class="guide-heading" data-hand-category="STRAIGHT_FLUSH"><span class="guide-position">2</span>ストレートフラッシュ</div>
+            <div class="guide-example" aria-label="カードの組み合わせ例"><span class="example-card example-card--red">♥5</span><span class="example-card example-card--red">♥6</span><span class="example-card example-card--red">♥7</span><span class="example-card example-card--red">♥8</span><span class="example-card example-card--red">♥9</span></div>
+            <p class="guide-description">同じマークで、数字が5枚連続している。</p>
+          </li>
+          <li class="hand-guide-item">
+            <div class="guide-heading" data-hand-category="FOUR_OF_A_KIND"><span class="guide-position">3</span>フォーカード</div>
+            <div class="guide-example" aria-label="カードの組み合わせ例"><span class="example-card">♠9</span><span class="example-card example-card--red">♥9</span><span class="example-card example-card--red">♦9</span><span class="example-card">♣9</span><span class="example-card">♠2</span></div>
+            <p class="guide-description">同じ数字を4枚そろえる。残り1枚は何でもよい。</p>
+          </li>
+          <li class="hand-guide-item">
+            <div class="guide-heading" data-hand-category="FULL_HOUSE"><span class="guide-position">4</span>フルハウス</div>
+            <div class="guide-example" aria-label="カードの組み合わせ例"><span class="example-card">♠K</span><span class="example-card example-card--red">♥K</span><span class="example-card example-card--red">♦K</span><span class="example-card">♣4</span><span class="example-card">♠4</span></div>
+            <p class="guide-description">同じ数字3枚と、別の同じ数字2枚を組み合わせる。</p>
+          </li>
+          <li class="hand-guide-item">
+            <div class="guide-heading" data-hand-category="FLUSH"><span class="guide-position">5</span>フラッシュ</div>
+            <div class="guide-example" aria-label="カードの組み合わせ例"><span class="example-card example-card--red">♥2</span><span class="example-card example-card--red">♥5</span><span class="example-card example-card--red">♥8</span><span class="example-card example-card--red">♥J</span><span class="example-card example-card--red">♥K</span></div>
+            <p class="guide-description">5枚すべてが同じマーク。数字は連続していなくてもよい。</p>
+          </li>
+          <li class="hand-guide-item">
+            <div class="guide-heading" data-hand-category="STRAIGHT"><span class="guide-position">6</span>ストレート</div>
+            <div class="guide-example" aria-label="カードの組み合わせ例"><span class="example-card">♠4</span><span class="example-card example-card--red">♥5</span><span class="example-card example-card--red">♦6</span><span class="example-card">♣7</span><span class="example-card">♠8</span></div>
+            <p class="guide-description">数字が5枚連続している。マークはそろっていなくてもよい。</p>
+          </li>
+          <li class="hand-guide-item">
+            <div class="guide-heading" data-hand-category="THREE_OF_A_KIND"><span class="guide-position">7</span>スリーカード</div>
+            <div class="guide-example" aria-label="カードの組み合わせ例"><span class="example-card">♠Q</span><span class="example-card example-card--red">♥Q</span><span class="example-card example-card--red">♦Q</span><span class="example-card">♣7</span><span class="example-card example-card--red">♥2</span></div>
+            <p class="guide-description">同じ数字を3枚そろえる。残り2枚は異なる数字。</p>
+          </li>
+          <li class="hand-guide-item">
+            <div class="guide-heading" data-hand-category="TWO_PAIR"><span class="guide-position">8</span>ツーペア</div>
+            <div class="guide-example" aria-label="カードの組み合わせ例"><span class="example-card">♠J</span><span class="example-card example-card--red">♥J</span><span class="example-card example-card--red">♦3</span><span class="example-card">♣3</span><span class="example-card">♠8</span></div>
+            <p class="guide-description">同じ数字2枚の組を、違う数字で2組作る。</p>
+          </li>
+          <li class="hand-guide-item">
+            <div class="guide-heading" data-hand-category="ONE_PAIR"><span class="guide-position">9</span>ワンペア</div>
+            <div class="guide-example" aria-label="カードの組み合わせ例"><span class="example-card">♠A</span><span class="example-card example-card--red">♥A</span><span class="example-card example-card--red">♦4</span><span class="example-card">♣7</span><span class="example-card">♠9</span></div>
+            <p class="guide-description">同じ数字を2枚そろえる。残り3枚はそれぞれ別の数字。</p>
+          </li>
+          <li class="hand-guide-item">
+            <div class="guide-heading" data-hand-category="HIGH_CARD"><span class="guide-position">10</span>ハイカード（役なし）</div>
+            <div class="guide-example" aria-label="カードの組み合わせ例"><span class="example-card">♠A</span><span class="example-card example-card--red">♥J</span><span class="example-card example-card--red">♦8</span><span class="example-card">♣5</span><span class="example-card">♠2</span></div>
+            <p class="guide-description">上のどの役もできていない状態。最も高い数字から比べる。</p>
+          </li>
+        </ol>
+        <h3 class="rule-heading">同じ役だった場合は？</h3>
+        <p>まず役を作っている数字の強さを比べます。例えば、<strong>AのワンペアはKのワンペアより強い</strong>です。ペアの数字も同じなら、残りのカード（「キッカー」）を大きい順に比べます。5枚の強さがすべて同じなら引き分けです。</p>
+        <p class="rule-tip"><strong>覚えておこう：</strong>Aはふだん最強ですが、A・2・3・4・5のストレートでは「5までの連続」として扱います。マークそのものに強弱はありません（♠だから♥より強い、ということはありません）。</p>
+      </div>
+    </details>
+    <footer class="footer">FIVE CARD SHOWDOWN · V6.0.0 · OFFLINE PLAY</footer>
+  </main>
+
+  <script>
+    "use strict";
+
+    const PokerRules = Object.freeze({
+      HAND_SIZE: 5,
+      MIN_RANK: 2,
+      MAX_RANK: 14,
+      RANK_STEP: 1,
+      MAX_RANDOM_VALUE_EXCLUSIVE: 0x100000000,
+      RANDOM_WORD_COUNT: 1,
+      SHUFFLE_MINIMUM_LENGTH: 2,
+      NO_CARDS: 0,
+      PAIR_SIZE: 2,
+      TRIPLE_SIZE: 3,
+      FOUR_SIZE: 4,
+      TWO_PAIRS: 2,
+      WIN: 1,
+      LOSS: -1,
+      TIE: 0,
+      ANIMATION_STEP_MS: 45
+    });
+
+    const Rank = Object.freeze({
+      TWO: 2, THREE: 3, FOUR: 4, FIVE: 5, TEN: 10,
+      JACK: 11, QUEEN: 12, KING: 13, ACE: 14
+    });
+
+    const Suit = Object.freeze({
+      SPADE: Object.freeze({ id: "spade", symbol: "♠", name: "スペード", color: "black" }),
+      HEART: Object.freeze({ id: "heart", symbol: "♥", name: "ハート", color: "red" }),
+      DIAMOND: Object.freeze({ id: "diamond", symbol: "♦", name: "ダイヤ", color: "red" }),
+      CLUB: Object.freeze({ id: "club", symbol: "♣", name: "クラブ", color: "black" })
+    });
+
+    const AllSuits = Object.freeze(Object.values(Suit));
+
+    const HandCategory = Object.freeze({
+      HIGH_CARD: 0,
+      ONE_PAIR: 1,
+      TWO_PAIR: 2,
+      THREE_OF_A_KIND: 3,
+      STRAIGHT: 4,
+      FLUSH: 5,
+      FULL_HOUSE: 6,
+      FOUR_OF_A_KIND: 7,
+      STRAIGHT_FLUSH: 8,
+      ROYAL_FLUSH: 9
+    });
+
+    const HandNames = Object.freeze({
+      [HandCategory.HIGH_CARD]: "ハイカード",
+      [HandCategory.ONE_PAIR]: "ワンペア",
+      [HandCategory.TWO_PAIR]: "ツーペア",
+      [HandCategory.THREE_OF_A_KIND]: "スリーカード",
+      [HandCategory.STRAIGHT]: "ストレート",
+      [HandCategory.FLUSH]: "フラッシュ",
+      [HandCategory.FULL_HOUSE]: "フルハウス",
+      [HandCategory.FOUR_OF_A_KIND]: "フォーカード",
+      [HandCategory.STRAIGHT_FLUSH]: "ストレートフラッシュ",
+      [HandCategory.ROYAL_FLUSH]: "ロイヤルフラッシュ"
+    });
+
+    // Point tiers match HandCategory: high card=0, pair=1, ..., royal flush=9.
+    const ScoringRules = Object.freeze({
+      POINTS_PER_TIER: 1000,
+      MINIMUM_PAID_CATEGORY: HandCategory.ONE_PAIR,
+      NO_POINTS: 0,
+      LOCALE: "ja-JP"
+    });
+
+    class PokerPointPolicy {
+      pointsFor(category) {
+        if (!Number.isInteger(category) || !Object.values(HandCategory).includes(category)) {
+          throw new RangeError("Invalid hand category for scoring.");
+        }
+        return category >= ScoringRules.MINIMUM_PAID_CATEGORY
+          ? category * ScoringRules.POINTS_PER_TIER
+          : ScoringRules.NO_POINTS;
+      }
+    }
+
+    const RankLabels = Object.freeze({
+      [Rank.JACK]: "J", [Rank.QUEEN]: "Q", [Rank.KING]: "K", [Rank.ACE]: "A"
+    });
+
+    const GameMessages = Object.freeze({
+      READY_TITLE: "準備完了",
+      READY_DESCRIPTION: "「カードを配る」を押して勝負しよう。",
+      WIN_TITLE: "あなたの勝ち！",
+      LOSS_TITLE: "コンピューターの勝ち",
+      TIE_TITLE: "引き分け！",
+      WINNER_BADGE: "WINNER",
+      TIE_BADGE: "TIE",
+      BACK_CARD_LABEL: "裏向きのカード",
+      INVALID_HAND: "手札は重複のない5枚のカードでなければなりません。",
+      INVALID_DRAW: "カードの配布枚数が不正です。",
+      MISSING_ELEMENT: "画面の構成要素が見つかりません: ",
+      INVALID_ARRANGEMENT: "カードと役の情報が一致しません。"
+    });
+
+    class PlayingCard {
+      constructor(suit, rank) {
+        if (!AllSuits.includes(suit) || !Number.isInteger(rank) ||
+            rank < PokerRules.MIN_RANK || rank > PokerRules.MAX_RANK) {
+          throw new RangeError("Invalid playing card.");
+        }
+        this.suit = suit;
+        this.rank = rank;
+        Object.freeze(this);
+      }
+
+      get key() { return `${this.suit.id}:${this.rank}`; }
+      get rankLabel() { return RankLabels[this.rank] ?? String(this.rank); }
+      get accessibleLabel() { return `${this.suit.name}の${this.rankLabel}`; }
+    }
+
+    class RandomIndexGenerator {
+      nextInt(maxExclusive) {
+        if (!Number.isSafeInteger(maxExclusive) || maxExclusive <= PokerRules.NO_CARDS ||
+            maxExclusive > PokerRules.MAX_RANDOM_VALUE_EXCLUSIVE) {
+          throw new RangeError("Invalid random range.");
+        }
+
+        if (!globalThis.crypto?.getRandomValues) {
+          return Math.floor(Math.random() * maxExclusive);
+        }
+
+        const boundary = Math.floor(PokerRules.MAX_RANDOM_VALUE_EXCLUSIVE / maxExclusive) * maxExclusive;
+        const randomWord = new Uint32Array(PokerRules.RANDOM_WORD_COUNT);
+        do {
+          globalThis.crypto.getRandomValues(randomWord);
+        } while (randomWord[0] >= boundary);
+        return randomWord[0] % maxExclusive;
+      }
+    }
+
+    class CardDeck {
+      #cards;
+      #nextIndex = PokerRules.NO_CARDS;
+
+      constructor(randomGenerator) {
+        if (!randomGenerator || typeof randomGenerator.nextInt !== "function") {
+          throw new TypeError("A random generator is required.");
+        }
+        this.#cards = this.#createCards();
+        this.#shuffle(randomGenerator);
+      }
+
+      #createCards() {
+        const cards = [];
+        for (const suit of AllSuits) {
+          for (let rank = PokerRules.MIN_RANK; rank <= PokerRules.MAX_RANK; rank++) {
+            cards.push(new PlayingCard(suit, rank));
+          }
+        }
+        return cards;
+      }
+
+      #shuffle(randomGenerator) {
+        for (let index = this.#cards.length - PokerRules.RANK_STEP;
+             index >= PokerRules.SHUFFLE_MINIMUM_LENGTH - PokerRules.RANK_STEP; index--) {
+          const otherIndex = randomGenerator.nextInt(index + PokerRules.RANK_STEP);
+          [this.#cards[index], this.#cards[otherIndex]] = [this.#cards[otherIndex], this.#cards[index]];
+        }
+      }
+
+      draw(count) {
+        if (!Number.isSafeInteger(count) || count < PokerRules.NO_CARDS ||
+            this.#nextIndex + count > this.#cards.length) {
+          throw new RangeError(GameMessages.INVALID_DRAW);
+        }
+        const cards = this.#cards.slice(this.#nextIndex, this.#nextIndex + count);
+        this.#nextIndex += count;
+        return cards;
+      }
+    }
+
+    class PokerHandEvaluator {
+      evaluate(cards) {
+        this.#validate(cards);
+        const ranksDescending = cards.map(card => card.rank).sort((a, b) => b - a);
+        const groups = this.#groupRanks(ranksDescending);
+        const flush = cards.every(card => card.suit === cards[0].suit);
+        const straightHigh = this.#findStraightHigh(ranksDescending);
+
+        if (flush && straightHigh !== null) {
+          const category = straightHigh === Rank.ACE
+            ? HandCategory.ROYAL_FLUSH : HandCategory.STRAIGHT_FLUSH;
+          return this.#ranking(category, [straightHigh]);
+        }
+        if (groups[0].count === PokerRules.FOUR_SIZE) {
+          return this.#ranking(HandCategory.FOUR_OF_A_KIND, groups.map(group => group.rank));
+        }
+        if (groups[0].count === PokerRules.TRIPLE_SIZE &&
+            groups[1]?.count === PokerRules.PAIR_SIZE) {
+          return this.#ranking(HandCategory.FULL_HOUSE, groups.map(group => group.rank));
+        }
+        if (flush) {
+          return this.#ranking(HandCategory.FLUSH, ranksDescending);
+        }
+        if (straightHigh !== null) {
+          return this.#ranking(HandCategory.STRAIGHT, [straightHigh]);
+        }
+        if (groups[0].count === PokerRules.TRIPLE_SIZE) {
+          return this.#ranking(HandCategory.THREE_OF_A_KIND, groups.map(group => group.rank));
+        }
+        if (groups.filter(group => group.count === PokerRules.PAIR_SIZE).length === PokerRules.TWO_PAIRS) {
+          return this.#ranking(HandCategory.TWO_PAIR, groups.map(group => group.rank));
+        }
+        if (groups[0].count === PokerRules.PAIR_SIZE) {
+          return this.#ranking(HandCategory.ONE_PAIR, groups.map(group => group.rank));
+        }
+        return this.#ranking(HandCategory.HIGH_CARD, ranksDescending);
+      }
+
+      #validate(cards) {
+        if (!Array.isArray(cards) || cards.length !== PokerRules.HAND_SIZE ||
+            cards.some(card => !(card instanceof PlayingCard)) ||
+            new Set(cards.map(card => card.key)).size !== PokerRules.HAND_SIZE) {
+          throw new RangeError(GameMessages.INVALID_HAND);
+        }
+      }
+
+      #groupRanks(ranks) {
+        const counts = new Map();
+        for (const rank of ranks) {
+          counts.set(rank, (counts.get(rank) ?? PokerRules.NO_CARDS) + PokerRules.RANK_STEP);
+        }
+        return [...counts].map(([rank, count]) => ({ rank, count }))
+          .sort((a, b) => b.count - a.count || b.rank - a.rank);
+      }
+
+      #findStraightHigh(ranksDescending) {
+        const unique = [...new Set(ranksDescending)];
+        if (unique.length !== PokerRules.HAND_SIZE) return null;
+
+        const wheel = [Rank.ACE, Rank.FIVE, Rank.FOUR, Rank.THREE, Rank.TWO];
+        if (wheel.every((rank, index) => unique[index] === rank)) return Rank.FIVE;
+
+        const sequential = unique.every((rank, index) =>
+          index === PokerRules.NO_CARDS || unique[index - PokerRules.RANK_STEP] - rank === PokerRules.RANK_STEP
+        );
+        return sequential ? unique[0] : null;
+      }
+
+      #ranking(category, tieBreakers) {
+        return Object.freeze({
+          category,
+          tieBreakers: Object.freeze([...tieBreakers]),
+          name: HandNames[category]
+        });
+      }
+    }
+
+    class HandComparator {
+      compare(left, right) {
+        if (left.category !== right.category) {
+          return Math.sign(left.category - right.category);
+        }
+        for (let index = PokerRules.NO_CARDS; index < left.tieBreakers.length; index++) {
+          const difference = left.tieBreakers[index] - right.tieBreakers[index];
+          if (difference !== PokerRules.TIE) return Math.sign(difference);
+        }
+        return PokerRules.TIE;
+      }
+    }
+
+    // Arrange cards for presentation only; the evaluated result never changes.
+    class PokerHandArranger {
+      arrange(cards, hand) {
+        this.#validate(cards, hand);
+        const orderedCards = [...cards];
+        if (this.#isStraight(hand.category)) {
+          const aceIsLow = hand.tieBreakers[0] === Rank.FIVE;
+          return orderedCards.sort((left, right) =>
+            this.#straightDisplayRank(left, aceIsLow) - this.#straightDisplayRank(right, aceIsLow) ||
+            this.#compareSuits(left, right)
+          );
+        }
+
+        // The evaluator's tie-breakers already describe the desired group order.
+        const rankPositions = new Map(hand.tieBreakers.map((rank, index) => [rank, index]));
+        if (cards.some(card => !rankPositions.has(card.rank))) {
+          throw new RangeError(GameMessages.INVALID_ARRANGEMENT);
+        }
+        return orderedCards.sort((left, right) =>
+          rankPositions.get(left.rank) - rankPositions.get(right.rank) ||
+          this.#compareSuits(left, right)
+        );
+      }
+
+      #validate(cards, hand) {
+        if (!Array.isArray(cards) || cards.length !== PokerRules.HAND_SIZE ||
+            cards.some(card => !(card instanceof PlayingCard)) ||
+            !hand || !Object.values(HandCategory).includes(hand.category) ||
+            !Array.isArray(hand.tieBreakers) || hand.tieBreakers.length === PokerRules.NO_CARDS) {
+          throw new TypeError(GameMessages.INVALID_ARRANGEMENT);
+        }
+      }
+
+      #isStraight(category) {
+        return category === HandCategory.STRAIGHT ||
+          category === HandCategory.STRAIGHT_FLUSH ||
+          category === HandCategory.ROYAL_FLUSH;
+      }
+
+      #straightDisplayRank(card, aceIsLow) {
+        return aceIsLow && card.rank === Rank.ACE ? PokerRules.RANK_STEP : card.rank;
+      }
+
+      #compareSuits(left, right) {
+        return AllSuits.indexOf(left.suit) - AllSuits.indexOf(right.suit);
+      }
+    }
+
+    class ShowdownGame {
+      #randomGenerator;
+      #evaluator;
+      #comparator;
+      #pointPolicy;
+      #statistics;
+
+      constructor(randomGenerator, evaluator, comparator, pointPolicy) {
+        if (!pointPolicy || typeof pointPolicy.pointsFor !== "function") {
+          throw new TypeError("A point policy is required.");
+        }
+        this.#randomGenerator = randomGenerator;
+        this.#evaluator = evaluator;
+        this.#comparator = comparator;
+        this.#pointPolicy = pointPolicy;
+        this.reset();
+      }
+
+      playRound() {
+        const deck = new CardDeck(this.#randomGenerator);
+        const playerCards = deck.draw(PokerRules.HAND_SIZE);
+        const computerCards = deck.draw(PokerRules.HAND_SIZE);
+        const playerHand = this.#evaluator.evaluate(playerCards);
+        const computerHand = this.#evaluator.evaluate(computerCards);
+        const outcome = this.#comparator.compare(playerHand, computerHand);
+
+        const pointsAwarded = this.#recordResult(outcome, playerHand, computerHand);
+        return Object.freeze({
+          playerCards, computerCards, playerHand, computerHand, outcome,
+          pointsAwarded, statistics: this.statistics
+        });
+      }
+
+      #recordResult(outcome, playerHand, computerHand) {
+        this.#statistics.rounds++;
+        if (outcome === PokerRules.WIN) {
+          this.#statistics.wins++;
+          const points = this.#pointPolicy.pointsFor(playerHand.category);
+          this.#statistics.playerPoints += points;
+          return points;
+        }
+        if (outcome === PokerRules.LOSS) {
+          this.#statistics.losses++;
+          const points = this.#pointPolicy.pointsFor(computerHand.category);
+          this.#statistics.computerPoints += points;
+          return points;
+        }
+        this.#statistics.ties++;
+        return ScoringRules.NO_POINTS;
+      }
+
+      reset() {
+        this.#statistics = {
+          rounds: 0, wins: 0, losses: 0, ties: 0,
+          playerPoints: 0, computerPoints: 0
+        };
+      }
+      get statistics() { return Object.freeze({ ...this.#statistics }); }
+    }
+
+    class PokerGameView {
+      #elements;
+      #cardArranger;
+      #pointPolicy;
+      #pointFormatter = new Intl.NumberFormat(ScoringRules.LOCALE);
+
+      constructor(documentRoot, cardArranger, pointPolicy) {
+        if (!pointPolicy || typeof pointPolicy.pointsFor !== "function") {
+          throw new TypeError("A point policy is required.");
+        }
+        this.#pointPolicy = pointPolicy;
+        if (!cardArranger || typeof cardArranger.arrange !== "function") {
+          throw new TypeError("A card arranger is required.");
+        }
+        this.#cardArranger = cardArranger;
+        const elementIds = Object.freeze({
+          playerCards: "player-cards", computerCards: "computer-cards",
+          playerArea: "player-area", computerArea: "computer-area",
+          playerRank: "player-rank", computerRank: "computer-rank",
+          playerBadge: "player-badge", computerBadge: "computer-badge",
+          playerPoints: "player-points", computerPoints: "computer-points",
+          resultTitle: "result-title", resultDescription: "result-description",
+          roundCount: "round-count", winCount: "win-count",
+          lossCount: "loss-count", tieCount: "tie-count",
+          dealButton: "deal-button", resetButton: "reset-button"
+        });
+        this.#elements = {};
+        for (const [key, id] of Object.entries(elementIds)) {
+          const element = documentRoot.getElementById(id);
+          if (!element) throw new Error(GameMessages.MISSING_ELEMENT + id);
+          this.#elements[key] = element;
+        }
+        this.#showScoreGuide(documentRoot);
+      }
+
+      onDeal(handler) { this.#elements.dealButton.addEventListener("click", handler); }
+      onReset(handler) { this.#elements.resetButton.addEventListener("click", handler); }
+
+      showInitial(statistics) {
+        this.#drawCards(this.#elements.playerCards);
+        this.#drawCards(this.#elements.computerCards);
+        this.#elements.playerRank.textContent = "まだ配られていません";
+        this.#elements.computerRank.textContent = "まだ配られていません";
+        this.#elements.resultTitle.textContent = GameMessages.READY_TITLE;
+        this.#elements.resultDescription.textContent = GameMessages.READY_DESCRIPTION;
+        this.#setResultStyle(null);
+        this.#updateStatistics(statistics);
+      }
+
+      showRound(round) {
+        this.#drawCards(this.#elements.playerCards,
+          this.#cardArranger.arrange(round.playerCards, round.playerHand));
+        this.#drawCards(this.#elements.computerCards,
+          this.#cardArranger.arrange(round.computerCards, round.computerHand));
+        this.#elements.playerRank.textContent = round.playerHand.name;
+        this.#elements.computerRank.textContent = round.computerHand.name;
+        this.#setResultStyle(round.outcome);
+        this.#updateStatistics(round.statistics);
+
+        const messages = {
+          [PokerRules.WIN]: GameMessages.WIN_TITLE,
+          [PokerRules.LOSS]: GameMessages.LOSS_TITLE,
+          [PokerRules.TIE]: GameMessages.TIE_TITLE
+        };
+        this.#elements.resultTitle.textContent = messages[round.outcome];
+        if (round.outcome !== PokerRules.TIE) {
+          const pointLabel = document.createElement("span");
+          pointLabel.className = "result-points";
+          pointLabel.textContent = `+${this.#formatPoints(round.pointsAwarded)}`;
+          this.#elements.resultTitle.append(pointLabel);
+        }
+        this.#elements.resultDescription.textContent =
+          `あなた：${round.playerHand.name}　／　コンピューター：${round.computerHand.name}`;
+      }
+
+      #drawCards(container, cards = null) {
+        const fragment = document.createDocumentFragment();
+        for (let index = PokerRules.NO_CARDS; index < PokerRules.HAND_SIZE; index++) {
+          fragment.append(this.#createCard(cards?.[index] ?? null, index));
+        }
+        container.replaceChildren(fragment);
+      }
+
+      #createCard(card, index) {
+        const element = document.createElement("div");
+        element.className = "playing-card";
+        element.style.setProperty("--card-delay", `${index * PokerRules.ANIMATION_STEP_MS}ms`);
+        element.setAttribute("role", "img");
+        element.setAttribute("aria-label", card?.accessibleLabel ?? GameMessages.BACK_CARD_LABEL);
+
+        if (!card) {
+          element.classList.add("playing-card--back");
+          return element;
+        }
+        if (card.suit.color === Suit.HEART.color) element.classList.add("playing-card--red");
+        element.append(this.#createCorner(card), this.#createCenter(card), this.#createCorner(card, true));
+        return element;
+      }
+
+      #createCorner(card, bottom = false) {
+        const corner = document.createElement("span");
+        corner.className = bottom ? "card-corner card-corner--bottom" : "card-corner";
+        corner.setAttribute("aria-hidden", "true");
+        const rank = document.createElement("span");
+        rank.textContent = card.rankLabel;
+        const suit = document.createElement("span");
+        suit.className = "corner-suit";
+        suit.textContent = card.suit.symbol;
+        corner.append(rank, suit);
+        return corner;
+      }
+
+      #createCenter(card) {
+        const center = document.createElement("span");
+        center.className = "card-center";
+        center.textContent = card.suit.symbol;
+        center.setAttribute("aria-hidden", "true");
+        return center;
+      }
+
+      #setResultStyle(outcome) {
+        const { playerArea, computerArea, playerBadge, computerBadge, resultTitle } = this.#elements;
+        playerArea.classList.toggle("hand-area--winner", outcome === PokerRules.WIN);
+        computerArea.classList.toggle("hand-area--winner", outcome === PokerRules.LOSS);
+        playerBadge.textContent = outcome === PokerRules.WIN ? GameMessages.WINNER_BADGE :
+          outcome === PokerRules.TIE ? GameMessages.TIE_BADGE : "";
+        computerBadge.textContent = outcome === PokerRules.LOSS ? GameMessages.WINNER_BADGE :
+          outcome === PokerRules.TIE ? GameMessages.TIE_BADGE : "";
+        resultTitle.classList.remove("result-title--win", "result-title--loss", "result-title--tie");
+        if (outcome === PokerRules.WIN) resultTitle.classList.add("result-title--win");
+        else if (outcome === PokerRules.LOSS) resultTitle.classList.add("result-title--loss");
+        else if (outcome === PokerRules.TIE) resultTitle.classList.add("result-title--tie");
+      }
+
+      #formatPoints(points) {
+        return `${this.#pointFormatter.format(points)}点`;
+      }
+
+      #showScoreGuide(documentRoot) {
+        const headings = documentRoot.querySelectorAll(".guide-heading[data-hand-category]");
+        for (const heading of headings) {
+          const category = HandCategory[heading.dataset.handCategory];
+          const score = documentRoot.createElement("span");
+          score.className = "guide-points";
+          score.textContent = this.#formatPoints(this.#pointPolicy.pointsFor(category));
+          heading.append(score);
+        }
+      }
+
+      #updateStatistics(statistics) {
+        this.#elements.roundCount.textContent = statistics.rounds;
+        this.#elements.winCount.textContent = statistics.wins;
+        this.#elements.lossCount.textContent = statistics.losses;
+        this.#elements.tieCount.textContent = statistics.ties;
+        this.#elements.playerPoints.textContent = this.#formatPoints(statistics.playerPoints);
+        this.#elements.computerPoints.textContent = this.#formatPoints(statistics.computerPoints);
+      }
+    }
+
+    class PokerGameController {
+      constructor(game, view) {
+        this.game = game;
+        this.view = view;
+      }
+
+      start() {
+        this.view.onDeal(() => this.view.showRound(this.game.playRound()));
+        this.view.onReset(() => {
+          this.game.reset();
+          this.view.showInitial(this.game.statistics);
+        });
+        this.view.showInitial(this.game.statistics);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const pointPolicy = new PokerPointPolicy();
+      const game = new ShowdownGame(
+        new RandomIndexGenerator(), new PokerHandEvaluator(), new HandComparator(), pointPolicy
+      );
+      const view = new PokerGameView(document, new PokerHandArranger(), pointPolicy);
+      new PokerGameController(game, view).start();
+    });
+  </script>
+</body>
+</html>
