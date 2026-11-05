@@ -1,0 +1,1026 @@
+<!--
+  Program      : Gin Rummy (Standalone Offline Web Game)
+  Version      : 1.0 (Initial Completed Release)
+  Release Date : 2026-11-05
+  Copyright    : (C) 2026 [Yasuhiro Kaizu]
+  Development  : Developed with assistance from OpenAI ChatGPT.
+  Note         : Single-file HTML/CSS/JavaScript game for offline use.
+                 Human vs. computer only; no two-player mode.
+                 No external libraries, resources, or network access.
+-->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>ジン・ラミー | Gin Rummy</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --felt: #123e36;
+    --felt-dark: #0a2826;
+    --felt-light: #1b5a4e;
+    --ink: #eef7ed;
+    --muted: #bad2cb;
+    --gold: #f8d17b;
+    --white-card: #fffdf7;
+    --red-suit: #bd3146;
+    --dark-suit: #1d2934;
+    --border: rgba(255,255,255,.19);
+    --card-width: 66px;
+    --card-height: 94px;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; font-family: system-ui, -apple-system, "Noto Sans JP", sans-serif; color: var(--ink); background: radial-gradient(ellipse at 50% 33%, #1c6054 0%, var(--felt) 52%, var(--felt-dark) 100%); }
+  button { font: inherit; cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: .44; }
+  button:focus-visible, summary:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+  .app { width: min(1120px, 100%); min-height: 100vh; margin: auto; padding: 16px 20px 22px; display: flex; flex-direction: column; gap: 13px; }
+  .header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: clamp(1.4rem, 3vw, 1.9rem); letter-spacing: .09em; }
+  .subtitle { font-size: .79rem; color: var(--muted); letter-spacing: .12em; }
+  .reset { border: 1px solid var(--border); color: var(--ink); background: rgba(0,0,0,.24); border-radius: 10px; padding: 9px 14px; white-space: nowrap; }
+  .reset:hover:not(:disabled) { background: rgba(255,255,255,.13); }
+  .scoreboard { display: grid; grid-template-columns: 1fr auto 1fr; align-items: stretch; gap: 10px; }
+  .score { border: 1px solid var(--border); background: rgba(2,14,15,.32); border-radius: var(--radius); padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .score-label { font-weight: 700; letter-spacing: .03em; }
+  .score-number { font-variant-numeric: tabular-nums; font-size: 1.75rem; font-weight: 800; color: var(--gold); line-height: 1; }
+  .score-middle { display: grid; place-items: center; padding: 0 10px; text-align: center; min-width: 114px; font-size: .78rem; color: var(--muted); }
+  .status { text-align: center; padding: 11px 14px; background: rgba(255,255,255,.1); border: 1px solid var(--border); border-radius: 10px; font-weight: 650; min-height: 45px; }
+  .table-region { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .hand-heading { width: 100%; display: flex; align-items: baseline; justify-content: center; gap: 14px; font-size: .95rem; }
+  .hint { color: var(--muted); font-size: .82rem; font-weight: 400; }
+  .hand { width: 100%; display: flex; flex-wrap: nowrap; align-items: center; justify-content: center; gap: 5px; min-height: var(--card-height); }
+  .card { appearance: none; flex: 0 0 var(--card-width); width: var(--card-width); height: var(--card-height); border: 2px solid #e8ebe8; border-radius: 8px; padding: 5px; background: var(--white-card); box-shadow: 0 3px 7px rgba(0,0,0,.28); display: flex; flex-direction: column; justify-content: space-between; position: relative; user-select: none; }
+  .card.red { color: var(--red-suit); }
+  .card.black { color: var(--dark-suit); }
+  .card .corner { display: flex; flex-direction: column; align-items: center; align-self: flex-start; font-size: 1.05rem; line-height: .93; font-weight: 850; }
+  .card .corner .small-suit { font-size: .85rem; margin-top: 3px; }
+  .card .center-suit { position: absolute; inset: 0; display: grid; place-items: center; font-size: 2.25rem; }
+  .card.meld { border-color: #81d8b8; box-shadow: 0 0 0 1px rgba(129,216,184,.5), 0 3px 8px rgba(0,0,0,.28); }
+  .card.laid-off { border-color: var(--gold); }
+  .hand.player .card:disabled:not(.forbidden) { opacity: 1; }
+  .hand.player .card:not(:disabled):hover { transform: translateY(-5px); }
+  .hand.player .card.selected { transform: translateY(-10px); border: 3px solid var(--gold); box-shadow: 0 0 0 2px rgba(248,209,123,.65),0 7px 12px rgba(0,0,0,.38); }
+  .hand.player .card.forbidden { filter: saturate(.5); opacity: .65; }
+  .card.back { background: repeating-linear-gradient(45deg,#24547d 0 6px,#183e63 6px 12px); border-color: #f5e6c2; color: #d9e8f4; }
+  .card.back::before { content: '✦'; position: absolute; inset: 6px; border: 2px solid rgba(255,255,255,.68); border-radius: 4px; display: grid; place-items: center; font-size: 2rem; text-shadow: 0 2px 5px #12283e; }
+  .midtable { width: min(550px,100%); display: flex; justify-content: center; align-items: center; gap: 20px; border-top: 1px solid rgba(255,255,255,.11); border-bottom: 1px solid rgba(255,255,255,.11); padding: 11px 0; }
+  .pile { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .pile-name { font-size: .8rem; color: var(--muted); }
+  .pile .card { transition: transform .13s ease; }
+  .pile button.card:hover:not(:disabled) { transform: translateY(-3px); }
+  .pile .card:disabled { opacity: .75; }
+  .empty-pile { justify-content: center; align-items: center; background: rgba(255,255,255,.1); border: 2px dashed var(--border); color: var(--muted); box-shadow: none; }
+  .pile .card.back:disabled { opacity: .55; }
+  .pile-count { height: 20px; color: var(--gold); font-size: .75rem; font-variant-numeric: tabular-nums; }
+  .draw-annotation { color: var(--muted); text-align: center; line-height: 1.5; font-size: .78rem; max-width: 160px; }
+  .info-row { text-align: center; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 9px 18px; min-height: 26px; font-size: .86rem; }
+  .info-row strong { color: var(--gold); }
+  .info-row .soft { color: var(--muted); }
+  .actions { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 44px; }
+  .action { border: 1px solid rgba(255,255,255,.27); border-radius: 9px; padding: 10px 19px; color: #f4fff9; font-weight: 750; background: #245f58; min-width: 140px; }
+  .action:hover:not(:disabled) { filter: brightness(1.16); }
+  .action.primary { background: linear-gradient(145deg,#a77728,#805218); border-color: #e2b869; color: white; }
+  .action.alt { background: #123b48; }
+  .action.subtle { background: rgba(255,255,255,.09); font-size: .84rem; min-width: unset; padding: 9px 13px; }
+  .bottom { margin-top: 4px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .bottom-top { width: 100%; display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
+  .legend { color: var(--muted); font-size: .76rem; }
+  .legend .mark { color: #9cedcf; font-weight: 800; }
+  .rules { margin-top: 5px; padding: 10px 15px; border: 1px solid var(--border); border-radius: 11px; background: rgba(0,0,0,.22); font-size: .84rem; color: #e1f0e9; }
+  .rules summary { cursor: pointer; font-weight: 650; }
+  .rules p { margin: 9px 0 0; line-height: 1.68; }
+  .rules strong { color: var(--gold); }
+  .overlay { position: fixed; inset: 0; display: grid; place-items: center; padding: 18px; z-index: 10; background: rgba(3,16,17,.82); backdrop-filter: blur(5px); }
+  .overlay.hidden { display: none; }
+  .dialog { width: min(590px,100%); max-height: min(92vh,900px); overflow: auto; border: 1px solid #cfb67d; border-radius: 17px; padding: 24px; box-shadow: 0 24px 65px rgba(0,0,0,.48); background: linear-gradient(150deg,#235a50,#0e302d); text-align: center; }
+  .dialog h2 { font-size: 1.65rem; color: var(--gold); margin: 0 0 8px; }
+  .result-message { line-height: 1.6; margin: 10px 0 14px; }
+  .result-details { background: rgba(0,0,0,.25); border-radius: 10px; padding: 12px; line-height: 1.85; font-size: .91rem; }
+  .result-details strong { color: var(--gold); }
+  .result-note { margin: 12px 0 18px; color: var(--muted); font-size: .84rem; }
+  .result-buttons { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+  .footer { margin-top: auto; text-align: center; color: rgba(233,244,238,.52); font-size: .72rem; padding-top: 3px; }
+  @media (max-width: 760px) {
+    :root { --card-width: clamp(27px,7.5vw,53px); --card-height: clamp(51px,11.2vw,78px); }
+    .app { padding: 11px 8px 15px; gap: 9px; }
+    .score { padding: 8px; flex-direction: column; gap: 4px; }
+    .score-label { font-size: .78rem; }
+    .score-number { font-size: 1.45rem; }
+    .score-middle { min-width: 77px; font-size: .7rem; padding: 0; }
+    .hand { gap: clamp(1px, .5vw, 3px); }
+    .card { border-width: 1px; border-radius: 5px; padding: 3px; }
+    .card .corner { font-size: clamp(.65rem,2.2vw,.9rem); }
+    .card .corner .small-suit { margin-top: 1px; font-size: .75em; }
+    .card .center-suit { font-size: clamp(1.1rem,4.1vw,1.9rem); }
+    .card.back::before { inset: 3px; font-size: 1.35rem; border-width: 1px; }
+    .midtable { padding: 7px 0; gap: 12px; }
+    .draw-annotation { max-width: 116px; }
+    .action { min-width: 112px; padding: 9px 10px; font-size: .86rem; }
+    .rules { font-size: .79rem; }
+  }
+  @media (max-height: 800px) and (min-width: 761px) {
+    :root { --card-width: 58px; --card-height: 82px; }
+    .app { gap: 8px; padding-top: 10px; }
+    .card .center-suit { font-size: 1.95rem; }
+    .card .corner { font-size: .95rem; }
+    .midtable { padding: 7px 0; }
+    .rules { padding: 7px 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+</style>
+</head>
+<body>
+<main class="app" id="app">
+  <header class="header">
+    <div class="brand"><h1>ジン・ラミー</h1><span class="subtitle">GIN RUMMY · SOLO</span></div>
+    <button id="resetButton" class="reset" data-action="reset">新しい対局</button>
+  </header>
+  <section class="scoreboard" aria-label="得点表">
+    <div class="score"><span class="score-label">あなた</span><span id="humanScore" class="score-number">0</span></div>
+    <div class="score-middle"><div><span id="roundLabel">第1局</span><br>先に100点で勝利</div></div>
+    <div class="score"><span class="score-label">コンピューター</span><span id="computerScore" class="score-number">0</span></div>
+  </section>
+  <div id="status" class="status" role="status" aria-live="polite"></div>
+  <section class="table-region" aria-label="コンピューターの手札">
+    <div class="hand-heading"><strong>コンピューターの手札</strong><span id="aiCount" class="hint"></span></div>
+    <div id="computerHand" class="hand" aria-label="コンピューターのカード"></div>
+  </section>
+  <section class="midtable" aria-label="山札と捨て札">
+    <div class="pile"><span class="pile-name">山札（引く）</span><button class="card back" id="stockCard" data-action="stock" aria-label="山札から1枚引く"></button><span id="stockCount" class="pile-count"></span></div>
+    <div class="draw-annotation">山札か表の捨て札を<br>選んで1枚引く</div>
+    <div class="pile"><span class="pile-name">捨て札（取る）</span><div id="discardPile"></div><span class="pile-count">一番上だけ取れる</span></div>
+  </section>
+  <section class="bottom" aria-label="あなたの手札">
+    <div class="bottom-top"><strong>あなたの手札</strong><button class="action subtle" data-action="sort">並び替え：役順</button><span class="legend"><span class="mark">●</span> 緑枠＝完成した役</span></div>
+    <div id="humanHand" class="hand player" aria-label="あなたのカード"></div>
+    <div id="handInfo" class="info-row"></div>
+    <div id="actions" class="actions"></div>
+  </section>
+  <details class="rules">
+    <summary>遊び方・得点の説明</summary>
+    <p>各自10枚で開始。1枚引いて1枚捨て、<strong>同じ数字3～4枚</strong>、または<strong>同じマークの連続3枚以上</strong>を役にします。Aは1として扱い、Q-K-Aはつながりません。役にならないカードが<strong>デッドウッド</strong>で、A＝1点、2～10＝数字どおり、J・Q・K＝10点です。</p>
+    <p>最初の表向きカードは、親ではない側→親の順に「受け取る／パス」を選び、両者がパスすると子が山札から引きます。以後は山札か捨て札の一番上を引いて1枚捨てます。<strong>捨て札から取ったカードは、その手番では捨てられません。</strong></p>
+    <p>捨てた後のデッドウッドが<strong>10点以下</strong>なら「ノック」で勝負できます。0点なら「ジン」で25点のボーナスを獲得し、相手はレイオフできません。普通のノックでは相手は余り札をノックした側の役につなげることができ、最終的な余り札の差が得点になります。相手が同点以下なら<strong>アンダーカット</strong>で相手に差額＋25点。山札が2枚になり、誰も宣言しなければその局は無得点です。</p>
+    <p>先に<strong>100点以上</strong>獲得した側の勝利。ビッグジン・追加のゲームボーナスなどの派生ルールは採用していません。コンピューターは公開された捨て札と自分の手札だけを使い、あなたの隠し手札や山札の中身は見ていません。</p>
+  </details>
+  <footer class="footer">Standalone Offline Web Game · HTML + JavaScript · V1.0</footer>
+</main>
+<div id="resultOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+  <div class="dialog">
+    <h2 id="resultTitle"></h2>
+    <p id="resultMessage" class="result-message"></p>
+    <div id="resultDetails" class="result-details"></div>
+    <p id="resultNote" class="result-note"></p>
+    <div class="result-buttons" id="resultButtons"></div>
+  </div>
+</div>
+<script>
+"use strict";
+
+const GAME_CONFIG = Object.freeze({
+  INITIAL_HAND_SIZE: 10,
+  DECK_RANK_COUNT: 13,
+  MAX_SET_SIZE: 4,
+  MIN_MELD_SIZE: 3,
+  KNOCK_DEADWOOD_LIMIT: 10,
+  GIN_BONUS: 25,
+  UNDERCUT_BONUS: 25,
+  TARGET_SCORE: 100,
+  STOCK_STOP_SIZE: 2,
+  COMPUTER_DELAY_MS: 660,
+  AI_DISCARD_THRESHOLD: 2.0,
+  AI_KNOCK_LIMIT: 10
+});
+const PLAYER = Object.freeze({ HUMAN: "human", COMPUTER: "computer" });
+const PHASE = Object.freeze({ OPENING: "opening", DRAW: "draw", DISCARD: "discard", ROUND_END: "round_end" });
+const CARD_SOURCE = Object.freeze({ STOCK: "stock", DISCARD: "discard" });
+const DECLARATION = Object.freeze({ NONE: "none", KNOCK: "knock", GIN: "gin" });
+const RESULT_TYPE = Object.freeze({ DRAW: "draw", KNOCK: "knock", GIN: "gin", UNDERCUT: "undercut" });
+const ACTION = Object.freeze({ RESET: "reset", STOCK: "stock", DISCARD_PILE: "discard_pile", PASS: "pass", DISCARD: "discard", KNOCK: "knock", GIN: "gin", NEXT: "next", SORT: "sort", CARD: "card" });
+const SUITS = Object.freeze([
+  Object.freeze({ id: "S", symbol: "♠", red: false, order: 0 }),
+  Object.freeze({ id: "H", symbol: "♥", red: true, order: 1 }),
+  Object.freeze({ id: "D", symbol: "♦", red: true, order: 2 }),
+  Object.freeze({ id: "C", symbol: "♣", red: false, order: 3 })
+]);
+const RANK_LABELS = Object.freeze(["", "A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]);
+
+class PlayingCard {
+  constructor(suit, rank) {
+    if (!SUITS.includes(suit) || !Number.isInteger(rank) || rank < 1 || rank > GAME_CONFIG.DECK_RANK_COUNT) {
+      throw new RangeError("Invalid playing card.");
+    }
+    this.suit = suit;
+    this.rank = rank;
+    this.id = `${suit.id}${rank}`;
+    Object.freeze(this);
+  }
+
+  get points() { return Math.min(this.rank, GAME_CONFIG.KNOCK_DEADWOOD_LIMIT); }
+  get label() { return `${this.suit.symbol}${RANK_LABELS[this.rank]}`; }
+}
+
+class CardDeck {
+  #cards;
+
+  constructor(random = Math.random) {
+    this.#cards = SUITS.flatMap(suit => Array.from({ length: GAME_CONFIG.DECK_RANK_COUNT }, (_, index) => new PlayingCard(suit, index + 1)));
+    for (let index = this.#cards.length - 1; index > 0; index--) {
+      const target = Math.floor(random() * (index + 1));
+      [this.#cards[index], this.#cards[target]] = [this.#cards[target], this.#cards[index]];
+    }
+  }
+
+  draw() {
+    if (this.#cards.length === 0) throw new Error("Deck is empty.");
+    return this.#cards.pop();
+  }
+
+  get count() { return this.#cards.length; }
+}
+
+class MeldAnalyzer {
+  analyze(cards) {
+    this.#validateCards(cards);
+    const possibilities = this.#findMelds(cards);
+    const memo = new Map();
+    const entireMask = (1 << cards.length) - 1;
+    const solve = usedMask => {
+      if (usedMask === entireMask) return { deadwood: 0, melds: [], meldedCount: 0 };
+      if (memo.has(usedMask)) return memo.get(usedMask);
+      const first = cards.findIndex((card, index) => !(usedMask & (1 << index)));
+      const excluded = solve(usedMask | (1 << first));
+      let best = {
+        deadwood: excluded.deadwood + cards[first].points,
+        melds: excluded.melds,
+        meldedCount: excluded.meldedCount
+      };
+      for (const possibility of possibilities) {
+        if (!(possibility.mask & (1 << first)) || (possibility.mask & usedMask)) continue;
+        const next = solve(usedMask | possibility.mask);
+        const candidate = {
+          deadwood: next.deadwood,
+          melds: [possibility, ...next.melds],
+          meldedCount: next.meldedCount + possibility.cards.length
+        };
+        if (candidate.deadwood < best.deadwood || (candidate.deadwood === best.deadwood && candidate.meldedCount > best.meldedCount)) best = candidate;
+      }
+      memo.set(usedMask, best);
+      return best;
+    };
+    const best = solve(0);
+    return this.#toAnalysis(cards, best.melds, best.deadwood);
+  }
+
+  analyzeForLayoff(cards, knockerMelds, layoffCalculator) {
+    this.#validateCards(cards);
+    const possibilities = this.#findMelds(cards);
+    const entireMask = (1 << cards.length) - 1;
+    let best = null;
+    const visit = (usedMask, chosenMelds, deadwoodCards) => {
+      if (usedMask === entireMask) {
+        const laidOff = layoffCalculator.calculate(deadwoodCards, knockerMelds);
+        const finalDeadwood = deadwoodCards.reduce((sum, card) => sum + card.points, 0) - laidOff.points;
+        if (!best || finalDeadwood < best.deadwood || (finalDeadwood === best.deadwood && deadwoodCards.length < best.unmatchedCount)) {
+          best = { deadwood: finalDeadwood, melds: chosenMelds, laidOff, unmatchedCount: deadwoodCards.length };
+        }
+        return;
+      }
+      const first = cards.findIndex((card, index) => !(usedMask & (1 << index)));
+      visit(usedMask | (1 << first), chosenMelds, [...deadwoodCards, cards[first]]);
+      for (const meld of possibilities) {
+        if (!(meld.mask & (1 << first)) || (meld.mask & usedMask)) continue;
+        visit(usedMask | meld.mask, [...chosenMelds, meld], deadwoodCards);
+      }
+    };
+    visit(0, [], []);
+    const analysis = this.#toAnalysis(cards, best.melds, null);
+    const laidOffIds = new Set(best.laidOff.cards.map(card => card.id));
+    return {
+      ...analysis,
+      deadwood: best.deadwood,
+      originalDeadwood: analysis.deadwoodCards.reduce((sum, card) => sum + card.points, 0),
+      laidOffCards: best.laidOff.cards,
+      deadwoodCards: analysis.deadwoodCards.filter(card => !laidOffIds.has(card.id))
+    };
+  }
+
+  #toAnalysis(cards, melds, knownDeadwood) {
+    const usedIds = new Set(melds.flatMap(meld => meld.cards.map(card => card.id)));
+    const deadwoodCards = cards.filter(card => !usedIds.has(card.id));
+    return {
+      melds: melds.map(meld => ({ type: meld.type, cards: [...meld.cards] })),
+      deadwoodCards,
+      deadwood: knownDeadwood ?? deadwoodCards.reduce((sum, card) => sum + card.points, 0),
+      laidOffCards: []
+    };
+  }
+
+  #findMelds(cards) {
+    const melds = [];
+    const indexOf = new Map(cards.map((card, index) => [card.id, index]));
+    const addMeld = (type, group) => {
+      const mask = group.reduce((result, card) => result | (1 << indexOf.get(card.id)), 0);
+      melds.push({ type, cards: group, mask });
+    };
+    for (let rank = 1; rank <= GAME_CONFIG.DECK_RANK_COUNT; rank++) {
+      const group = cards.filter(card => card.rank === rank);
+      if (group.length === GAME_CONFIG.MIN_MELD_SIZE) addMeld("set", group);
+      if (group.length === GAME_CONFIG.MAX_SET_SIZE) {
+        addMeld("set", group);
+        for (let excluded = 0; excluded < group.length; excluded++) addMeld("set", group.filter((_, index) => index !== excluded));
+      }
+    }
+    for (const suit of SUITS) {
+      const ordered = cards.filter(card => card.suit.id === suit.id).sort((left, right) => left.rank - right.rank);
+      for (let start = 0; start < ordered.length; start++) {
+        for (let end = start + GAME_CONFIG.MIN_MELD_SIZE - 1; end < ordered.length; end++) {
+          if (ordered[end].rank !== ordered[start].rank + (end - start)) break;
+          addMeld("run", ordered.slice(start, end + 1));
+        }
+      }
+    }
+    return melds;
+  }
+
+  #validateCards(cards) {
+    if (!Array.isArray(cards) || cards.length > GAME_CONFIG.INITIAL_HAND_SIZE + 1 || cards.some(card => !(card instanceof PlayingCard))) {
+      throw new TypeError("Invalid hand for meld analysis.");
+    }
+    if (new Set(cards.map(card => card.id)).size !== cards.length) throw new Error("Duplicate cards in hand.");
+  }
+}
+
+class LayoffCalculator {
+  calculate(deadwoodCards, knockerMelds) {
+    const optionsByMeld = knockerMelds.map(meld => this.#optionsForMeld(deadwoodCards, meld));
+    const memo = new Map();
+    const search = (index, usedMask) => {
+      if (index === optionsByMeld.length) return { points: 0, mask: usedMask };
+      const key = `${index}:${usedMask}`;
+      if (memo.has(key)) return memo.get(key);
+      let best = { points: -1, mask: usedMask };
+      for (const option of optionsByMeld[index]) {
+        if (option.mask & usedMask) continue;
+        const continuation = search(index + 1, usedMask | option.mask);
+        const total = option.points + continuation.points;
+        if (total > best.points) best = { points: total, mask: continuation.mask };
+      }
+      memo.set(key, best);
+      return best;
+    };
+    const found = search(0, 0);
+    return { points: found.points, cards: deadwoodCards.filter((card, index) => found.mask & (1 << index)) };
+  }
+
+  #optionsForMeld(cards, meld) {
+    const choices = [{ mask: 0, points: 0 }];
+    if (meld.type === "set") {
+      if (meld.cards.length >= GAME_CONFIG.MAX_SET_SIZE) return choices;
+      const existingSuitIds = new Set(meld.cards.map(card => card.suit.id));
+      const index = cards.findIndex(card => card.rank === meld.cards[0].rank && !existingSuitIds.has(card.suit.id));
+      if (index >= 0) choices.push({ mask: 1 << index, points: cards[index].points });
+      return choices;
+    }
+    const suitId = meld.cards[0].suit.id;
+    const ranks = meld.cards.map(card => card.rank);
+    const lowest = Math.min(...ranks);
+    const highest = Math.max(...ranks);
+    const buildChain = (startingRank, step) => {
+      const chain = [];
+      for (let rank = startingRank; rank >= 1 && rank <= GAME_CONFIG.DECK_RANK_COUNT; rank += step) {
+        const index = cards.findIndex(card => card.suit.id === suitId && card.rank === rank);
+        if (index < 0) break;
+        chain.push(index);
+      }
+      return chain;
+    };
+    const lowChain = buildChain(lowest - 1, -1);
+    const highChain = buildChain(highest + 1, 1);
+    for (let lowLength = 0; lowLength <= lowChain.length; lowLength++) {
+      for (let highLength = 0; highLength <= highChain.length; highLength++) {
+        if (!lowLength && !highLength) continue;
+        const indices = [...lowChain.slice(0, lowLength), ...highChain.slice(0, highLength)];
+        choices.push({
+          mask: indices.reduce((mask, index) => mask | (1 << index), 0),
+          points: indices.reduce((points, index) => points + cards[index].points, 0)
+        });
+      }
+    }
+    return choices;
+  }
+}
+
+class RoundScorer {
+  constructor(analyzer, layoffCalculator) {
+    this.analyzer = analyzer;
+    this.layoffCalculator = layoffCalculator;
+  }
+
+  calculate(knocker, declaration, knockerHand, defenderHand) {
+    const knocking = this.analyzer.analyze(knockerHand);
+    if (declaration === DECLARATION.GIN && knocking.deadwood !== 0) throw new Error("Gin requires zero deadwood.");
+    if (declaration === DECLARATION.KNOCK && knocking.deadwood > GAME_CONFIG.KNOCK_DEADWOOD_LIMIT) throw new Error("Knock exceeds permitted deadwood.");
+    const defending = declaration === DECLARATION.GIN
+      ? this.analyzer.analyze(defenderHand)
+      : this.analyzer.analyzeForLayoff(defenderHand, knocking.melds, this.layoffCalculator);
+    let resultType, winner, points;
+    if (declaration === DECLARATION.GIN) {
+      resultType = RESULT_TYPE.GIN;
+      winner = knocker;
+      points = defending.deadwood + GAME_CONFIG.GIN_BONUS;
+    } else if (knocking.deadwood < defending.deadwood) {
+      resultType = RESULT_TYPE.KNOCK;
+      winner = knocker;
+      points = defending.deadwood - knocking.deadwood;
+    } else {
+      resultType = RESULT_TYPE.UNDERCUT;
+      winner = knocker === PLAYER.HUMAN ? PLAYER.COMPUTER : PLAYER.HUMAN;
+      points = knocking.deadwood - defending.deadwood + GAME_CONFIG.UNDERCUT_BONUS;
+    }
+    return { type: resultType, knocker, winner, points, analyses: { [knocker]: knocking, [knocker === PLAYER.HUMAN ? PLAYER.COMPUTER : PLAYER.HUMAN]: defending } };
+  }
+}
+
+class GinRummyEngine {
+  #analyzer;
+  #scorer;
+  #deck;
+  #hands;
+  #discardPile;
+  #scores;
+  #dealer;
+  #round;
+  #phase;
+  #current;
+  #openingStep;
+  #forbiddenCardId;
+  #stockOnly;
+  #result;
+  #matchWinner;
+
+  constructor(analyzer, scorer) {
+    this.#analyzer = analyzer;
+    this.#scorer = scorer;
+    this.startMatch();
+  }
+
+  startMatch() {
+    this.#scores = { [PLAYER.HUMAN]: 0, [PLAYER.COMPUTER]: 0 };
+    this.#round = 0;
+    this.#dealer = PLAYER.COMPUTER;
+    this.#startRound();
+  }
+
+  startNextRound() {
+    if (this.#phase !== PHASE.ROUND_END || this.#matchWinner) throw new Error("Next round is not available.");
+    if (this.#result.type !== RESULT_TYPE.DRAW) this.#dealer = this.#other(this.#dealer);
+    this.#startRound();
+  }
+
+  respondToUpcard(player, accept) {
+    this.#requireTurn(player, PHASE.OPENING);
+    if (typeof accept !== "boolean") throw new TypeError("Invalid opening choice.");
+    if (accept) {
+      this.#draw(player, CARD_SOURCE.DISCARD);
+      return;
+    }
+    if (this.#openingStep === 0) {
+      this.#openingStep = 1;
+      this.#current = this.#dealer;
+      return;
+    }
+    this.#current = this.#other(this.#dealer);
+    this.#phase = PHASE.DRAW;
+    this.#stockOnly = true;
+  }
+
+  draw(player, source) {
+    this.#requireTurn(player, PHASE.DRAW);
+    if (source !== CARD_SOURCE.STOCK && source !== CARD_SOURCE.DISCARD) throw new Error("Unknown draw source.");
+    if (source === CARD_SOURCE.DISCARD && this.#stockOnly) throw new Error("Opening passes require a stock draw.");
+    this.#draw(player, source);
+  }
+
+  discard(player, cardId, declaration = DECLARATION.NONE) {
+    this.#requireTurn(player, PHASE.DISCARD);
+    if (!Object.values(DECLARATION).includes(declaration)) throw new Error("Unknown declaration.");
+    if (cardId === this.#forbiddenCardId) throw new Error("A card taken from the discard pile cannot be discarded immediately.");
+    const hand = this.#hands[player];
+    const index = hand.findIndex(card => card.id === cardId);
+    if (index < 0) throw new Error("Selected card is not in the hand.");
+    if (hand.length !== GAME_CONFIG.INITIAL_HAND_SIZE + 1) throw new Error("Invalid card count before discard.");
+    const future = hand.filter(card => card.id !== cardId);
+    const deadwood = this.#analyzer.analyze(future).deadwood;
+    if (declaration === DECLARATION.GIN && deadwood !== 0) throw new Error("Gin declaration is invalid.");
+    if (declaration === DECLARATION.KNOCK && deadwood > GAME_CONFIG.KNOCK_DEADWOOD_LIMIT) throw new Error("Knock declaration is invalid.");
+    const [discarded] = hand.splice(index, 1);
+    this.#discardPile.push(discarded);
+    this.#forbiddenCardId = null;
+    if (declaration !== DECLARATION.NONE) {
+      this.#finishByDeclaration(player, declaration);
+    } else if (this.#deck.count <= GAME_CONFIG.STOCK_STOP_SIZE) {
+      this.#finishAsDraw();
+    } else {
+      this.#current = this.#other(player);
+      this.#phase = PHASE.DRAW;
+    }
+  }
+
+  getSnapshot() {
+    return {
+      hands: { [PLAYER.HUMAN]: [...this.#hands[PLAYER.HUMAN]], [PLAYER.COMPUTER]: [...this.#hands[PLAYER.COMPUTER]] },
+      stockCount: this.#deck.count,
+      topDiscard: this.#discardPile.at(-1),
+      scores: { ...this.#scores },
+      round: this.#round,
+      dealer: this.#dealer,
+      phase: this.#phase,
+      current: this.#current,
+      forbiddenCardId: this.#forbiddenCardId,
+      stockOnly: this.#stockOnly,
+      result: this.#result,
+      matchWinner: this.#matchWinner
+    };
+  }
+
+  #startRound() {
+    this.#round++;
+    this.#deck = new CardDeck();
+    this.#hands = { [PLAYER.HUMAN]: [], [PLAYER.COMPUTER]: [] };
+    for (let index = 0; index < GAME_CONFIG.INITIAL_HAND_SIZE; index++) {
+      this.#hands[PLAYER.HUMAN].push(this.#deck.draw());
+      this.#hands[PLAYER.COMPUTER].push(this.#deck.draw());
+    }
+    this.#discardPile = [this.#deck.draw()];
+    this.#current = this.#other(this.#dealer);
+    this.#phase = PHASE.OPENING;
+    this.#openingStep = 0;
+    this.#forbiddenCardId = null;
+    this.#stockOnly = false;
+    this.#result = null;
+    this.#matchWinner = null;
+  }
+
+  #draw(player, source) {
+    if (source === CARD_SOURCE.STOCK && this.#deck.count <= GAME_CONFIG.STOCK_STOP_SIZE) throw new Error("Stock draw is unavailable.");
+    const card = source === CARD_SOURCE.STOCK ? this.#deck.draw() : this.#discardPile.pop();
+    if (!card) throw new Error("No card is available to draw.");
+    this.#hands[player].push(card);
+    this.#forbiddenCardId = source === CARD_SOURCE.DISCARD ? card.id : null;
+    this.#stockOnly = false;
+    this.#phase = PHASE.DISCARD;
+  }
+
+  #finishByDeclaration(player, declaration) {
+    const defender = this.#other(player);
+    this.#result = this.#scorer.calculate(player, declaration, this.#hands[player], this.#hands[defender]);
+    this.#scores[this.#result.winner] += this.#result.points;
+    this.#matchWinner = this.#scores[this.#result.winner] >= GAME_CONFIG.TARGET_SCORE ? this.#result.winner : null;
+    this.#phase = PHASE.ROUND_END;
+  }
+
+  #finishAsDraw() {
+    this.#result = {
+      type: RESULT_TYPE.DRAW,
+      winner: null,
+      points: 0,
+      analyses: {
+        [PLAYER.HUMAN]: this.#analyzer.analyze(this.#hands[PLAYER.HUMAN]),
+        [PLAYER.COMPUTER]: this.#analyzer.analyze(this.#hands[PLAYER.COMPUTER])
+      }
+    };
+    this.#phase = PHASE.ROUND_END;
+  }
+
+  #requireTurn(player, phase) {
+    if (!Object.values(PLAYER).includes(player) || this.#current !== player || this.#phase !== phase) throw new Error("Action is not allowed at this time.");
+  }
+
+  #other(player) { return player === PLAYER.HUMAN ? PLAYER.COMPUTER : PLAYER.HUMAN; }
+}
+
+class ComputerPlayer {
+  constructor(analyzer) { this.analyzer = analyzer; }
+
+  chooseUpcard(cards, upcard) { return this.#shouldTakeDiscard(cards, upcard); }
+
+  chooseDraw(cards, upcard, stockOnly) {
+    if (stockOnly) return CARD_SOURCE.STOCK;
+    return this.#shouldTakeDiscard(cards, upcard) ? CARD_SOURCE.DISCARD : CARD_SOURCE.STOCK;
+  }
+
+  chooseDiscard(cards, forbiddenCardId) {
+    let best = null;
+    for (const card of cards) {
+      if (card.id === forbiddenCardId) continue;
+      const hand = cards.filter(candidate => candidate.id !== card.id);
+      const analysis = this.analyzer.analyze(hand);
+      const score = this.#assess(hand, analysis);
+      if (!best || score < best.score || (score === best.score && card.points > best.card.points)) {
+        best = { card, score, analysis };
+      }
+    }
+    if (!best) throw new Error("Computer has no legal discard.");
+    const deadwood = best.analysis.deadwood;
+    const declaration = deadwood === 0 ? DECLARATION.GIN
+      : deadwood <= GAME_CONFIG.AI_KNOCK_LIMIT ? DECLARATION.KNOCK : DECLARATION.NONE;
+    return { cardId: best.card.id, declaration };
+  }
+
+  #shouldTakeDiscard(cards, upcard) {
+    if (!upcard) return false;
+    const baseline = this.#assess(cards, this.analyzer.analyze(cards));
+    const withUpcard = this.chooseDiscard([...cards, upcard], upcard.id);
+    const reduced = cards.concat(upcard).filter(card => card.id !== withUpcard.cardId);
+    const candidate = this.#assess(reduced, this.analyzer.analyze(reduced));
+    return candidate <= baseline - GAME_CONFIG.AI_DISCARD_THRESHOLD;
+  }
+
+  #assess(cards, analysis) {
+    const unmatched = analysis.deadwoodCards;
+    let potential = 0;
+    for (let first = 0; first < unmatched.length; first++) {
+      for (let second = first + 1; second < unmatched.length; second++) {
+        const a = unmatched[first];
+        const b = unmatched[second];
+        if (a.rank === b.rank) potential += 2.4;
+        if (a.suit.id === b.suit.id) {
+          const distance = Math.abs(a.rank - b.rank);
+          if (distance === 1) potential += 2.0;
+          if (distance === 2) potential += 1.0;
+        }
+      }
+    }
+    const facePenalty = unmatched.filter(card => card.points === GAME_CONFIG.KNOCK_DEADWOOD_LIMIT).length;
+    return analysis.deadwood * 2.3 - potential + facePenalty * .2;
+  }
+}
+
+class GameView {
+  constructor(root, analyzer) {
+    this.root = root;
+    this.analyzer = analyzer;
+    this.nodes = {
+      humanScore: document.getElementById("humanScore"),
+      computerScore: document.getElementById("computerScore"),
+      round: document.getElementById("roundLabel"),
+      status: document.getElementById("status"),
+      computerHand: document.getElementById("computerHand"),
+      humanHand: document.getElementById("humanHand"),
+      aiCount: document.getElementById("aiCount"),
+      stock: document.getElementById("stockCard"),
+      stockCount: document.getElementById("stockCount"),
+      discard: document.getElementById("discardPile"),
+      handInfo: document.getElementById("handInfo"),
+      actions: document.getElementById("actions"),
+      overlay: document.getElementById("resultOverlay"),
+      resultTitle: document.getElementById("resultTitle"),
+      resultMessage: document.getElementById("resultMessage"),
+      resultDetails: document.getElementById("resultDetails"),
+      resultNote: document.getElementById("resultNote"),
+      resultButtons: document.getElementById("resultButtons")
+    };
+  }
+
+  bind(handler) {
+    const listener = event => {
+      const card = event.target.closest("[data-card-id]");
+      if (card && !card.disabled) { handler(ACTION.CARD, card.dataset.cardId); return; }
+      const button = event.target.closest("[data-action]");
+      if (button && !button.disabled) handler(button.dataset.action);
+    };
+    this.root.addEventListener("click", listener);
+    this.nodes.overlay.addEventListener("click", listener);
+  }
+
+  render(state, selectedId, grouped, notice) {
+    this.nodes.humanScore.textContent = String(state.scores[PLAYER.HUMAN]);
+    this.nodes.computerScore.textContent = String(state.scores[PLAYER.COMPUTER]);
+    this.nodes.round.textContent = `第${state.round}局`;
+    this.nodes.status.textContent = notice || this.#status(state);
+    const humanAnalysis = this.analyzer.analyze(state.hands[PLAYER.HUMAN]);
+    const computerAnalysis = state.result ? state.result.analyses[PLAYER.COMPUTER] : null;
+    this.#renderHand(this.nodes.humanHand, state.hands[PLAYER.HUMAN], humanAnalysis, grouped, selectedId, state);
+    this.#renderComputerHand(state.hands[PLAYER.COMPUTER], computerAnalysis, state);
+    this.nodes.aiCount.textContent = `${state.hands[PLAYER.COMPUTER].length}枚${state.dealer === PLAYER.COMPUTER ? " · 親" : ""}`;
+    this.nodes.stockCount.textContent = `残り ${state.stockCount} 枚`;
+    this.nodes.stock.disabled = !(state.current === PLAYER.HUMAN && state.phase === PHASE.DRAW && state.stockCount > GAME_CONFIG.STOCK_STOP_SIZE);
+    this.#renderDiscardPile(state);
+    this.#renderInformation(state, selectedId, humanAnalysis);
+    this.#renderActions(state, selectedId);
+    this.#renderOverlay(state);
+  }
+
+  #renderHand(container, cards, analysis, grouped, selectedId, state) {
+    const ordered = this.#orderCards(cards, analysis, grouped);
+    const meldIds = new Set(analysis.melds.flatMap(meld => meld.cards.map(card => card.id)));
+    container.replaceChildren(...ordered.map(card => {
+      const element = this.#card(card, true);
+      if (meldIds.has(card.id)) element.classList.add("meld");
+      if (selectedId === card.id) element.classList.add("selected");
+      if (state.forbiddenCardId === card.id && state.phase === PHASE.DISCARD && state.current === PLAYER.HUMAN) element.classList.add("forbidden");
+      element.dataset.cardId = card.id;
+      element.disabled = state.current !== PLAYER.HUMAN || state.phase !== PHASE.DISCARD || state.forbiddenCardId === card.id;
+      element.setAttribute("aria-label", `${card.label}${selectedId === card.id ? " 選択中" : ""}`);
+      return element;
+    }));
+  }
+
+  #renderComputerHand(cards, analysis, state) {
+    if (!state.result) {
+      this.nodes.computerHand.replaceChildren(...cards.map(() => this.#backCard()));
+      return;
+    }
+    const meldIds = new Set(analysis.melds.flatMap(meld => meld.cards.map(card => card.id)));
+    const laidOffIds = new Set(analysis.laidOffCards.map(card => card.id));
+    const ordered = this.#orderCards(cards, analysis, true);
+    this.nodes.computerHand.replaceChildren(...ordered.map(card => {
+      const element = this.#card(card, false);
+      if (meldIds.has(card.id)) element.classList.add("meld");
+      if (laidOffIds.has(card.id)) element.classList.add("laid-off");
+      return element;
+    }));
+  }
+
+  #orderCards(cards, analysis, grouped) {
+    const byRank = (left, right) => left.rank - right.rank || left.suit.order - right.suit.order;
+    if (!grouped) return [...cards].sort(byRank);
+    const meldIds = new Set();
+    const meldCards = analysis.melds.flatMap(meld => {
+      const ordered = [...meld.cards].sort(byRank);
+      ordered.forEach(card => meldIds.add(card.id));
+      return ordered;
+    });
+    return [...meldCards, ...cards.filter(card => !meldIds.has(card.id)).sort(byRank)];
+  }
+
+  #card(card, interactive) {
+    const element = document.createElement(interactive ? "button" : "div");
+    element.className = `card ${card.suit.red ? "red" : "black"}`;
+    if (interactive) element.type = "button";
+    const corner = document.createElement("span");
+    corner.className = "corner";
+    const rank = document.createElement("span");
+    rank.textContent = RANK_LABELS[card.rank];
+    const suit = document.createElement("span");
+    suit.className = "small-suit";
+    suit.textContent = card.suit.symbol;
+    corner.append(rank, suit);
+    const center = document.createElement("span");
+    center.className = "center-suit";
+    center.textContent = card.suit.symbol;
+    element.append(corner, center);
+    return element;
+  }
+
+  #backCard() {
+    const element = document.createElement("div");
+    element.className = "card back";
+    element.setAttribute("aria-label", "裏向きのカード");
+    return element;
+  }
+
+  #renderDiscardPile(state) {
+    if (!state.topDiscard) {
+      const placeholder = document.createElement("div");
+      placeholder.className = "card empty-pile";
+      placeholder.textContent = "空";
+      this.nodes.discard.replaceChildren(placeholder);
+      return;
+    }
+    const element = this.#card(state.topDiscard, true);
+    element.dataset.action = ACTION.DISCARD_PILE;
+    element.disabled = !(state.current === PLAYER.HUMAN && (state.phase === PHASE.OPENING || (state.phase === PHASE.DRAW && !state.stockOnly)));
+    element.setAttribute("aria-label", `捨て札 ${state.topDiscard.label} を取る`);
+    this.nodes.discard.replaceChildren(element);
+  }
+
+  #renderInformation(state, selectedId, analysis) {
+    const info = [];
+    const normal = `現在のデッドウッド：${analysis.deadwood}点`;
+    info.push(this.#infoSegment(normal, true));
+    if (state.phase === PHASE.DISCARD && state.current === PLAYER.HUMAN) {
+      if (selectedId) {
+        const selected = state.hands[PLAYER.HUMAN].find(card => card.id === selectedId);
+        const futureHand = state.hands[PLAYER.HUMAN].filter(card => card.id !== selectedId);
+        const resulting = this.analyzer.analyze(futureHand);
+        info.push(this.#infoSegment(`${selected.label}を捨てた後：${resulting.deadwood}点`, true));
+      } else {
+        info.push(this.#infoSegment("捨てるカードをクリックして選択", false));
+      }
+    } else if (state.phase === PHASE.OPENING && state.current === PLAYER.HUMAN) {
+      info.push(this.#infoSegment("表の札を取るか、パス", false));
+    } else if (state.phase === PHASE.DRAW && state.current === PLAYER.HUMAN) {
+      info.push(this.#infoSegment(state.stockOnly ? "両者パス：山札から引く" : "山札か捨て札から引く", false));
+    }
+    this.nodes.handInfo.replaceChildren(...info);
+  }
+
+  #infoSegment(label, highlighted) {
+    const span = document.createElement("span");
+    span.className = highlighted ? "" : "soft";
+    span.textContent = label;
+    return span;
+  }
+
+  #renderActions(state, selectedId) {
+    const buttons = [];
+    if (state.current === PLAYER.HUMAN && state.phase === PHASE.OPENING) {
+      buttons.push(this.#actionButton("表の札を受け取る", ACTION.DISCARD_PILE, "primary"));
+      buttons.push(this.#actionButton("パス", ACTION.PASS, "alt"));
+    }
+    if (state.current === PLAYER.HUMAN && state.phase === PHASE.DISCARD) {
+      const selected = state.hands[PLAYER.HUMAN].find(card => card.id === selectedId && card.id !== state.forbiddenCardId);
+      const deadwood = selected ? this.analyzer.analyze(state.hands[PLAYER.HUMAN].filter(card => card.id !== selectedId)).deadwood : null;
+      buttons.push(this.#actionButton("通常捨てる", ACTION.DISCARD, "alt", !selected));
+      if (deadwood === 0) buttons.push(this.#actionButton("ジン！ +25点", ACTION.GIN, "primary"));
+      else if (deadwood !== null && deadwood <= GAME_CONFIG.KNOCK_DEADWOOD_LIMIT) buttons.push(this.#actionButton("ノックして勝負", ACTION.KNOCK, "primary"));
+    }
+    this.nodes.actions.replaceChildren(...buttons);
+  }
+
+  #actionButton(label, action, kind, disabled = false) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `action ${kind}`;
+    button.dataset.action = action;
+    button.disabled = disabled;
+    button.textContent = label;
+    return button;
+  }
+
+  #renderOverlay(state) {
+    if (!state.result) { this.nodes.overlay.classList.add("hidden"); return; }
+    const result = state.result;
+    this.nodes.overlay.classList.remove("hidden");
+    const humanWon = result.winner === PLAYER.HUMAN;
+    let title;
+    if (result.type === RESULT_TYPE.DRAW) title = "この局は引き分け";
+    else if (result.type === RESULT_TYPE.GIN) title = humanWon ? "ジン！ あなたの勝ち" : "コンピューターのジン";
+    else if (result.type === RESULT_TYPE.UNDERCUT) title = humanWon ? "アンダーカット成功！" : "アンダーカットされました";
+    else title = humanWon ? "ノック成功！" : "コンピューターのノック";
+    this.nodes.resultTitle.textContent = title;
+    this.nodes.resultMessage.textContent = result.type === RESULT_TYPE.DRAW
+      ? "山札が残り2枚になりました。今回の局は双方0点です。"
+      : `${humanWon ? "あなた" : "コンピューター"}が${result.points}点を獲得しました。`;
+    this.nodes.resultDetails.replaceChildren();
+    if (result.type !== RESULT_TYPE.DRAW) {
+      const knocking = result.analyses[result.knocker];
+      const defender = result.analyses[result.knocker === PLAYER.HUMAN ? PLAYER.COMPUTER : PLAYER.HUMAN];
+      const label = result.knocker === PLAYER.HUMAN ? "あなた" : "コンピューター";
+      const opponentLabel = result.knocker === PLAYER.HUMAN ? "コンピューター" : "あなた";
+      this.nodes.resultDetails.append(
+        this.#detailLine(`${label}（宣言側）のデッドウッド：${knocking.deadwood}点`),
+        this.#detailLine(`${opponentLabel}のデッドウッド：${defender.deadwood}点${defender.laidOffCards.length ? `（レイオフ前 ${defender.originalDeadwood}点）` : ""}`),
+        this.#detailLine(this.#scoreExplanation(result))
+      );
+    } else {
+      this.nodes.resultDetails.append(this.#detailLine("双方とも得点に変化はありません。"));
+    }
+    this.nodes.resultNote.textContent = state.matchWinner
+      ? `最終得点：あなた ${state.scores[PLAYER.HUMAN]}点 ／ コンピューター ${state.scores[PLAYER.COMPUTER]}点。${humanWon ? "あなたの対局勝利です！" : "コンピューターの対局勝利です。"}`
+      : `累計：あなた ${state.scores[PLAYER.HUMAN]}点 ／ コンピューター ${state.scores[PLAYER.COMPUTER]}点`;
+    this.nodes.resultButtons.replaceChildren(
+      state.matchWinner
+        ? this.#actionButton("もう一度対戦", ACTION.RESET, "primary")
+        : this.#actionButton("次の局へ", ACTION.NEXT, "primary")
+    );
+  }
+
+  #detailLine(content) {
+    const element = document.createElement("div");
+    element.textContent = content;
+    return element;
+  }
+
+  #scoreExplanation(result) {
+    if (result.type === RESULT_TYPE.GIN) return `ジンのボーナス ${GAME_CONFIG.GIN_BONUS}点 ＋ 相手の余り札 ${result.points - GAME_CONFIG.GIN_BONUS}点`;
+    if (result.type === RESULT_TYPE.UNDERCUT) return `アンダーカットのボーナス ${GAME_CONFIG.UNDERCUT_BONUS}点 ＋ デッドウッドの差 ${result.points - GAME_CONFIG.UNDERCUT_BONUS}点`;
+    return `ノック：デッドウッドの差 ${result.points}点`;
+  }
+
+  #status(state) {
+    if (state.phase === PHASE.ROUND_END) return "決着しました。相手の手札を公開しています。";
+    if (state.current === PLAYER.COMPUTER) return "コンピューターが考えています…";
+    if (state.phase === PHASE.OPENING) return "最初の表の札を取るか、パスしてください。";
+    if (state.phase === PHASE.DRAW) return state.stockOnly ? "両者がパスしました。山札から1枚引いてください。" : "山札か捨て札から1枚引いてください。";
+    return "捨てるカードを選び、「通常捨てる」または「ノック／ジン」で確定してください。";
+  }
+}
+
+class GinRummyApp {
+  #analyzer;
+  #engine;
+  #computer;
+  #view;
+  #selectedId;
+  #grouped;
+  #timer;
+  #notice;
+
+  constructor() {
+    this.#analyzer = new MeldAnalyzer();
+    const scorer = new RoundScorer(this.#analyzer, new LayoffCalculator());
+    this.#engine = new GinRummyEngine(this.#analyzer, scorer);
+    this.#computer = new ComputerPlayer(this.#analyzer);
+    this.#view = new GameView(document.getElementById("app"), this.#analyzer);
+    this.#selectedId = null;
+    this.#grouped = true;
+    this.#timer = null;
+    this.#notice = null;
+    this.#view.bind((action, cardId) => this.#handle(action, cardId));
+    this.#refresh();
+  }
+
+  #handle(action, cardId) {
+    try {
+      const state = this.#engine.getSnapshot();
+      this.#notice = null;
+      if (action === ACTION.RESET) {
+        if (state.phase !== PHASE.ROUND_END && !window.confirm("現在の対局を終了して、得点を0から始めますか？")) return;
+        this.#clearTimer();
+        this.#engine.startMatch();
+        this.#selectedId = null;
+      } else if (action === ACTION.NEXT) {
+        this.#clearTimer();
+        this.#engine.startNextRound();
+        this.#selectedId = null;
+      } else if (action === ACTION.SORT) {
+        this.#grouped = !this.#grouped;
+        document.querySelector('[data-action="sort"]').textContent = `並び替え：${this.#grouped ? "役順" : "数字順"}`;
+      } else if (state.current === PLAYER.HUMAN && action === ACTION.CARD && state.phase === PHASE.DISCARD) {
+        if (state.forbiddenCardId !== cardId && state.hands[PLAYER.HUMAN].some(card => card.id === cardId)) this.#selectedId = this.#selectedId === cardId ? null : cardId;
+      } else if (state.current === PLAYER.HUMAN && action === ACTION.PASS && state.phase === PHASE.OPENING) {
+        this.#engine.respondToUpcard(PLAYER.HUMAN, false);
+      } else if (state.current === PLAYER.HUMAN && action === ACTION.DISCARD_PILE) {
+        if (state.phase === PHASE.OPENING) this.#engine.respondToUpcard(PLAYER.HUMAN, true);
+        else this.#engine.draw(PLAYER.HUMAN, CARD_SOURCE.DISCARD);
+        this.#selectedId = null;
+      } else if (state.current === PLAYER.HUMAN && action === ACTION.STOCK) {
+        this.#engine.draw(PLAYER.HUMAN, CARD_SOURCE.STOCK);
+        this.#selectedId = null;
+      } else if (state.current === PLAYER.HUMAN && [ACTION.DISCARD, ACTION.KNOCK, ACTION.GIN].includes(action)) {
+        const kind = action === ACTION.GIN ? DECLARATION.GIN : action === ACTION.KNOCK ? DECLARATION.KNOCK : DECLARATION.NONE;
+        if (!this.#selectedId) return;
+        this.#engine.discard(PLAYER.HUMAN, this.#selectedId, kind);
+        this.#selectedId = null;
+      } else return;
+      this.#refresh();
+    } catch (error) {
+      console.error("Gin Rummy game action failed:", error);
+      this.#notice = `操作を完了できませんでした：${error.message}`;
+      this.#refresh();
+    }
+  }
+
+  #refresh() {
+    const state = this.#engine.getSnapshot();
+    this.#view.render(state, this.#selectedId, this.#grouped, this.#notice);
+    if (state.current === PLAYER.COMPUTER && state.phase !== PHASE.ROUND_END) this.#scheduleComputer();
+  }
+
+  #scheduleComputer() {
+    if (this.#timer !== null) return;
+    this.#timer = window.setTimeout(() => {
+      this.#timer = null;
+      try {
+        const state = this.#engine.getSnapshot();
+        if (state.current !== PLAYER.COMPUTER || state.phase === PHASE.ROUND_END) return;
+        if (state.phase === PHASE.OPENING) {
+          const shouldTake = this.#computer.chooseUpcard(state.hands[PLAYER.COMPUTER], state.topDiscard);
+          this.#engine.respondToUpcard(PLAYER.COMPUTER, shouldTake);
+        } else if (state.phase === PHASE.DRAW) {
+          const source = this.#computer.chooseDraw(state.hands[PLAYER.COMPUTER], state.topDiscard, state.stockOnly);
+          this.#engine.draw(PLAYER.COMPUTER, source);
+        } else if (state.phase === PHASE.DISCARD) {
+          const decision = this.#computer.chooseDiscard(state.hands[PLAYER.COMPUTER], state.forbiddenCardId);
+          this.#engine.discard(PLAYER.COMPUTER, decision.cardId, decision.declaration);
+        }
+      } catch (error) {
+        console.error("Computer move failed:", error);
+        this.#notice = `コンピューターの処理でエラー：${error.message}`;
+        this.#view.render(this.#engine.getSnapshot(), this.#selectedId, this.#grouped, this.#notice);
+        return;
+      }
+      this.#refresh();
+    }, GAME_CONFIG.COMPUTER_DELAY_MS);
+  }
+
+  #clearTimer() {
+    if (this.#timer !== null) window.clearTimeout(this.#timer);
+    this.#timer = null;
+  }
+}
+
+if (typeof window !== "undefined" && typeof document !== "undefined") {
+  new GinRummyApp();
+}
+</script>
+</body>
+</html>
