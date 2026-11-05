@@ -1,0 +1,754 @@
+<!--
+Program      : Reversi - Single Player
+Version      : 2.0.0
+Release Date : 2026-11-05
+Copyright    : (C) 2026 [Yasuhiro Kaizu]
+Development  : Developed with assistance from ChatGPT (OpenAI)
+Note         : Offline, single-file Reversi game with alternating human and computer colors.
+               No external libraries, assets, communications, or online services.
+-->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>リバーシ | コンピューター対戦</title>
+<style>
+  :root {
+    color-scheme: light;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Yu Gothic", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+    background: #f5f2e9;
+    color: #263b31;
+    font-synthesis: none;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-width: 320px; }
+  button, select { font: inherit; }
+  button { -webkit-tap-highlight-color: transparent; }
+  .page {
+    width: min(100% - 36px, 1050px);
+    margin: 0 auto;
+    padding: 25px 0 22px;
+  }
+  .masthead {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 0 3px 18px;
+    border-bottom: 1px solid #deddd0;
+  }
+  .eyebrow { font-size: 11px; font-weight: 800; letter-spacing: .21em; color: #788c70; }
+  h1 { margin: 4px 0 0; font-size: clamp(26px, 4vw, 35px); line-height: 1.15; letter-spacing: .055em; }
+  .subtitle { margin: 0 0 2px; font-size: 13px; color: #718076; text-align: right; }
+  .game-layout { display: grid; grid-template-columns: minmax(0, 600px) minmax(285px, 1fr); gap: 24px; align-items: start; padding-top: 23px; }
+  .board-panel {
+    background: #e4e0d3;
+    border: 1px solid #d5d0bf;
+    border-radius: 20px;
+    padding: 16px;
+    box-shadow: 0 14px 34px rgba(29, 44, 30, .10);
+  }
+  .board-frame {
+    background: #173d2e;
+    padding: 11px;
+    border-radius: 12px;
+    box-shadow: inset 0 2px 5px rgba(0,0,0,.3), 0 2px 0 rgba(255,255,255,.55);
+  }
+  .board {
+    width: 100%;
+    aspect-ratio: 1;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    border: 2px solid #092c1e;
+    background: #174f35;
+    overflow: hidden;
+  }
+  .cell {
+    appearance: none;
+    position: relative;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-right: 1px solid #0b3928;
+    border-bottom: 1px solid #0b3928;
+    border-radius: 0;
+    background: #24794f;
+    color: inherit;
+    cursor: default;
+    min-width: 0;
+    min-height: 0;
+  }
+  .cell:nth-child(even) { background: #287e52; }
+  .cell:nth-child(8n) { border-right: 0; }
+  .cell:nth-last-child(-n+8) { border-bottom: 0; }
+  .cell:disabled { opacity: 1; }
+  .cell.is-valid { cursor: pointer; }
+  .cell.is-valid:hover, .cell.is-valid:focus-visible { background: #469f6c; }
+  .cell:focus-visible { outline: 3px solid #f8e09c; outline-offset: -4px; z-index: 2; }
+  .cell.is-valid::after {
+    content: "";
+    display: block;
+    width: 19%; height: 19%;
+    border-radius: 50%;
+    background: #cde9bd;
+    opacity: .78;
+    box-shadow: 0 0 0 3px rgba(234,255,226,.10);
+  }
+  .cell.is-last::before {
+    content: "";
+    position: absolute;
+    inset: 6%;
+    border: 2px solid rgba(255, 215, 117, .9);
+    border-radius: 5px;
+    pointer-events: none;
+  }
+  .disc {
+    display: block;
+    width: 80%; height: 80%;
+    border-radius: 50%;
+    box-shadow: 0 3px 4px rgba(0,0,0,.34);
+    position: relative;
+  }
+  .disc.black { background: radial-gradient(circle at 32% 25%, #5c6862, #1b2521 48%, #07110d 90%); border: 1px solid #15211a; }
+  .disc.white { background: radial-gradient(circle at 33% 25%, #fff, #f2f4e9 55%, #ced4c9 100%); border: 1px solid #c1c9bf; }
+  .board-bottom {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 3px 0;
+    font-size: 12px;
+    color: #536b5b;
+  }
+  .board-bottom strong { color: #37513f; }
+  .side { display: flex; flex-direction: column; gap: 15px; }
+  .card { border: 1px solid #dfdfd4; background: #fffefa; border-radius: 16px; padding: 18px 19px; box-shadow: 0 4px 13px rgba(46,64,45,.035); }
+  .section-name { margin: 0 0 12px; color: #879080; font-size: 11px; font-weight: 850; letter-spacing: .12em; }
+  .players { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .player {
+    border: 2px solid #e8e7dd;
+    background: #fafaf6;
+    padding: 12px 10px;
+    border-radius: 13px;
+    min-width: 0;
+    transition: border-color .15s, background .15s;
+  }
+  .player.is-turn { border-color: #9abfa7; background: #edf7ef; }
+  .player-top { display: flex; align-items: center; gap: 7px; white-space: nowrap; font-size: 12px; font-weight: 750; }
+  .disc-mini { display: inline-block; flex: 0 0 17px; width: 17px; height: 17px; border-radius: 50%; }
+  .disc-mini.black { background: #202a24; border: 1px solid #111a14; }
+  .disc-mini.white { background: #fff; border: 1px solid #a8b5aa; box-shadow: inset 0 0 1px #b8c3b5; }
+  .count { font-variant-numeric: tabular-nums; font-size: 39px; line-height: 1.15; font-weight: 750; margin: 7px 0 1px; letter-spacing: -.04em; }
+  .small-muted { font-size: 11px; color: #859087; }
+  .status-card { background: #234c36; color: #f5f7ee; border-color: #234c36; }
+  .status-card .section-name { color: #b4d0b3; }
+  .status-title { display: flex; align-items: center; gap: 9px; font-size: 19px; font-weight: 780; margin: 0 0 8px; line-height: 1.3; }
+  .turn-indicator { width: 11px; height: 11px; border-radius: 50%; background: #bce6b2; flex: 0 0 11px; }
+  .turn-indicator.is-thinking { background: #f6ce78; animation: pulse 1s infinite ease-in-out; }
+  .turn-indicator.is-finished { background: #cdd6c8; animation: none; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .status-detail { min-height: 40px; margin: 0; color: #d8e7d9; font-size: 13px; line-height: 1.6; }
+  .field-label { display: block; font-size: 12px; font-weight: 800; margin-bottom: 7px; }
+  select {
+    width: 100%; background: #fafbf7; color: #293d30;
+    padding: 10px 35px 10px 12px; border: 1px solid #cdd7ca; border-radius: 9px;
+    cursor: pointer;
+  }
+  select:focus-visible, .action:focus-visible { outline: 3px solid #8bbf95; outline-offset: 2px; }
+  .actions { display: grid; grid-template-columns: 1.2fr 1fr; gap: 9px; margin-top: 13px; }
+  .action { border: 0; border-radius: 10px; padding: 11px 8px; font-size: 12px; font-weight: 800; cursor: pointer; }
+  .action.primary { color: white; background: #2b6745; }
+  .action.primary:hover { background: #205135; }
+  .action.secondary { color: #3d614a; background: #edf2eb; border: 1px solid #d8e4d6; }
+  .action.secondary:not(:disabled):hover { background: #dfeadd; }
+  .action:disabled { cursor: default; opacity: .48; }
+  .helper { padding-top: 11px; margin: 0; color: #8a9189; font-size: 11px; line-height: 1.55; }
+  .rules { font-size: 12px; color: #647466; line-height: 1.7; margin: 0; }
+  .footer { text-align: center; font-size: 11px; color: #a4a79a; padding: 19px 0 0; }
+  @media (max-width: 820px) {
+    .page { width: min(100% - 24px, 660px); padding-top: 14px; }
+    .masthead { padding-bottom: 14px; }
+    .game-layout { display: flex; flex-direction: column; gap: 15px; padding-top: 15px; }
+    .board-panel, .side { width: 100%; }
+    .side { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .side .card { padding: 14px; }
+    .side .status-card { grid-column: 1 / -1; grid-row: 1; }
+    .side .controls-card { grid-column: 1 / -1; }
+    .side .rules-card { display: none; }
+    .status-detail { min-height: unset; }
+  }
+  @media (max-width: 470px) {
+    .page { width: min(100% - 16px, 660px); }
+    .subtitle { font-size: 11px; }
+    .board-panel { padding: 8px; border-radius: 12px; }
+    .board-frame { padding: 6px; border-radius: 7px; }
+    .board-bottom { font-size: 11px; }
+    .side { display: flex; }
+    .count { font-size: 32px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .turn-indicator.is-thinking { animation: none; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="masthead">
+    <div>
+      <div class="eyebrow">CLASSIC BOARD GAME</div>
+      <h1>リバーシ</h1>
+    </div>
+    <p class="subtitle">8 × 8 · コンピューター対戦</p>
+  </header>
+
+  <div class="game-layout">
+    <section class="board-panel" aria-label="リバーシ盤面">
+      <div class="board-frame"><div class="board" id="board" role="group" aria-label="8×8の盤面"></div></div>
+      <div class="board-bottom"><span id="player-color-line">黒が先手 · あなたは黒</span><span id="move-info">0 手目</span></div>
+    </section>
+
+    <aside class="side">
+      <section class="card score-card" aria-label="石の枚数">
+        <h2 class="section-name">SCORE / 石の枚数</h2>
+        <div class="players">
+          <div class="player is-turn" id="human-player">
+            <div class="player-top"><span class="disc-mini black" id="human-disc" aria-hidden="true"></span> あなた</div>
+            <div class="count" id="human-score">2</div>
+            <div class="small-muted" id="human-role">BLACK · 先手</div>
+          </div>
+          <div class="player" id="computer-player">
+            <div class="player-top"><span class="disc-mini white" id="computer-disc" aria-hidden="true"></span> コンピューター</div>
+            <div class="count" id="computer-score">2</div>
+            <div class="small-muted" id="computer-role">WHITE · 後手</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card status-card" aria-live="polite" aria-atomic="true">
+        <h2 class="section-name">GAME STATUS</h2>
+        <p class="status-title"><span class="turn-indicator" id="turn-indicator" aria-hidden="true"></span><span id="status-title">あなたの番です</span></p>
+        <p class="status-detail" id="status-detail">緑の点が表示された場所をクリックして、黒い石を置いてください。</p>
+      </section>
+
+      <section class="card controls-card">
+        <h2 class="section-name">SETTINGS / 対局設定</h2>
+        <label class="field-label" for="difficulty">コンピューターの強さ</label>
+        <select id="difficulty">
+          <option value="easy">初級 · 気軽に対戦</option>
+          <option value="normal" selected>中級 · バランス型</option>
+          <option value="hard">上級 · 先読み重視</option>
+        </select>
+        <div class="actions">
+          <button class="action primary" type="button" id="restart">新しい対局</button>
+          <button class="action secondary" type="button" id="undo" disabled>一手戻す</button>
+        </div>
+        <p class="helper">「新しい対局」を押すたびに先手・後手が交代します。強さは対局中でも変更でき、「一手戻す」で原則あなたの着手前まで戻ります。</p>
+      </section>
+
+      <section class="card rules-card">
+        <h2 class="section-name">HOW TO PLAY / 遊び方</h2>
+        <p class="rules">相手の石を縦・横・斜めに挟むと、その間の石を自分の色に変えられます。置ける場所がなければ自動的にパス。双方とも置けなくなると終了し、石が多い方の勝ちです。</p>
+      </section>
+    </aside>
+  </div>
+  <footer class="footer">OFFLINE REVERSI · Ver. 2.0.0</footer>
+</main>
+<script>
+'use strict';
+
+// Game-wide constants and immutable configuration.
+const CONFIG = Object.freeze({
+  SIZE: 8,
+  EMPTY: 0,
+  BLACK: 1,
+  WHITE: -1,
+  STARTING_DISCS: 4,
+  COMPUTER_DELAY_MS: 330,
+  SEARCH_DEPTH: Object.freeze({ normal: 2, hard: 4 }),
+  HARD_ENDGAME_THRESHOLD: 14,
+  HARD_ENDGAME_DEPTH: 5,
+  WIN_SCORE: 100000,
+  TERMINAL_DISC_WEIGHT: 100,
+  MOBILITY_WEIGHT: 11,
+  EARLY_DISC_WEIGHT: 1,
+  LATE_DISC_WEIGHT: 7,
+  LATE_PHASE_THRESHOLD: 18,
+  COLUMNS: Object.freeze(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']),
+  DIRECTIONS: Object.freeze([
+    [-1, -1], [-1, 0], [-1, 1],
+    [0, -1],            [0, 1],
+    [1, -1],  [1, 0],   [1, 1]
+  ]),
+  POSITION_WEIGHTS: Object.freeze([
+    120, -20, 20,  5,  5, 20, -20, 120,
+    -20, -40, -5, -5, -5, -5, -40, -20,
+     20,  -5, 15,  3,  3, 15,  -5,  20,
+      5,  -5,  3,  3,  3,  3,  -5,   5,
+      5,  -5,  3,  3,  3,  3,  -5,   5,
+     20,  -5, 15,  3,  3, 15,  -5,  20,
+    -20, -40, -5, -5, -5, -5, -40, -20,
+    120, -20, 20,  5,  5, 20, -20, 120
+  ])
+});
+
+// Color-specific presentation data belongs outside the rules and AI.
+const COLOR_DISPLAY = Object.freeze({
+  [CONFIG.BLACK]: Object.freeze({ name: '黒', className: 'black', role: 'BLACK · 先手' }),
+  [CONFIG.WHITE]: Object.freeze({ name: '白', className: 'white', role: 'WHITE · 後手' })
+});
+
+class BoardState {
+  #cells;
+
+  constructor(cells = null) {
+    this.#cells = cells ? new Int8Array(cells) : new Int8Array(CONFIG.SIZE * CONFIG.SIZE);
+  }
+
+  static initial() {
+    const cells = new Int8Array(CONFIG.SIZE * CONFIG.SIZE);
+    const center = CONFIG.SIZE / 2;
+    const put = (row, col, color) => { cells[row * CONFIG.SIZE + col] = color; };
+    put(center - 1, center - 1, CONFIG.WHITE);
+    put(center - 1, center, CONFIG.BLACK);
+    put(center, center - 1, CONFIG.BLACK);
+    put(center, center, CONFIG.WHITE);
+    return new BoardState(cells);
+  }
+
+  at(row, col) {
+    if (!BoardState.inBounds(row, col)) {
+      throw new RangeError('Board coordinates are out of range.');
+    }
+    return this.#cells[row * CONFIG.SIZE + col];
+  }
+
+  static inBounds(row, col) {
+    return Number.isInteger(row) && Number.isInteger(col) &&
+      row >= 0 && row < CONFIG.SIZE && col >= 0 && col < CONFIG.SIZE;
+  }
+
+  withMove(move, color) {
+    if (!BoardState.inBounds(move.row, move.col) || this.at(move.row, move.col) !== CONFIG.EMPTY ||
+        !Array.isArray(move.flips) || move.flips.length === 0 ||
+        (color !== CONFIG.BLACK && color !== CONFIG.WHITE)) {
+      throw new Error('Invalid board move.');
+    }
+    const nextCells = new Int8Array(this.#cells);
+    nextCells[move.row * CONFIG.SIZE + move.col] = color;
+    for (const { row, col } of move.flips) {
+      nextCells[row * CONFIG.SIZE + col] = color;
+    }
+    return new BoardState(nextCells);
+  }
+
+  count(color) {
+    let total = 0;
+    for (const cell of this.#cells) {
+      if (cell === color) total += 1;
+    }
+    return total;
+  }
+
+  emptyCount() { return this.count(CONFIG.EMPTY); }
+
+  positionalScore(color) {
+    let total = 0;
+    for (let index = 0; index < this.#cells.length; index += 1) {
+      total += this.#cells[index] * color * CONFIG.POSITION_WEIGHTS[index];
+    }
+    return total;
+  }
+}
+
+class ReversiRules {
+  flipsFor(board, row, col, color) {
+    if (!BoardState.inBounds(row, col) || board.at(row, col) !== CONFIG.EMPTY) return [];
+    const allFlips = [];
+    for (const [dr, dc] of CONFIG.DIRECTIONS) {
+      const line = [];
+      let nextRow = row + dr;
+      let nextCol = col + dc;
+      while (BoardState.inBounds(nextRow, nextCol) && board.at(nextRow, nextCol) === -color) {
+        line.push({ row: nextRow, col: nextCol });
+        nextRow += dr;
+        nextCol += dc;
+      }
+      if (line.length > 0 && BoardState.inBounds(nextRow, nextCol) &&
+          board.at(nextRow, nextCol) === color) {
+        allFlips.push(...line);
+      }
+    }
+    return allFlips;
+  }
+
+  legalMoves(board, color) {
+    const moves = [];
+    for (let row = 0; row < CONFIG.SIZE; row += 1) {
+      for (let col = 0; col < CONFIG.SIZE; col += 1) {
+        if (board.at(row, col) !== CONFIG.EMPTY) continue;
+        const flips = this.flipsFor(board, row, col, color);
+        if (flips.length > 0) moves.push({ row, col, flips });
+      }
+    }
+    return moves;
+  }
+}
+
+class ComputerPlayer {
+  #rules;
+
+  constructor(rules) { this.#rules = rules; }
+
+  chooseMove(board, color, difficulty) {
+    const legalMoves = this.#rules.legalMoves(board, color);
+    if (legalMoves.length === 0) return null;
+    if (difficulty === 'easy') {
+      return legalMoves[Math.floor(Math.random() * legalMoves.length)];
+    }
+    if (!Object.hasOwn(CONFIG.SEARCH_DEPTH, difficulty)) {
+      throw new Error('Unknown computer difficulty.');
+    }
+    const depth = this.#searchDepth(board, difficulty);
+    const orderedMoves = this.#ordered(legalMoves);
+    let bestMove = orderedMoves[0];
+    let bestScore = -Infinity;
+    let alpha = -Infinity;
+    for (const move of orderedMoves) {
+      const nextBoard = board.withMove(move, color);
+      const score = -this.#negamax(nextBoard, -color, depth - 1, -Infinity, -alpha);
+      if (score > bestScore) { bestScore = score; bestMove = move; }
+      alpha = Math.max(alpha, bestScore);
+    }
+    return bestMove;
+  }
+
+  #searchDepth(board, difficulty) {
+    if (difficulty === 'hard' && board.emptyCount() <= CONFIG.HARD_ENDGAME_THRESHOLD) {
+      return CONFIG.HARD_ENDGAME_DEPTH;
+    }
+    return CONFIG.SEARCH_DEPTH[difficulty];
+  }
+
+  #ordered(moves) {
+    return moves.slice().sort((left, right) =>
+      CONFIG.POSITION_WEIGHTS[right.row * CONFIG.SIZE + right.col] -
+      CONFIG.POSITION_WEIGHTS[left.row * CONFIG.SIZE + left.col]);
+  }
+
+  #negamax(board, color, depth, alpha, beta) {
+    const moves = this.#rules.legalMoves(board, color);
+    if (moves.length === 0) {
+      const opponentMoves = this.#rules.legalMoves(board, -color);
+      if (opponentMoves.length === 0) return this.#terminalScore(board, color);
+      if (depth <= 0) return this.#evaluate(board, color);
+      return -this.#negamax(board, -color, depth - 1, -beta, -alpha);
+    }
+    if (depth <= 0) return this.#evaluate(board, color);
+
+    let bestScore = -Infinity;
+    for (const move of this.#ordered(moves)) {
+      const nextBoard = board.withMove(move, color);
+      const score = -this.#negamax(nextBoard, -color, depth - 1, -beta, -alpha);
+      bestScore = Math.max(bestScore, score);
+      alpha = Math.max(alpha, score);
+      if (alpha >= beta) break;
+    }
+    return bestScore;
+  }
+
+  #terminalScore(board, color) {
+    const difference = board.count(color) - board.count(-color);
+    if (difference === 0) return 0;
+    return Math.sign(difference) * CONFIG.WIN_SCORE + difference * CONFIG.TERMINAL_DISC_WEIGHT;
+  }
+
+  #evaluate(board, color) {
+    const positionScore = board.positionalScore(color);
+    const mobility = this.#rules.legalMoves(board, color).length -
+      this.#rules.legalMoves(board, -color).length;
+    const discDifference = board.count(color) - board.count(-color);
+    const discWeight = board.emptyCount() <= CONFIG.LATE_PHASE_THRESHOLD ?
+      CONFIG.LATE_DISC_WEIGHT : CONFIG.EARLY_DISC_WEIGHT;
+    return positionScore + mobility * CONFIG.MOBILITY_WEIGHT + discDifference * discWeight;
+  }
+}
+
+class GameSession {
+  #rules;
+  #board;
+  #turn;
+  #finished;
+  #lastMove;
+  #notice;
+  #history;
+  #moveCount;
+  #humanColor;
+
+  constructor(rules) {
+    this.#rules = rules;
+    this.#humanColor = CONFIG.BLACK;
+    this.#resetBoard();
+  }
+
+  startNextGame() {
+    this.#humanColor = -this.#humanColor;
+    this.#resetBoard();
+  }
+
+  #resetBoard() {
+    this.#board = BoardState.initial();
+    this.#turn = CONFIG.BLACK;
+    this.#finished = false;
+    this.#lastMove = null;
+    this.#notice = '';
+    this.#history = [];
+    this.#moveCount = 0;
+  }
+
+  get board() { return this.#board; }
+  get humanColor() { return this.#humanColor; }
+  get computerColor() { return -this.#humanColor; }
+  get turn() { return this.#turn; }
+  get finished() { return this.#finished; }
+  get lastMove() { return this.#lastMove; }
+  get notice() { return this.#notice; }
+  get moveCount() { return this.#moveCount; }
+  get canUndo() { return this.#history.some(snapshot => snapshot.turn === this.#humanColor); }
+
+  legalMoves() {
+    return this.#finished ? [] : this.#rules.legalMoves(this.#board, this.#turn);
+  }
+
+  play(row, col) {
+    if (this.#finished) return false;
+    const move = this.legalMoves().find(candidate => candidate.row === row && candidate.col === col);
+    if (!move) return false;
+
+    this.#history.push({
+      board: this.#board,
+      turn: this.#turn,
+      finished: this.#finished,
+      lastMove: this.#lastMove,
+      notice: this.#notice,
+      moveCount: this.#moveCount
+    });
+    const playerWhoMoved = this.#turn;
+    this.#board = this.#board.withMove(move, this.#turn);
+    this.#lastMove = { row, col, color: playerWhoMoved };
+    this.#moveCount += 1;
+    this.#turn = -this.#turn;
+    this.#notice = '';
+    this.#resolvePassOrFinish();
+    return true;
+  }
+
+  #resolvePassOrFinish() {
+    if (this.#rules.legalMoves(this.#board, this.#turn).length > 0) return;
+    const passingColor = this.#turn;
+    this.#turn = -this.#turn;
+    if (this.#rules.legalMoves(this.#board, this.#turn).length === 0) {
+      this.#finished = true;
+      this.#notice = '双方とも置ける場所がないため、対局終了です。';
+      return;
+    }
+    this.#notice = passingColor === this.#humanColor ?
+      'あなたは置ける場所がないため、自動的にパスしました。' :
+      'コンピューターは置ける場所がないため、自動的にパスしました。';
+  }
+
+  undoToHumanTurn() {
+    if (!this.canUndo) return false;
+    do {
+      const previous = this.#history.pop();
+      this.#board = previous.board;
+      this.#turn = previous.turn;
+      this.#finished = previous.finished;
+      this.#lastMove = previous.lastMove;
+      this.#notice = previous.notice;
+      this.#moveCount = previous.moveCount;
+    } while (this.#turn !== this.#humanColor && this.canUndo);
+    return true;
+  }
+}
+
+class GameView {
+  #elements;
+  #cells;
+
+  constructor(documentRoot) {
+    const byId = id => {
+      const element = documentRoot.getElementById(id);
+      if (!element) throw new Error(`Missing UI element: ${id}`);
+      return element;
+    };
+    this.#elements = {
+      board: byId('board'), humanScore: byId('human-score'),
+      computerScore: byId('computer-score'), humanDisc: byId('human-disc'),
+      computerDisc: byId('computer-disc'), humanRole: byId('human-role'),
+      computerRole: byId('computer-role'), playerColorLine: byId('player-color-line'),
+      humanPlayer: byId('human-player'), computerPlayer: byId('computer-player'),
+      statusTitle: byId('status-title'),
+      statusDetail: byId('status-detail'), turnIndicator: byId('turn-indicator'),
+      difficulty: byId('difficulty'), restart: byId('restart'),
+      undo: byId('undo'), moveInfo: byId('move-info')
+    };
+    this.#cells = [];
+    const fragment = documentRoot.createDocumentFragment();
+    for (let row = 0; row < CONFIG.SIZE; row += 1) {
+      for (let col = 0; col < CONFIG.SIZE; col += 1) {
+        const cell = documentRoot.createElement('button');
+        cell.type = 'button';
+        cell.className = 'cell';
+        cell.dataset.row = String(row);
+        cell.dataset.col = String(col);
+        cell.disabled = true;
+        this.#cells.push(cell);
+        fragment.appendChild(cell);
+      }
+    }
+    this.#elements.board.appendChild(fragment);
+  }
+
+  onBoardClick(handler) {
+    this.#elements.board.addEventListener('click', event => {
+      const target = event.target.closest('button.cell');
+      if (!target || !this.#elements.board.contains(target)) return;
+      handler(Number(target.dataset.row), Number(target.dataset.col));
+    });
+  }
+
+  onRestart(handler) { this.#elements.restart.addEventListener('click', handler); }
+  onUndo(handler) { this.#elements.undo.addEventListener('click', handler); }
+  selectedDifficulty() { return this.#elements.difficulty.value; }
+
+  render(game, isThinking) {
+    const blackCount = game.board.count(CONFIG.BLACK);
+    const whiteCount = game.board.count(CONFIG.WHITE);
+    const humanColor = game.humanColor;
+    const humanDisplay = COLOR_DISPLAY[humanColor];
+    const computerDisplay = COLOR_DISPLAY[game.computerColor];
+    this.#elements.humanScore.textContent = String(game.board.count(humanColor));
+    this.#elements.computerScore.textContent = String(game.board.count(game.computerColor));
+    this.#elements.humanDisc.className = `disc-mini ${humanDisplay.className}`;
+    this.#elements.computerDisc.className = `disc-mini ${computerDisplay.className}`;
+    this.#elements.humanRole.textContent = humanDisplay.role;
+    this.#elements.computerRole.textContent = computerDisplay.role;
+    this.#elements.playerColorLine.textContent = `黒が先手 · あなたは${humanDisplay.name}`;
+    this.#elements.moveInfo.textContent = `${game.moveCount} 手目`;
+    this.#elements.undo.disabled = !game.canUndo;
+    const humanTurn = game.turn === game.humanColor && !game.finished && !isThinking;
+    this.#elements.humanPlayer.classList.toggle('is-turn', humanTurn);
+    this.#elements.computerPlayer.classList.toggle('is-turn', !game.finished && !humanTurn);
+
+    const legalSquares = new Set(humanTurn ? game.legalMoves().map(move => move.row * CONFIG.SIZE + move.col) : []);
+    this.#cells.forEach((cell, index) => {
+      const row = Math.floor(index / CONFIG.SIZE);
+      const col = index % CONFIG.SIZE;
+      const color = game.board.at(row, col);
+      const isValid = legalSquares.has(index);
+      const last = game.lastMove?.row === row && game.lastMove?.col === col;
+      cell.classList.toggle('is-valid', isValid);
+      cell.classList.toggle('is-last', last);
+      cell.disabled = !isValid;
+      cell.replaceChildren();
+      if (color !== CONFIG.EMPTY) {
+        const disc = cell.ownerDocument.createElement('span');
+        disc.className = `disc ${color === CONFIG.BLACK ? 'black' : 'white'}`;
+        disc.setAttribute('aria-hidden', 'true');
+        cell.appendChild(disc);
+      }
+      const label = color === CONFIG.EMPTY ? (isValid ? `${humanDisplay.name}を置けます` : '空き') :
+        COLOR_DISPLAY[color].name;
+      cell.setAttribute('aria-label', `${CONFIG.COLUMNS[col]}${row + 1}：${label}${last ? '・直前の手' : ''}`);
+    });
+    this.#renderStatus(game, isThinking, blackCount, whiteCount);
+  }
+
+  #renderStatus(game, isThinking, blackCount, whiteCount) {
+    const indicator = this.#elements.turnIndicator;
+    indicator.classList.toggle('is-thinking', isThinking);
+    indicator.classList.toggle('is-finished', game.finished);
+
+    if (game.finished) {
+      const humanCount = game.board.count(game.humanColor);
+      const computerCount = game.board.count(game.computerColor);
+      this.#elements.statusTitle.textContent = humanCount === computerCount ? '引き分けです' :
+        (humanCount > computerCount ? 'あなたの勝ち！' : 'コンピューターの勝ち');
+      this.#elements.statusDetail.textContent = `対局終了。黒 ${blackCount} 枚・白 ${whiteCount} 枚。${game.notice}`;
+      return;
+    }
+    this.#elements.statusTitle.textContent = isThinking ? 'コンピューターの番です' : 'あなたの番です';
+    const instruction = isThinking ? `コンピューター（${COLOR_DISPLAY[game.computerColor].name}）が着手を考えています…` :
+      `緑の点が表示された場所をクリックして、${COLOR_DISPLAY[game.humanColor].name}い石を置いてください。`;
+    this.#elements.statusDetail.textContent = game.notice ? `${game.notice} ${instruction}` : instruction;
+  }
+}
+
+class GameController {
+  #game;
+  #view;
+  #computer;
+  #pendingTimer = null;
+  #turnSequence = 0;
+
+  constructor(documentRoot) {
+    const rules = new ReversiRules();
+    this.#game = new GameSession(rules);
+    this.#computer = new ComputerPlayer(rules);
+    this.#view = new GameView(documentRoot);
+    this.#view.onBoardClick((row, col) => this.#onHumanMove(row, col));
+    this.#view.onRestart(() => this.#restart());
+    this.#view.onUndo(() => this.#undo());
+    this.#view.render(this.#game, false);
+  }
+
+  #onHumanMove(row, col) {
+    if (this.#game.turn !== this.#game.humanColor || this.#game.finished) return;
+    if (!this.#game.play(row, col)) return;
+    this.#continueTurn();
+  }
+
+  #continueTurn() {
+    const computerTurn = !this.#game.finished && this.#game.turn === this.#game.computerColor;
+    this.#view.render(this.#game, computerTurn);
+    if (!computerTurn) return;
+
+    this.#cancelPendingMove();
+    const currentSequence = this.#turnSequence;
+    this.#pendingTimer = window.setTimeout(() => {
+      this.#pendingTimer = null;
+      if (currentSequence !== this.#turnSequence || this.#game.finished ||
+          this.#game.turn !== this.#game.computerColor) return;
+      const move = this.#computer.chooseMove(this.#game.board, this.#game.computerColor, this.#view.selectedDifficulty());
+      if (move && this.#game.play(move.row, move.col)) this.#continueTurn();
+    }, CONFIG.COMPUTER_DELAY_MS);
+  }
+
+  #cancelPendingMove() {
+    this.#turnSequence += 1;
+    if (this.#pendingTimer !== null) {
+      window.clearTimeout(this.#pendingTimer);
+      this.#pendingTimer = null;
+    }
+  }
+
+  #restart() {
+    this.#cancelPendingMove();
+    this.#game.startNextGame();
+    this.#continueTurn();
+  }
+
+  #undo() {
+    this.#cancelPendingMove();
+    if (this.#game.undoToHumanTurn()) this.#continueTurn();
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  new GameController(document);
+});
+</script>
+</body>
+</html>
