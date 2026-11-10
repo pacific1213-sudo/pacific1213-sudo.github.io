@@ -1,0 +1,2465 @@
+<!DOCTYPE html>
+<!--
+  Program      : Aircraft Landing Simulator - F-15C / Embraer E170
+  Version      : V6.0
+  Release Date : 2026-11-09
+  Copyright    : Copyright (c) 2026 [Yasuhiro Kaizu]
+  Development  : Developed with assistance from OpenAI ChatGPT.
+  Note         : Single-file, offline-only flight simulation. NOT certified for training.
+                 F-15C / E170 flight-model coefficients are preliminary simulator estimates,
+                 not verified flight-test or aircraft-manual data.
+-->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aircraft Landing Simulator V6.0 — F-15C / Embraer E170</title>
+<style>
+  :root { color-scheme: dark; --green:#44ff83; --muted:#9bcbaa; --panel:rgba(0,17,9,.95); }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#000; color:var(--green); font-family:Consolas, 'Liberation Mono', monospace; overflow:hidden; }
+  canvas { display:block; width:100vw; height:100vh; }
+  button { font:inherit; cursor:pointer; }
+  #menu, #settings { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); border:1px solid var(--green); background:var(--panel); padding:23px; width:min(480px,calc(100vw - 28px)); text-align:center; box-shadow:0 0 30px #064a23; z-index:10; }
+  #menu h1 { font-size:20px; letter-spacing:1px; margin:0 0 8px; }
+  #menu h2 { font-size:16px; font-weight:normal; color:#baffbd; margin:0 0 20px; }
+  .note { color:var(--muted); font-size:12px; line-height:1.5; margin:14px 0 0; }
+  .menu-button { display:block; width:100%; background:#001807; border:1px solid #247d46; padding:10px; color:var(--green); margin:7px 0; font-size:15px; }
+  .menu-button:hover,.menu-button:focus-visible { color:#001807; background:var(--green); }
+  #settings { display:none; max-height:90vh; overflow-y:auto; text-align:left; width:min(570px,calc(100vw - 28px)); z-index:20; }
+  #settings h2 { text-align:center; font-size:20px; margin:0 0 14px; }
+  #settings table { width:100%; border-collapse:collapse; font-size:13px; }
+  #settings td,#settings th { padding:9px 5px; border-bottom:1px solid #13552a; }
+  #settings button { background:#001807; border:1px solid var(--green); color:var(--green); padding:6px; }
+  #settings button:disabled { opacity:.45; }
+  #settings input { accent-color:#43ff80; }
+  #settings .status { margin:12px 0; min-height:22px; font-size:13px; }
+  #open-settings { position:absolute; bottom:12px; right:14px; z-index:5; color:var(--green); background:#00190dbd; border:1px solid #237f42; padding:8px 10px; }
+  #open-settings:hover { background:#124b29; }
+  #message { display:none; position:absolute; left:50%; top:42%; transform:translate(-50%,-50%); background:rgba(0,0,0,.86); color:#ffe76b; border:1px solid #c8ac43; padding:15px 20px; text-align:center; font-size:18px; white-space:pre-line; max-width:90vw; pointer-events:none; z-index:6; }
+  #help { position:absolute; bottom:12px; left:16px; max-width:calc(100vw - 125px);
+      font-size:11px; line-height:1.35; color:#94cda4; pointer-events:none; z-index:4; text-shadow:1px 1px #000; }
+
+  /* Landing report is deliberately hidden until touchdown failure or rollout termination. */
+  #landing-report { position:absolute; inset:0; display:flex; justify-content:center;
+      align-items:center; padding:16px; background:rgba(0,0,0,.74); z-index:15; }
+  #landing-report .report-card { width:min(680px,100%); max-height:calc(100vh - 32px);
+      overflow-y:auto; background:#001009; border:2px solid #52ff83;
+      box-shadow:0 0 32px #063d20; padding:19px 22px; }
+  #landing-report h2 { color:#baffc5; font-size:21px; margin:0 0 8px; text-align:center; }
+  #landing-report .report-status { text-align:center; font-size:18px; margin:0 0 12px; font-weight:bold; }
+  #landing-report .report-status.failed {color:#ff7777;}
+  #landing-report .report-status.passed {color:#52ff83;}
+  #landing-report .report-caption {color:#bad5c0; font-size:12px; line-height:1.4;
+      margin:7px 0 12px; text-align:center;}
+  #landing-report table {width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums;}
+  #landing-report th {color:#c4ffe0; border-bottom:1px solid #49935a; text-align:left; padding:7px 5px;}
+  #landing-report td {padding:7px 5px; border-bottom:1px solid #174a2a;}
+  #landing-report td:nth-child(2) {color:#fff0a0; white-space:nowrap;}
+  #landing-report .metric-good {color:#5cff88;}
+  #landing-report .metric-bad {color:#ff7777;}
+  #landing-report .metric-na {color:#9bafa2;}
+  #landing-report .report-buttons {display:flex; gap:10px; margin-top:16px;}
+  #landing-report button {flex:1; min-width:0; padding:10px; background:#042612;
+      color:#85ffa7; border:1px solid #3aa65f;}
+  #landing-report button:hover,#landing-report button:focus-visible {background:#165335;}
+  @media(max-width:620px) {
+    #landing-report .report-card {padding:12px;}
+    #landing-report h2 {font-size:17px;}
+    #landing-report table {font-size:11px;}
+    #landing-report th,#landing-report td {padding:6px 2px;}
+  }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<canvas id="flight-canvas" aria-label="Flight simulator view"></canvas>
+<div id="menu">
+  <h1>AIRCRAFT LANDING SIMULATOR</h1>
+  <h2 id="aircraft-selection-title">F-15C EAGLE · V6.0</h2>
+  <button class="menu-button" data-aircraft="F15C">[ AIRCRAFT: F-15C EAGLE ]</button>
+  <button class="menu-button" data-aircraft="E170">[ AIRCRAFT: EMBRAER E170 · FDA ]</button>
+  <button class="menu-button" data-start="5">[ 5 NM · FINAL APPROACH ]</button>
+  <button class="menu-button" data-start="2">[ 2 NM · SHORT FINAL ]</button>
+  <button class="menu-button" id="lighting-mode-button" data-action="lighting">[ LIGHTING: DAY → NIGHT ]</button>
+  <button class="menu-button" data-action="settings">[ JOYSTICK CONFIG ]</button>
+</div>
+<div id="settings" role="dialog" aria-modal="true" aria-label="Joystick configuration">
+  <h2>JOYSTICK CONFIGURATION</h2>
+  <p class="note">Connect the joystick and press a key or joystick button to activate it. Choose ASSIGN, then move the required axis, or press the required button.</p>
+  <table><thead><tr><th>CONTROL</th><th>ASSIGNMENT</th><th>REVERSE</th><th></th></tr></thead><tbody id="settings-rows"></tbody></table>
+  <p id="settings-status" class="status"></p>
+  <button class="menu-button" data-action="close-settings">[ SAVE & CLOSE ]</button>
+</div>
+<button id="open-settings" data-action="settings">⚙ CONFIG</button>
+<div id="message"></div>
+<section id="landing-report" role="dialog" aria-labelledby="landing-report-heading" aria-modal="false" hidden>
+  <div class="report-card">
+    <h2 id="landing-report-heading">[ F-15C LANDING ASSESSMENT ]</h2>
+    <p id="report-status" class="report-status"></p>
+    <p id="report-caption" class="report-caption"></p>
+    <table aria-label="Landing performance data">
+      <thead><tr><th>PARAMETER</th><th>MEASURED</th><th>SIM TARGET</th><th>RESULT</th></tr></thead>
+      <tbody id="report-rows"></tbody>
+    </table>
+    <p class="report-caption">SIMULATOR TARGETS ONLY — NOT OFFICIAL AIRCRAFT LANDING LIMITS</p>
+    <div class="report-buttons">
+      <button type="button" data-action="restart-flight">[ R · RETRY ]</button>
+      <button type="button" data-action="return-menu">[ ESC · MENU ]</button>
+    </div>
+  </div>
+</section>
+
+<div id="help">↑↓ PITCH · ←→ ROLL · Z/X RUDDER · W/S THR · G GEAR · F FLAP · Q/A SPDB · V REVERSE (E170 GROUND) · B WHEEL BRAKE · N DAY/NIGHT · P PAUSE · R RESTART · ESC MENU</div>
+<script>
+'use strict';
+
+// ============================================================================
+// 1. NAMED PARAMETERS AND AIRCRAFT CATALOG
+// ============================================================================
+const UNITS = Object.freeze({ DEG:Math.PI/180, RAD:180/Math.PI, NM:1852, FT:0.3048, KT:0.514444, FPS:0.3048 });
+const LIMITS = Object.freeze({ FRAME_DT:0.10, STEP_DT:1/120, EPS:1e-8, STOP_SPEED:0.25, MAX_DPR:2 });
+const DISPLAY = Object.freeze({ FOV:60*UNITS.DEG, NEAR:0.25, CLIP_MARGIN:40, GRID_SPACING:500,
+    GRID_EXTENT:18000, CHASE_DISTANCE:75, CHASE_HEIGHT:18, FPM_SMOOTH:0.085,
+    PITCH_LADDER_STEP:5, TAPE_STEP_SPEED:10, TAPE_STEP_ALT:100, TEXT_SHADOW:'#000',
+    HORIZON_MAX_SLOPE:3.0 });
+const HUD_TAPE = Object.freeze({
+    CENTER_OFFSET_PX:235, OFFSET_VIEWPORT_RATIO:0.275, MIN_OFFSET_PX:122,
+    HEIGHT_PX:240, HALF_WIDTH_PX:43, TICK_PX:27, LARGE_TICK_PX:13,
+    SMALL_TICK_PX:7, TICK_LIMIT:7, VALUE_BOX_WIDTH_PX:78,
+    VALUE_BOX_HEIGHT_PX:32, ALT_FINE_BELOW_FT:500, ALT_MEDIUM_BELOW_FT:2500,
+    ALT_FINE_STEP_FT:20, ALT_MEDIUM_STEP_FT:100, ALT_COARSE_STEP_FT:500,
+    IAS_MIN_KTS:0, ALT_MIN_FT:0, LABEL_OFFSET_Y_PX:141,
+    BORDER_COLOR:'#61e99b', VALUE_COLOR:'#fff09b', BACKGROUND:'rgba(0,12,8,0.82)'
+});
+const LIGHTING_MODE = Object.freeze({DAY:'DAY',NIGHT:'NIGHT'});
+const LIGHTING_CONFIG = Object.freeze({
+    MODES:Object.freeze([LIGHTING_MODE.DAY,LIGHTING_MODE.NIGHT]),
+    MODE_SETTINGS:Object.freeze({
+        DAY:Object.freeze({background:'#000000',groundFill:'#000000',grid:'#126838',runway:'#36ff6c',mark:'#96ffac',intensity:1.0,glow:0}),
+        NIGHT:Object.freeze({background:'#00090e',groundFill:'#061714',grid:'#0c3030',runway:'#297366',mark:'#68b09d',intensity:1.0,glow:10})
+    }),
+    FIXTURE_HEIGHT_M:0.35, MAX_VISIBLE_DISTANCE_M:11000,
+    EDGE_SPACING_M:60, EDGE_OUTSET_M:1.5, EDGE_CAUTION_ZONE_M:610,
+    CENTER_SPACING_M:30, CENTER_ALTERNATE_FROM_END_M:900, CENTER_RED_FROM_END_M:300,
+    THRESHOLD_SPACING_M:6, APPROACH_LENGTH_M:900, APPROACH_SPACING_M:30,
+    APPROACH_BAR_INTERVAL_M:150, APPROACH_BAR_HALF_WIDTH_M:18,
+    APPROACH_BAR_LIGHT_SPACING_M:6, STROBE_LENGTH_M:780, STROBE_SPACING_M:60,
+    STROBE_RATE_HZ:9, STROBE_CYCLE_PAUSE:4,
+    PAPI_STATION_Z_M:300, PAPI_OFFSET_FROM_EDGE_M:15,
+    PAPI_LIGHT_SPACING_M:9, PAPI_MIN_RANGE_M:40, PAPI_MAX_RANGE_NM:3.4,
+    PAPI_HALF_BEAM_DEG:10, PAPI_CUTOFFS_DEG:Object.freeze([2.50,2.83,3.17,3.50]),
+    LIGHT_MIN_RADIUS_PX:1.4, LIGHT_MAX_RADIUS_PX:5.5, LIGHT_DEPTH_SCALE:2400,
+    PAPI_RADIUS_BOOST_PX:1.6, PAPI_MIN_SCREEN_SPACING_PX:11, PAPI_MAX_GLOW_PX:4, STROBE_RADIUS_BOOST_PX:2.4,
+    COLORS:Object.freeze({white:'#fafffc',green:'#3cff7b',red:'#ff4b4b',yellow:'#ffcd54'})
+});
+const ENVIRONMENT = Object.freeze({ gravity:9.80665, rho0:1.225, scaleHeight:8500, groundHeight:0, speedOfSoundMps:340.3, wind:Object.freeze({x:0,y:0,z:0}) });
+const RUNWAY = Object.freeze({ x:0, z:0, length:3400, width:48, heading:0,
+    color:'#4cff80', ground:'#123d24', mark:'#a1ffae', thresholdCrossingM:15.0 });
+const AIRCRAFT_VISUAL = Object.freeze({
+    GEAR_RETRACTED_Y_M:-0.55, MAIN_GEAR_OFFSET_X_M:2.2, STRUT_TOP_Y_M:-0.7, NOSE_GEAR_RAISE_M:0.0,
+    MAIN_WHEEL_RADIUS_M:0.65, NOSE_WHEEL_RADIUS_M:0.45, WHEEL_SEGMENTS:10,
+    FLAP_INBOARD_X_M:2.2, FLAP_OUTBOARD_X_M:5.5, FLAP_HINGE_Z_M:-4.7,
+    FLAP_TRAILING_LENGTH_M:1.3, FLAP_DROP_M:0.85,
+    BRAKE_HALF_WIDTH_M:0.95, BRAKE_HINGE_Y_M:0.95, BRAKE_HINGE_Z_M:-5.1,
+    BRAKE_REAR_Z_M:-7.7, BRAKE_RAISE_M:2.6
+});
+const APPROACH = Object.freeze({ glideDeg:3, descentAngle:-3*UNITS.DEG,
+    presets:Object.freeze({
+        10:Object.freeze({iasKts:200,gearDown:false,flapsDown:false,speedbrakeFraction:0}),
+        5:Object.freeze({iasKts:200,gearDown:false,flapsDown:false,speedbrakeFraction:0}),
+        2:Object.freeze({iasKts:164,gearDown:true,flapsDown:true,speedbrakeFraction:1}),
+        1:Object.freeze({iasKts:164,gearDown:true,flapsDown:true,speedbrakeFraction:1})
+    }),
+    bank:0, heading:0, aoaTrim:8.75*UNITS.DEG, nominalClearance:2.1, defaultNm:5,
+    ENTRY_ANGLES_DEG:Object.freeze({5:20,2:5}),
+    INTERCEPT_POINT_FROM_THRESHOLD_M:300, RANDOM_SIDE_SPLIT:0.5,
+    distancesNm:Object.freeze([1,2,5,10]) });
+const APPROACH_SIDE = Object.freeze({LEFT:'LEFT',RIGHT:'RIGHT'});
+// Keep all approach profiles for future versions; only these are user-selectable.
+const UI_FEATURES = Object.freeze({
+    SELECTABLE_APPROACH_NM:Object.freeze([5,2]),
+    CHASE_VIEW_ENABLED:false
+});
+const GROUND = Object.freeze({ gearHeight:2.1, bellyHeight:0.72, cockpitHeight:2.1, mainGearZ:-2.4, noseGearZ:6.4,
+    maxSinkMps:3.3, minLandingIAS:115, maxLandingIAS:205, maxTouchdownPitchDeg:16,
+    maxTouchdownRollDeg:8, maxYawAlignmentDeg:5, maxLateralSpeedMps:4.0, brakeDecel:5.5, rollingDecel:0.75,
+    lateralDrag:0.8,
+    // Ground model parameters are tuning estimates, not measured F-15C coefficients.
+    groundBaseDragCoefficient:0.055, aeroBrakeDragCoefficientAtTenDeg:0.16,
+    aeroBrakeReferencePitchDeg:10.0, maxGroundPitchDeg:16.0,
+    cgAheadOfMainGearM:0.23, groundPitchInertiaMultiplier:3.0,
+    pitchDampingMomentNms:140000, pitchControlMomentFraction:0.35,
+    pitchAerodynamicSupportExponent:2.0, maxNosePitchRateDegPerSec:5.0,
+    mainGearLateralOffsetM:2.2, noseContactToleranceM:0.01,
+    rudderSteerRateDegPerSec:2.3, noseWheelSteerRateDegPerSec:7.0,
+    rudderReferenceSpeedMps:32, noseWheelSteerFadeSpeedMps:12,
+    statusMessageSeconds:2.5 });
+// E170 airframe dimensions are from the Embraer airport planning manual.
+// All below flight-model coefficients, masses, procedure speeds and limits are
+// illustrative estimates, NOT an E170 AFM, QRH or operational training standard.
+const E170_GROUND = Object.freeze({...GROUND,
+    gearHeight:2.55, bellyHeight:1.10, cockpitHeight:4.10,
+    mainGearZ:-3.9, noseGearZ:6.7, mainGearLateralOffsetM:2.35,
+    maxSinkMps:2.60, minLandingIAS:115, maxLandingIAS:151,
+    maxTouchdownPitchDeg:10, maxTouchdownRollDeg:5,
+    maxYawAlignmentDeg:4, maxLateralSpeedMps:3.0,
+    brakeDecel:3.2, rollingDecel:0.50, lateralDrag:0.95,
+    groundBaseDragCoefficient:0.040, aeroBrakeDragCoefficientAtTenDeg:0.045,
+    cgAheadOfMainGearM:0.42, groundPitchInertiaMultiplier:2.8,
+    pitchDampingMomentNms:220000, pitchControlMomentFraction:0.26,
+    maxNosePitchRateDegPerSec:3.0,
+    rudderSteerRateDegPerSec:1.8, noseWheelSteerRateDegPerSec:5.0
+});
+const E170_APPROACH = Object.freeze({...APPROACH,
+    aoaTrim:6.25*UNITS.DEG,
+    ENTRY_ANGLES_DEG:Object.freeze({5:8,2:3}),
+    presets:Object.freeze({
+        10:Object.freeze({iasKts:170,gearDown:false,flapsDown:false,speedbrakeFraction:0}),
+        5:Object.freeze({iasKts:170,gearDown:false,flapsDown:false,speedbrakeFraction:0}),
+        2:Object.freeze({iasKts:136,gearDown:true,flapsDown:true,speedbrakeFraction:0}),
+        1:Object.freeze({iasKts:136,gearDown:true,flapsDown:true,speedbrakeFraction:0})
+    })
+});
+const AIRCRAFT_ID = Object.freeze({ F15C:'F15C', E170:'E170' });
+const INPUT = Object.freeze({ keyResponse:8.0, keyReleaseResponse:32.0, throttleRate:0.24, defaultThrottle:0.07,
+    speedBrakeRate:0.50, joystickSpeedBrakeRate:0.50,
+    deadzone:0.055, captureThreshold:0.35, captureDelayFrames:9,
+    storageKey:'ALS_F15C_V1_JOYSTICK', keyboard:Object.freeze({
+        pitchUp:'ArrowDown',pitchDown:'ArrowUp',rollRight:'ArrowRight',rollLeft:'ArrowLeft',
+        yawLeft:'KeyZ',yawRight:'KeyX',throttleUp:'KeyW',throttleDown:'KeyS',
+        view:'KeyC',pause:'KeyP',restart:'KeyR',brake:'KeyB',menu:'Escape',lighting:'KeyN',
+        gear:'KeyG',flap:'KeyF',speedbrakeExtend:'KeyQ',speedbrakeRetract:'KeyA',reverse:'KeyV' 
+    }) });
+const FLIGHT_MODE = Object.freeze({ MENU:'MENU', FLIGHT:'FLIGHT', ROLLOUT:'ROLLOUT', CRASH:'CRASH', COMPLETE:'COMPLETE' });
+const CAMERA_MODE = Object.freeze({ COCKPIT:'COCKPIT', CHASE:'CHASE' });
+
+const LANDING_REPORT = Object.freeze({
+    STATUS:Object.freeze({CONTACT_FAILED:'CONTACT FAILED', IN_ROLLOUT:'ROLLOUT IN PROGRESS',
+        COMPLETE:'LANDING COMPLETE', OVERRUN:'RUNWAY OVERRUN / EXCURSION'}),
+    RESULT_PASS:'PASS', RESULT_FAIL:'FAIL', RESULT_NA:'—',
+    METRICS:Object.freeze([
+        Object.freeze({id:'speed',name:'Touchdown IAS',unit:'KTS'}),
+        Object.freeze({id:'sink',name:'Vertical speed',unit:'FPS'}),
+        Object.freeze({id:'pitch',name:'Pitch angle',unit:'DEG'}),
+        Object.freeze({id:'roll',name:'Roll angle',unit:'DEG'}),
+        Object.freeze({id:'alignment',name:'Runway alignment',unit:'DEG'}),
+        Object.freeze({id:'drift',name:'Lateral velocity',unit:'M/S'}),
+        Object.freeze({id:'lateralPosition',name:'Centerline offset',unit:'M'}),
+        Object.freeze({id:'touchdownPosition',name:'Touchdown from threshold',unit:'M'}),
+        Object.freeze({id:'gear',name:'Landing gear',unit:''}),
+        Object.freeze({id:'rollout',name:'Ground roll to stop/exit',unit:'M'})
+    ])
+});
+
+
+class AircraftProfile {
+    constructor(spec) {
+        if (!spec || !Number.isFinite(spec.massKg) || spec.massKg <= 0 || spec.wingAreaM2 <= 0) {
+            throw new TypeError('Aircraft mass and wing area must be positive finite values');
+        }
+        Object.assign(this, spec);
+        Object.freeze(this.engine);
+        Object.freeze(this.aero);
+        Object.freeze(this.inertia);
+        Object.freeze(this.control);
+        Object.freeze(this.ground);
+        Object.freeze(this.approach);
+        for(const system of Object.values(this.systems))Object.freeze(system);
+        Object.freeze(this.systems);
+        Object.freeze(this);
+    }
+}
+class AircraftCatalog {
+    static #profiles = new Map([
+        ['F15C', new AircraftProfile({
+            id:'F15C', name:'F-15C EAGLE', massKg:16000, wingAreaM2:56.5,
+            ground:GROUND, approach:APPROACH,
+            spanM:13.05, chordM:4.35,
+            inertia:{pitch:370000,roll:125000,yaw:475000},
+            aero:{CL0:0.14, CLalpha:3.2, CLmax:1.28, stallAoa:19*UNITS.DEG,
+                stallRetention:0.44, postStallTransition:35*UNITS.DEG, CD0:0.027, CDinduced:0.12, CDgear:0.018,
+                CDstall:0.85, CYbeta:-0.42},
+            engine:{idleNewton:9000, maxDryNewton:127000, spoolUpSec:1.8, spoolDownSec:2.1},
+            systems:{
+                landingGear:{initialDown:false,travelSeconds:5.0,maximumOperatingIasKts:250},
+                flaps:{initialDown:false,travelSeconds:3.2,maximumOperatingIasKts:250,
+                    automaticRetractIasKts:250,automaticRestoreIasKts:240,
+                    deltaCL:0.15,deltaCD:0.050,deltaCLmax:0.18,pitchMoment:-0.0025},
+                speedbrake:{initialFraction:0,travelSeconds:2.4,deltaCD:0.125}
+            },
+            control:{maxPitchRate:18*UNITS.DEG, maxRollRate:45*UNITS.DEG,
+                maxYawRate:14*UNITS.DEG, pitchPower:0.110, rollPower:0.017,
+                yawPower:0.012, pitchStatic:-0.65, yawStatic:0.28,
+                rollDamping:1.00, pitchDamping:14.0, yawDamping:2.1,
+                rudderLateral:0.11, stickCubicBlend:0.45,
+                pitchResponseSeconds:0.14, rollResponseSeconds:0.12, yawResponseSeconds:0.19,
+                stickNeutralDeadband:0.04, stickCenteringSeconds:0.055,
+                pitchRateCommandFraction:0.90, rollRateCommandFraction:1.0,
+                yawRateCommandFraction:0.80,
+                pitchRateTrackingSeconds:0.15, rollRateTrackingSeconds:0.14,
+                yawRateTrackingSeconds:0.20,
+                minControlSpeedMps:15, maxPitchDeg:58, maxBankDeg:85}
+        })],
+        [AIRCRAFT_ID.E170, new AircraftProfile({
+            id:AIRCRAFT_ID.E170, name:'EMBRAER E170 · FDA',
+            massKg:29500, wingAreaM2:72.72, spanM:26.00, chordM:3.40,
+            ground:E170_GROUND, approach:E170_APPROACH,
+            inertia:{pitch:850000,roll:1100000,yaw:1700000},
+            aero:{CL0:0.365, CLalpha:4.30, CLmax:1.45, stallAoa:17*UNITS.DEG,
+                stallRetention:0.38, postStallTransition:31*UNITS.DEG,
+                CD0:0.030, CDinduced:0.055, CDgear:0.023,
+                CDstall:1.00, CYbeta:-0.48},
+            // Combined thrust of two CF34-8E engines, with simplified spool dynamics.
+            engine:{idleNewton:6000, maxDryNewton:126400, spoolUpSec:3.5, spoolDownSec:4.2,
+                reverseFraction:0.19},
+            systems:{
+                landingGear:{initialDown:false,travelSeconds:7.0,maximumOperatingIasKts:235},
+                flaps:{initialDown:false,travelSeconds:4.8,maximumOperatingIasKts:200,
+                    automaticRetractIasKts:200,automaticRestoreIasKts:190,
+                    positions:Object.freeze([0,0.25,0.50,0.75,1]),
+                    deltaCL:0.455,deltaCD:0.090,deltaCLmax:0.55,pitchMoment:-0.0020},
+                speedbrake:{initialFraction:0,travelSeconds:1.2,deltaCD:0.085,
+                    autoGroundDeploy:true}
+            },
+            // Bounded rate-command augmentation, not genuine E170 FBW laws.
+            control:{maxPitchRate:7*UNITS.DEG, maxRollRate:18*UNITS.DEG,
+                maxYawRate:5*UNITS.DEG, pitchPower:0.18,rollPower:0.038,
+                yawPower:0.038, pitchStatic:-0.50,yawStatic:0.24,
+                rollDamping:1.2,pitchDamping:10,yawDamping:1.8,
+                rudderLateral:0.09,stickCubicBlend:0.55,
+                pitchResponseSeconds:0.30,rollResponseSeconds:0.34,yawResponseSeconds:0.40,
+                stickNeutralDeadband:0.04,stickCenteringSeconds:0.16,
+                pitchRateCommandFraction:0.72,rollRateCommandFraction:0.78,
+                yawRateCommandFraction:0.65,
+                pitchRateTrackingSeconds:0.45,rollRateTrackingSeconds:0.50,
+                yawRateTrackingSeconds:0.60,
+                minControlSpeedMps:17,maxPitchDeg:30,maxBankDeg:55}
+        })]
+    ]);
+    static get(id) {
+        const profile = this.#profiles.get(id);
+        if (!profile) throw new RangeError(`Unknown aircraft profile: ${id}`);
+        return profile;
+    }
+    static available() { return [...this.#profiles.keys()]; }
+}
+
+// ============================================================================
+// 2. MATH / ATMOSPHERE / INITIAL CONDITIONS
+// ============================================================================
+class Vector3 {
+    constructor(x=0,y=0,z=0) { this.x=x;this.y=y;this.z=z; }
+    add(v) { return new Vector3(this.x+v.x,this.y+v.y,this.z+v.z); }
+    sub(v) { return new Vector3(this.x-v.x,this.y-v.y,this.z-v.z); }
+    scale(t) { return new Vector3(this.x*t,this.y*t,this.z*t); }
+    dot(v) { return this.x*v.x+this.y*v.y+this.z*v.z; }
+    magnitude() { return Math.hypot(this.x,this.y,this.z); }
+    normalized() { return this.scale(1/Math.max(this.magnitude(),LIMITS.EPS)); }
+    clone() { return new Vector3(this.x,this.y,this.z); }
+}
+class Maths {
+    static clamp(v,a,b) { return Math.max(a,Math.min(b,v)); }
+    static approach(a,b,delta) { return a + this.clamp(b-a,-delta,delta); }
+    static smooth(a,b,dt,tau) { return a+(b-a)*(1-Math.exp(-dt/Math.max(tau,LIMITS.EPS))); }
+    static wrapRad(a) { return Math.atan2(Math.sin(a),Math.cos(a)); }
+    static headingDeg(a) { return ((Math.round(a*UNITS.RAD)%360)+360)%360; }
+    // Local +x is right, +y is up, +z is forward, as in shuttle V41.
+    static rotate(v,pitch,roll,yaw) {
+        const cr=Math.cos(roll),sr=Math.sin(roll),cp=Math.cos(pitch),sp=Math.sin(pitch);
+        const cy=Math.cos(yaw),sy=Math.sin(yaw);
+        const x1=v.x*cr+v.y*sr, y1=-v.x*sr+v.y*cr;
+        const y2=y1*cp+v.z*sp, z2=-y1*sp+v.z*cp;
+        return new Vector3(x1*cy+z2*sy,y2,-x1*sy+z2*cy);
+    }
+    static basis(pitch,roll,yaw) {
+        return {right:this.rotate(new Vector3(1,0,0),pitch,roll,yaw),
+            up:this.rotate(new Vector3(0,1,0),pitch,roll,yaw),
+            forward:this.rotate(new Vector3(0,0,1),pitch,roll,yaw)};
+    }
+}
+class AtmosphereModel {
+    constructor(environment) { this.environment=environment; }
+    density(heightM) { return this.environment.rho0*Math.exp(-Math.max(0,heightM)/this.environment.scaleHeight); }
+    indicatedSpeed(trueAirSpeedMps,heightM) {
+        return trueAirSpeedMps*Math.sqrt(this.density(heightM)/this.environment.rho0);
+    }
+}
+class ScenarioFactory {
+    #random;
+    constructor(aircraft, atmosphere, random=Math.random) {
+        if(typeof random!=='function')throw new TypeError('Random source must be a function');
+        this.aircraft=aircraft;this.atmosphere=atmosphere;this.#random=random;
+    }
+    create(distanceNm, requestedSide=null) {
+        const approach=this.aircraft.approach;
+        const ground=this.aircraft.ground;
+        if (!approach.distancesNm.includes(distanceNm)) throw new RangeError('Unsupported approach distance');
+        if(requestedSide!==null && requestedSide!==APPROACH_SIDE.LEFT && requestedSide!==APPROACH_SIDE.RIGHT){
+            throw new RangeError('Invalid approach entry side');
+        }
+        const side=requestedSide??this.#chooseSide();
+        const distance=distanceNm*UNITS.NM;
+        const height=RUNWAY.thresholdCrossingM+distance*Math.tan(approach.glideDeg*UNITS.DEG);
+        const entryAngleDeg=approach.ENTRY_ANGLES_DEG[distanceNm]??0;
+        const interceptRangeM=distance+approach.INTERCEPT_POINT_FROM_THRESHOLD_M;
+        // Place the airplane on either side of the runway and point it toward the aiming point.
+        // The published mode distance remains the longitudinal distance to the threshold.
+        const lateralSign=side===APPROACH_SIDE.LEFT?-1:1;
+        const lateralOffsetM=lateralSign*interceptRangeM*Math.tan(entryAngleDeg*UNITS.DEG);
+        const yaw=Math.atan2(-lateralOffsetM,interceptRangeM);
+        const preset=approach.presets[distanceNm];
+        const velocityIAS=preset.iasKts*UNITS.KT;
+        const velocityTAS=velocityIAS/Math.sqrt(this.atmosphere.density(height)/ENVIRONMENT.rho0);
+        const pitch=approach.descentAngle+approach.aoaTrim;
+        const horizontalSpeed=velocityTAS*Math.cos(approach.descentAngle);
+        const velocity=new Vector3(horizontalSpeed*Math.sin(yaw),
+            Math.sin(approach.descentAngle)*velocityTAS,horizontalSpeed*Math.cos(yaw));
+        const initialSystems=Object.freeze({gearDown:preset.gearDown,
+            flapsDown:preset.flapsDown,speedbrakeFraction:preset.speedbrakeFraction});
+        const thrustRequired=this.#estimateTrimThrust(velocityIAS,approach.aoaTrim,initialSystems);
+        return {distanceNm, approachSide:side, entryAngleDeg,
+            position:new Vector3(RUNWAY.x+lateralOffsetM,height+ground.gearHeight,RUNWAY.z-distance),
+            velocity,pitch,roll:0,yaw,initialSystems,
+            throttle:Maths.clamp((thrustRequired-this.aircraft.engine.idleNewton)/
+                (this.aircraft.engine.maxDryNewton-this.aircraft.engine.idleNewton),0,1)};
+    }
+    #chooseSide() {
+        const sample=this.#random();
+        if(!Number.isFinite(sample)||sample<0||sample>=1){
+            throw new RangeError('Random source must return a finite number in [0, 1)');
+        }
+        return sample<APPROACH.RANDOM_SIDE_SPLIT?APPROACH_SIDE.LEFT:APPROACH_SIDE.RIGHT;
+    }
+    #estimateTrimThrust(ias,aoa,initialSystems) {
+        const a=this.aircraft.aero;
+        const system=this.aircraft.systems;
+        const flapFraction=Number(initialSystems.flapsDown);
+        const gearFraction=Number(initialSystems.gearDown);
+        const cl=Math.min(a.CLmax+system.flaps.deltaCLmax*flapFraction,
+            a.CL0+a.CLalpha*aoa+system.flaps.deltaCL*flapFraction);
+        const cd=a.CD0+a.CDinduced*cl*cl+a.CDgear*gearFraction+
+            system.flaps.deltaCD*flapFraction+
+            system.speedbrake.deltaCD*initialSystems.speedbrakeFraction;
+        const drag=0.5*ENVIRONMENT.rho0*ias*ias*this.aircraft.wingAreaM2*cd;
+        const gravityDownPath=this.aircraft.massKg*ENVIRONMENT.gravity*Math.sin(this.aircraft.approach.descentAngle);
+        return drag+gravityDownPath;
+    }
+}
+
+// ============================================================================
+// 3. AIRCRAFT CONFIGURATION ACTUATORS (COMPOSITION, V2)
+// ============================================================================
+class TimedActuator {
+    #position;
+    #target;
+    constructor(initialPosition,travelSeconds) {
+        if(!Number.isFinite(travelSeconds)||travelSeconds<=0)throw new RangeError('Actuator travel time must be positive');
+        this.travelSeconds=travelSeconds;
+        this.#position=Maths.clamp(initialPosition,0,1);
+        this.#target=this.#position;
+    }
+    get position(){return this.#position;}
+    get target(){return this.#target;}
+    get moving(){return Math.abs(this.#position-this.#target)>LIMITS.EPS;}
+    get fullyExtended(){return this.#position>=1-LIMITS.EPS;}
+    get fullyStowed(){return this.#position<=LIMITS.EPS;}
+    command(position){this.#target=Maths.clamp(position,0,1);}
+    step(dt){this.#position=Maths.approach(this.#position,this.#target,dt/this.travelSeconds);}
+}
+class LandingGearSystem {
+    #actuator;
+    #config;
+    #warning='';
+    constructor(config,initialDown=config.initialDown){
+        this.#config=config;
+        this.#actuator=new TimedActuator(Number(initialDown),config.travelSeconds);
+    }
+    toggle(indicatedAirspeedKts){
+        if(indicatedAirspeedKts>this.#config.maximumOperatingIasKts){
+            this.#warning=`GEAR: OVERSPEED > ${this.#config.maximumOperatingIasKts} KIAS`;
+            return false;
+        }
+        this.#actuator.command(this.#actuator.target<0.5?1:0);
+        this.#warning='';
+        return true;
+    }
+    update(dt){this.#actuator.step(dt);}
+    get fraction(){return this.#actuator.position;}
+    get lockedDown(){return this.#actuator.fullyExtended;}
+    get lockedUp(){return this.#actuator.fullyStowed;}
+    get warning(){return this.#warning;}
+    get status(){return this.#actuator.moving?(this.#actuator.target>0?'EXTENDING':'RETRACTING'):
+        (this.lockedDown?'DOWN LOCKED':'UP LOCKED');}
+}
+class FlapSystem {
+    #actuator;
+    #config;
+    #selector;
+    #overspeedRetracted=false;
+    #selectedFraction;
+    constructor(config,initialDown=config.initialDown){
+        this.#config=config;
+        this.#selector=!!initialDown;
+        this.#selectedFraction=Number(this.#selector);
+        this.#actuator=new TimedActuator(this.#selectedFraction,config.travelSeconds);
+    }
+    toggle(){
+        if(this.#config.positions) {
+            const current=this.#config.positions.findIndex(value=>Math.abs(value-this.#selectedFraction)<LIMITS.EPS);
+            this.#selectedFraction=this.#config.positions[(current+1)%this.#config.positions.length];
+            this.#selector=this.#selectedFraction>0;
+        } else {
+            this.#selector=!this.#selector;
+            this.#selectedFraction=Number(this.#selector);
+        }
+        this.#overspeedRetracted=false;
+    }
+    update(dt,indicatedAirspeedKts){
+        if(this.#selector) {
+            if(indicatedAirspeedKts>=this.#config.automaticRetractIasKts)this.#overspeedRetracted=true;
+            else if(indicatedAirspeedKts<=this.#config.automaticRestoreIasKts)this.#overspeedRetracted=false;
+        } else this.#overspeedRetracted=false;
+        this.#actuator.command(this.#selector&&!this.#overspeedRetracted?this.#selectedFraction:0);
+        this.#actuator.step(dt);
+    }
+    get fraction(){return this.#actuator.position;}
+    get selectorDown(){return this.#selector;}
+    get status(){
+        if(this.#overspeedRetracted)return 'AUTO UP (FAST)';
+        if(this.#actuator.moving)return this.#actuator.target>0?'EXTENDING':'RETRACTING';
+        return this.#actuator.fullyExtended?'DOWN':'UP';
+    }
+}
+class SpeedBrakeSystem {
+    #actuator;
+    #config;
+    constructor(config,initialFraction=config.initialFraction){
+        this.#config=config;
+        if(!Number.isFinite(initialFraction)||initialFraction<0||initialFraction>1){
+            throw new RangeError('Initial speedbrake fraction must be between 0 and 1');
+        }
+        this.#actuator=new TimedActuator(initialFraction,config.travelSeconds);
+    }
+    deployGroundSpoilers(){if(this.#config?.autoGroundDeploy)this.#actuator.command(1);}
+
+    update(dt,controlDirection){
+        if(controlDirection!==0){
+            // Holding an assigned input changes the target continuously; the actuator moves at its physical rate.
+            this.#actuator.command(this.#actuator.target+Math.sign(controlDirection)*dt/this.#actuator.travelSeconds);
+        }
+        this.#actuator.step(dt);
+    }
+    get fraction(){return this.#actuator.position;}
+    get status(){return this.#actuator.fullyStowed?'STOWED':this.#actuator.fullyExtended?'EXTENDED':'PARTIAL';}
+}
+class AircraftSystems {
+    constructor(profile,initialSystems={}){
+        this.gear=new LandingGearSystem(profile.systems.landingGear,initialSystems.gearDown);
+        this.flaps=new FlapSystem(profile.systems.flaps,initialSystems.flapsDown);
+        this.speedbrake=new SpeedBrakeSystem(profile.systems.speedbrake,initialSystems.speedbrakeFraction);
+    }
+    deployGroundSpoilers(){this.speedbrake.deployGroundSpoilers();}
+    update(dt,airspeedKts,speedbrakeDirection){
+        this.gear.update(dt);
+        this.flaps.update(dt,airspeedKts);
+        this.speedbrake.update(dt,speedbrakeDirection);
+    }
+    get snapshot(){return Object.freeze({gearFraction:this.gear.fraction,gearLockedDown:this.gear.lockedDown,
+        gearLockedUp:this.gear.lockedUp,gearStatus:this.gear.status,gearWarning:this.gear.warning,
+        flapFraction:this.flaps.fraction,flapStatus:this.flaps.status,flapSelectorDown:this.flaps.selectorDown,
+        speedbrakeFraction:this.speedbrake.fraction,speedbrakeStatus:this.speedbrake.status});}
+}
+
+// ============================================================================
+// 4. AIRCRAFT PROPULSION, AERODYNAMICS, AND FLIGHT DYNAMICS
+// ============================================================================
+class JetEngineModel {
+    #spool;
+    constructor(engineConfig,initialThrottle) { this.config=engineConfig;this.#spool=Maths.clamp(initialThrottle,0,1); }
+    update(throttle,dt) {
+        const target=Maths.clamp(throttle,0,1);
+        const tau=target>this.#spool?this.config.spoolUpSec:this.config.spoolDownSec;
+        this.#spool=Maths.smooth(this.#spool,target,dt,tau);
+    }
+    get thrustN() { return this.config.idleNewton+(this.config.maxDryNewton-this.config.idleNewton)*this.#spool; }
+    get spool() { return this.#spool; }
+}
+class AerodynamicsModel {
+    constructor(profile,atmosphere) { this.profile=profile;this.atmosphere=atmosphere; }
+    calculate(state,controls,systemState) {
+        const basis=Maths.basis(state.pitch,state.roll,state.yaw);
+        const airVelocity=state.velocity.sub(new Vector3(ENVIRONMENT.wind.x,ENVIRONMENT.wind.y,ENVIRONMENT.wind.z));
+        const speed=Math.max(airVelocity.magnitude(),0.1);
+        const bodyForward=airVelocity.dot(basis.forward);
+        const bodyUp=airVelocity.dot(basis.up);
+        const bodyRight=airVelocity.dot(basis.right);
+        const aoa=Math.atan2(-bodyUp,Math.max(bodyForward,LIMITS.EPS));
+        const sideslip=Math.atan2(bodyRight,Math.max(bodyForward,LIMITS.EPS));
+        const rho=this.atmosphere.density(state.position.y);
+        const q=0.5*rho*speed*speed;
+        const aero=this.profile.aero;
+        const cappedAoa=Maths.clamp(aoa,-aero.stallAoa,aero.stallAoa);
+        const flap=this.profile.systems.flaps;
+        const maxCl=aero.CLmax+flap.deltaCLmax*systemState.flapFraction;
+        let cl=Maths.clamp(aero.CL0+aero.CLalpha*cappedAoa+flap.deltaCL*systemState.flapFraction,-maxCl,maxCl);
+        const excessAoa=Math.max(0,Math.abs(aoa)-aero.stallAoa);
+        const stallFraction=Maths.clamp(excessAoa/aero.postStallTransition,0,1);
+        cl*=1-stallFraction*(1-aero.stallRetention);
+        const cd=aero.CD0+aero.CDinduced*cl*cl+aero.CDgear*systemState.gearFraction+
+            flap.deltaCD*systemState.flapFraction+
+            this.profile.systems.speedbrake.deltaCD*systemState.speedbrakeFraction+
+            aero.CDstall*stallFraction*stallFraction;
+        const wingPressure=q*this.profile.wingAreaM2;
+        const airflow=airVelocity.normalized();
+        const projectedUp=basis.up.sub(airflow.scale(basis.up.dot(airflow))).normalized();
+        const lift=projectedUp.scale(wingPressure*cl);
+        const drag=airflow.scale(-wingPressure*cd);
+        const side=basis.right.scale(wingPressure*(aero.CYbeta*sideslip+this.profile.control.rudderLateral*controls.yaw));
+        return {lift,drag,side,basis,q,aoa,sideslip,speed,ias:this.atmosphere.indicatedSpeed(speed,state.position.y),cl,cd};
+    }
+}
+// The pilot commands surface deflections, not aircraft angular velocities.
+// A nonlinear stick curve and finite actuator response prevent unrealistic snaps.
+class PilotControlResponse {
+    #controls;
+    #config;
+    constructor(config,initialThrottle){
+        this.#config=config;
+        this.#controls={pitch:0,roll:0,yaw:0,throttle:Maths.clamp(initialThrottle,0,1)};
+    }
+    update(command,dt){
+        const blend=this.#config.stickCubicBlend;
+        for(const [axis,timeConstant] of [
+            ['pitch',this.#config.pitchResponseSeconds],
+            ['roll',this.#config.rollResponseSeconds],
+            ['yaw',this.#config.yawResponseSeconds]]){
+            const raw=Maths.clamp(command[axis],-1,1);
+            if(!Number.isFinite(raw))throw new RangeError(`Invalid ${axis} command`);
+            const centered=Math.abs(raw)<=this.#config.stickNeutralDeadband;
+            const target=centered?0:(1-blend)*raw+blend*raw*raw*raw;
+            const responseTime=centered?this.#config.stickCenteringSeconds:timeConstant;
+            this.#controls[axis]=Maths.smooth(this.#controls[axis],target,dt,responseTime);
+        }
+        if(!Number.isFinite(command.throttle))throw new RangeError('Invalid throttle command');
+        this.#controls.throttle=Maths.clamp(command.throttle,0,1);
+        return this.snapshot;
+    }
+    get snapshot(){return {...this.#controls};}
+}
+// Approximate control-augmentation law: pilot input commands an angular rate.
+// Servo feedback opposes residual angular velocity and trim disturbance without
+// injecting unbounded torque or directly setting aircraft attitude/rotation rate.
+// This is NOT an authentic F-15C CAS/flight-control implementation.
+class FlightControlAugmentation {
+    #profile;
+    constructor(profile) { this.#profile=profile; }
+    calculate(state,aero,controls,systemState) {
+        const p=this.#profile,c=p.control,v=Math.max(aero.speed,c.minControlSpeedMps);
+        const wingPressure=aero.q*p.wingAreaM2;
+        const reduced={pitch:state.pitchRate*p.chordM/(2*v),
+            roll:state.rollRate*p.spanM/(2*v),
+            yaw:state.yawRate*p.spanM/(2*v)};
+        const axes={
+            pitch:{rate:state.pitchRate,inertia:p.inertia.pitch,
+                target:controls.pitch*c.maxPitchRate*c.pitchRateCommandFraction,
+                seconds:c.pitchRateTrackingSeconds,
+                capacity:wingPressure*p.chordM*c.pitchPower,
+                disturbance:wingPressure*p.chordM*(
+                    p.systems.flaps.pitchMoment*systemState.flapFraction+
+                    c.pitchStatic*(aero.aoa-p.approach.aoaTrim)-c.pitchDamping*reduced.pitch)},
+            roll:{rate:state.rollRate,inertia:p.inertia.roll,
+                target:controls.roll*c.maxRollRate*c.rollRateCommandFraction,
+                seconds:c.rollRateTrackingSeconds,
+                capacity:wingPressure*p.spanM*c.rollPower,
+                disturbance:-wingPressure*p.spanM*c.rollDamping*reduced.roll},
+            yaw:{rate:state.yawRate,inertia:p.inertia.yaw,
+                target:controls.yaw*c.maxYawRate*c.yawRateCommandFraction,
+                seconds:c.yawRateTrackingSeconds,
+                capacity:wingPressure*p.spanM*c.yawPower,
+                disturbance:wingPressure*p.spanM*(
+                    c.yawStatic*aero.sideslip-c.yawDamping*reduced.yaw)}
+        };
+        const moments={};
+        for(const [axis,config] of Object.entries(axes)) {
+            const desiredMoment=config.inertia*(config.target-config.rate)/config.seconds;
+            const servo=Maths.clamp(desiredMoment-config.disturbance,
+                -config.capacity,config.capacity);
+            moments[axis]=config.disturbance+servo;
+        }
+        return moments;
+    }
+}
+
+class AircraftFlightDynamics {
+    #state;
+    #engine;
+    #aerodynamics;
+    #systems;
+    #controlResponse;
+    #controlAugmentation;
+    #profile;
+    #elapsed=0;
+    constructor(profile,environment,scenario) {
+        this.#profile=profile;
+        this.environment=environment;
+        this.#aerodynamics=new AerodynamicsModel(profile,new AtmosphereModel(environment));
+        this.#systems=new AircraftSystems(profile,scenario.initialSystems);
+        this.#engine=new JetEngineModel(profile.engine,scenario.throttle);
+        this.#controlResponse=new PilotControlResponse(profile.control,scenario.throttle);
+        this.#controlAugmentation=new FlightControlAugmentation(profile);
+        this.#state={ position:scenario.position.clone(),velocity:scenario.velocity.clone(),
+            pitch:scenario.pitch,roll:scenario.roll,yaw:scenario.yaw,
+            pitchRate:0,rollRate:0,yawRate:0 };
+        this.lastAerodynamics=this.#aerodynamics.calculate(this.#state,this.#controlResponse.snapshot,this.#systems.snapshot);
+    }
+    get state() {
+        const s=this.#state;
+        return {position:s.position.clone(),velocity:s.velocity.clone(),
+            pitch:s.pitch,roll:s.roll,yaw:s.yaw,pitchRate:s.pitchRate,rollRate:s.rollRate,yawRate:s.yawRate};
+    }
+    get elapsed() { return this.#elapsed; }
+    get throttle() { return this.#controlResponse.snapshot.throttle; }
+    get thrustN() { return this.#engine.thrustN; }
+    get controls() { return this.#controlResponse.snapshot; }
+    get aero() { return {...this.lastAerodynamics}; }
+    get profile() { return this.#profile; }
+    get systems(){return this.#systems.snapshot;}
+    toggleGear(){return this.#systems.gear.toggle(this.lastAerodynamics.ias/UNITS.KT);}
+    toggleFlaps(){this.#systems.flaps.toggle();}
+    deployGroundSpoilers(){this.#systems.deployGroundSpoilers();}
+    updateGroundSystems(dt,indicatedAirspeedKts,command) {
+        if(!Number.isFinite(dt)||dt<0)throw new RangeError('Invalid ground-system step');
+        const ctrl=this.#controlResponse.update(command,dt);
+        this.#engine.update(ctrl.throttle,dt);
+        this.#systems.update(dt,indicatedAirspeedKts,Maths.clamp(command.speedbrake||0,-1,1));
+    }
+    get altitudeAgl() { return Math.max(0,this.#state.position.y-this.#profile.ground.gearHeight); }
+    step(deltaSeconds,command) {
+        if (!Number.isFinite(deltaSeconds) || deltaSeconds<0) throw new RangeError('Invalid simulation step');
+        const duration=Math.min(deltaSeconds,LIMITS.FRAME_DT);
+        let remaining=duration;
+        while(remaining>LIMITS.EPS) {
+            const dt=Math.min(remaining,LIMITS.STEP_DT);
+            this.#integrate(dt,command);
+            remaining-=dt;
+        }
+    }
+    #integrate(dt,command) {
+        const s=this.#state,cfg=this.#profile.control;
+        const ctrl=this.#controlResponse.update(command,dt);
+        this.#engine.update(ctrl.throttle,dt);
+        this.#systems.update(dt,this.lastAerodynamics.ias/UNITS.KT,Maths.clamp(command.speedbrake||0,-1,1));
+        const systemState=this.#systems.snapshot;
+        const a=this.#aerodynamics.calculate(s,ctrl,systemState);
+        this.lastAerodynamics=a;
+        const p=this.#profile;
+        const moments=this.#controlAugmentation.calculate(s,a,ctrl,systemState);
+        s.pitchRate=Maths.clamp(s.pitchRate+moments.pitch/p.inertia.pitch*dt,-cfg.maxPitchRate,cfg.maxPitchRate);
+        s.rollRate=Maths.clamp(s.rollRate+moments.roll/p.inertia.roll*dt,-cfg.maxRollRate,cfg.maxRollRate);
+        s.yawRate=Maths.clamp(s.yawRate+moments.yaw/p.inertia.yaw*dt,-cfg.maxYawRate,cfg.maxYawRate);
+        s.pitch=Maths.clamp(s.pitch+s.pitchRate*dt,-cfg.maxPitchDeg*UNITS.DEG,cfg.maxPitchDeg*UNITS.DEG);
+        s.roll=Maths.clamp(Maths.wrapRad(s.roll+s.rollRate*dt),-cfg.maxBankDeg*UNITS.DEG,cfg.maxBankDeg*UNITS.DEG);
+        s.yaw=Maths.wrapRad(s.yaw+s.yawRate*dt);
+        const engineThrust=a.basis.forward.scale(this.#engine.thrustN);
+        const acceleration=a.lift.add(a.drag).add(a.side).add(engineThrust)
+            .scale(1/p.massKg).add(new Vector3(0,-this.environment.gravity,0));
+        const previousVelocity=s.velocity;
+        s.velocity=s.velocity.add(acceleration.scale(dt));
+        s.position=s.position.add(previousVelocity.add(s.velocity).scale(0.5*dt));
+        this.#elapsed+=dt;
+        if (![s.position.x,s.position.y,s.position.z,s.velocity.x,s.velocity.y,s.velocity.z,
+            s.pitch,s.roll,s.yaw].every(Number.isFinite)) throw new Error('Non-finite flight state');
+    }
+    setGroundState(position,velocity,pitch,yaw) {
+        this.#state.position=position.clone();this.#state.velocity=velocity.clone();
+        this.#state.pitch=pitch;this.#state.yaw=yaw;this.#state.roll=0;
+        this.#state.pitchRate=0;this.#state.rollRate=0;this.#state.yawRate=0;
+    }
+}
+
+// ============================================================================
+// 4. INITIAL CONTACT, ROLLOUT, AND LANDING EVALUATION
+// ============================================================================
+class TouchdownContactSampler {
+    // Estimate first contact within the final graphics frame without changing flight dynamics.
+    static atFirstContact(previous,current,gearFraction,ground=GROUND) {
+        const clearance=state=>state.position.y-GroundContactGeometry.mainGearBodyHeight(
+            state.pitch,state.roll,gearFraction,ground);
+        const before=clearance(previous),after=clearance(current);
+        if(before<=0 || after>=0 || !Number.isFinite(before+after))return current;
+        const progress=Maths.clamp(before/(before-after),0,1);
+        const lerp=(a,b)=>a+(b-a)*progress;
+        const vec=(a,b)=>new Vector3(lerp(a.x,b.x),lerp(a.y,b.y),lerp(a.z,b.z));
+        return {position:vec(previous.position,current.position),
+            velocity:vec(previous.velocity,current.velocity),
+            pitch:lerp(previous.pitch,current.pitch),roll:lerp(previous.roll,current.roll),
+            yaw:Maths.wrapRad(previous.yaw+Maths.wrapRad(current.yaw-previous.yaw)*progress)};
+    }
+}
+class LandingEvaluator {
+    constructor(profile=AircraftCatalog.get(AIRCRAFT_ID.F15C)){this.profile=profile;}
+    // Freeze each touchdown measurement at the first ground-contact event.
+    // Ground-roll figures are recorded separately after stopping or runway departure.
+    evaluate(flightState,aero,systemState) {
+        const s=flightState,ground=this.profile.ground;
+        const values=[s?.position?.x,s?.position?.y,s?.position?.z,
+            s?.velocity?.x,s?.velocity?.y,s?.velocity?.z,s?.pitch,s?.roll,s?.yaw,aero?.ias];
+        if(!systemState || !values.every(Number.isFinite)) {
+            throw new TypeError('Touchdown evaluation requires finite flight values and system state');
+        }
+        const dx=s.position.x-RUNWAY.x,dz=s.position.z-RUNWAY.z;
+        const cos=Math.cos(RUNWAY.heading),sin=Math.sin(RUNWAY.heading);
+        const lateralM=dx*cos-dz*sin;
+        const fromThresholdM=dx*sin+dz*cos;
+        const lateralVelocityMps=s.velocity.x*cos-s.velocity.z*sin;
+        const yawErrorDeg=Maths.wrapRad(s.yaw-RUNWAY.heading)*UNITS.RAD;
+        const iasKts=aero.ias/UNITS.KT;
+        const verticalSpeedFps=s.velocity.y/UNITS.FPS;
+        const sinkFps=Math.max(0,-verticalSpeedFps);
+        const pitchDeg=s.pitch*UNITS.RAD,rollDeg=s.roll*UNITS.RAD;
+        const checks=Object.freeze({
+            gear:systemState.gearLockedDown===true,
+            lateralPosition:Math.abs(lateralM)<=RUNWAY.width/2,
+            touchdownPosition:fromThresholdM>=0 && fromThresholdM<=RUNWAY.length,
+            speed:iasKts>=ground.minLandingIAS && iasKts<=ground.maxLandingIAS,
+            sink:s.velocity.y>=-ground.maxSinkMps,
+            pitch:s.pitch>=0 && s.pitch<=ground.maxTouchdownPitchDeg*UNITS.DEG,
+            roll:Math.abs(s.roll)<=ground.maxTouchdownRollDeg*UNITS.DEG,
+            alignment:Math.abs(yawErrorDeg)<=ground.maxYawAlignmentDeg,
+            drift:Math.abs(lateralVelocityMps)<=ground.maxLateralSpeedMps
+        });
+        const runway=checks.lateralPosition&&checks.touchdownPosition;
+        return Object.freeze({
+            passed:Object.values(checks).every(Boolean),checks,runway,
+            iasKts,verticalSpeedFps,sinkFps,pitchDeg,rollDeg,
+            yawAlignmentDeg:yawErrorDeg,lateralVelocityMps,
+            lateralOffsetM:lateralM,offsetM:lateralM,touchdownPositionM:fromThresholdM,
+            gearLockedDown:checks.gear,
+            flapFraction:systemState.flapFraction,
+            speedbrakeFraction:systemState.speedbrakeFraction
+        });
+    }
+}
+class LandingSession {
+    #touchdown=null;
+    #rollout=null;
+    get hasTouchdown(){return this.#touchdown!==null;}
+    get isFinished(){return this.#rollout!==null;}
+    recordTouchdown(measurement) {
+        if(this.#touchdown)throw new Error('Touchdown measurement has already been recorded');
+        if(!measurement || typeof measurement.passed!=='boolean'){
+            throw new TypeError('A validated touchdown assessment is required');
+        }
+        this.#touchdown=measurement;
+        if(!measurement.passed){
+            this.#rollout=Object.freeze({status:LANDING_REPORT.STATUS.CONTACT_FAILED,
+                passed:false,distanceM:null,positionM:null});
+        }
+    }
+    finalizeRollout(distanceM,positionM,outsideRunway) {
+        if(!this.#touchdown?.passed || this.#rollout){
+            throw new Error('Rollout can be finalized only once after an accepted touchdown');
+        }
+        if(!Number.isFinite(distanceM) || distanceM<0 || !Number.isFinite(positionM)) {
+            throw new RangeError('Rollout distance and stopping position must be finite');
+        }
+        this.#rollout=Object.freeze({status:outsideRunway?LANDING_REPORT.STATUS.OVERRUN:
+            LANDING_REPORT.STATUS.COMPLETE,passed:!outsideRunway,distanceM,positionM});
+    }
+    get result(){
+        if(!this.#touchdown)return null;
+        const roll=this.#rollout;
+        return Object.freeze({...this.#touchdown,
+            passed:this.#touchdown.passed && (roll===null||roll.passed),
+            status:roll?.status??LANDING_REPORT.STATUS.IN_ROLLOUT,
+            rolloutDistanceM:roll?.distanceM??null,
+            stoppingPositionM:roll?.positionM??null,
+            checks:Object.freeze({...this.#touchdown.checks,
+                ...(roll?.distanceM!=null?{rollout:roll.passed}:{})})
+        });
+    }
+}
+class LandingReportView {
+    constructor(root,config=LANDING_REPORT,profile=AircraftCatalog.get(AIRCRAFT_ID.F15C)){
+        this.profile=profile;
+        if(!root)throw new TypeError('A landing-report root element is required');
+        this.root=root;this.config=config;
+        this.status=root.querySelector('#report-status');
+        this.caption=root.querySelector('#report-caption');
+        this.body=root.querySelector('#report-rows');
+    }
+    setProfile(profile){this.profile=profile;}
+    hide(){this.root.hidden=true;}
+    show(result){
+        if(!result || typeof result.passed!=='boolean') {
+            throw new TypeError('A landing evaluation result is required');
+        }
+        this.status.className=`report-status ${result.passed?'passed':'failed'}`;
+        this.status.textContent=`${result.passed?this.config.RESULT_PASS:this.config.RESULT_FAIL} · ${result.status}`;
+        this.caption.textContent=result.rolloutDistanceM===null?
+            'FIRST GROUND CONTACT — NO GROUND-ROLL DISTANCE AVAILABLE':
+            `STOP/EXIT POSITION: ${result.stoppingPositionM.toFixed(0)} M FROM THRESHOLD`;
+        const entries=this.#buildMetrics(result);
+        const rows=entries.map(entry=>this.#createRow(entry));
+        this.body.replaceChildren(...rows);
+        this.root.hidden=false;
+    }
+    #buildMetrics(r){
+        const g=this.profile.ground;
+        const mapping={
+            speed:[`${r.iasKts.toFixed(1)} KTS`,`${g.minLandingIAS}–${g.maxLandingIAS} KTS`],
+            sink:[`${r.verticalSpeedFps.toFixed(1)} FPS`,`≥ ${(-g.maxSinkMps/UNITS.FPS).toFixed(1)} FPS`],
+            pitch:[`${r.pitchDeg.toFixed(1)} DEG`,`0–${g.maxTouchdownPitchDeg} DEG`],
+            roll:[`${r.rollDeg.toFixed(1)} DEG`,`±${g.maxTouchdownRollDeg} DEG`],
+            alignment:[`${r.yawAlignmentDeg.toFixed(1)} DEG`,`±${g.maxYawAlignmentDeg} DEG`],
+            drift:[`${r.lateralVelocityMps.toFixed(1)} M/S`,`±${g.maxLateralSpeedMps} M/S`],
+            lateralPosition:[`${r.lateralOffsetM.toFixed(1)} M`,`±${RUNWAY.width/2} M`],
+            touchdownPosition:[`${r.touchdownPositionM.toFixed(0)} M`,`0–${RUNWAY.length} M`],
+            gear:[r.gearLockedDown?'DOWN LOCKED':'NOT LOCKED DOWN','DOWN LOCKED'],
+            rollout:[r.rolloutDistanceM===null?'—':`${r.rolloutDistanceM.toFixed(0)} M`,
+                r.rolloutDistanceM===null?'—':'STOP WITHIN RUNWAY']
+        };
+        return this.config.METRICS.map(item=>({name:item.name,
+            measured:mapping[item.id][0],target:mapping[item.id][1],passed:r.checks[item.id]}));
+    }
+    #createRow(entry){
+        const row=document.createElement('tr');
+        const label=document.createElement('td');label.textContent=entry.name;
+        const value=document.createElement('td');value.textContent=entry.measured;
+        const target=document.createElement('td');target.textContent=entry.target;
+        const flag=document.createElement('td');
+        flag.className=entry.passed===undefined?'metric-na':entry.passed?'metric-good':'metric-bad';
+        flag.textContent=entry.passed===undefined?this.config.RESULT_NA:
+            entry.passed?this.config.RESULT_PASS:this.config.RESULT_FAIL;
+        row.append(label,value,target,flag);
+        return row;
+    }
+}
+class GroundContactGeometry {
+    // Calculate main-wheel contact from the oriented landing gear, independent of the aircraft origin.
+    static mainGearBodyHeight(pitchRad,rollRad,gearFraction,ground=GROUND) {
+        if(gearFraction<=LIMITS.EPS)return ground.bellyHeight;
+        const wheelLocalY=-ground.gearHeight;
+        const wheelWorldOffsets=[-ground.mainGearLateralOffsetM,ground.mainGearLateralOffsetM]
+            .map(x=>Maths.rotate(new Vector3(x,wheelLocalY,ground.mainGearZ),pitchRad,rollRad,0).y);
+        const lowestMainWheel=Math.min(...wheelWorldOffsets);
+        const extendedContactHeight=-lowestMainWheel;
+        return ground.bellyHeight+(extendedContactHeight-ground.bellyHeight)*gearFraction;
+    }
+    static noseWheelClearance(pitchRad,ground=GROUND) {
+        // Once the main wheels touch, the nose-wheel altitude follows pitch and wheelbase.
+        return Math.max(0,(ground.noseGearZ-ground.mainGearZ)*Math.sin(Math.max(0,pitchRad)));
+    }
+}
+class GroundRolloutModel {
+    #distance=0;
+    #stopped=false;
+    #position;
+    #velocity;
+    #pitch;
+    #pitchRate=0;
+    #yaw;
+    #noseWheelOnGround=false;
+    #touchdownSpeedMps;
+    #elapsed=0;
+    #profile;
+    #ground;
+    #reverseActive=false;
+    constructor(touchdownState,profile) {
+        if(!profile||!touchdownState?.position||!touchdownState?.velocity) {
+            throw new TypeError('Touchdown state and aircraft profile are required');
+        }
+        this.#profile=profile;
+        this.#ground=profile.ground;
+        this.#position=touchdownState.position.clone();
+        this.#velocity=new Vector3(touchdownState.velocity.x,0,touchdownState.velocity.z);
+        this.#touchdownSpeedMps=this.#velocity.magnitude();
+        this.#pitch=Maths.clamp(touchdownState.pitch,0,this.#ground.maxGroundPitchDeg*UNITS.DEG);
+        this.#yaw=touchdownState.yaw;
+        this.#noseWheelOnGround=GroundContactGeometry.noseWheelClearance(this.#pitch,this.#ground)
+            <=this.#ground.noseContactToleranceM;
+        this.#position.y=GroundContactGeometry.mainGearBodyHeight(this.#pitch,0,1,this.#ground);
+    }
+    get stopped(){return this.#stopped;}
+    get distance(){return this.#distance;}
+    get elapsed(){return this.#elapsed;}
+    get noseWheelOnGround(){return this.#noseWheelOnGround;}
+    get reverseActive(){return this.#reverseActive;}
+    get noseWheelClearanceM(){return GroundContactGeometry.noseWheelClearance(this.#pitch,this.#ground);}
+    get speedMps(){return this.#velocity.magnitude();}
+    get isOutsideRunway(){
+        return Math.abs(this.#position.x-RUNWAY.x)>RUNWAY.width/2 ||
+            this.#position.z<RUNWAY.z || this.#position.z>RUNWAY.z+RUNWAY.length;
+    }
+    get state(){return {position:this.#position.clone(),velocity:this.#velocity.clone(),
+        pitch:this.#pitch,roll:0,yaw:this.#yaw,pitchRate:this.#pitchRate,rollRate:0,yawRate:0};}
+    #updatePitch(dt,speedMps,pilotPitch) {
+        if(this.#noseWheelOnGround)return;
+        const g=this.#ground,weightN=this.#profile.massKg*ENVIRONMENT.gravity;
+        const gravityMoment=weightN*g.cgAheadOfMainGearM;
+        const pressureRatio=Maths.clamp(speedMps/Math.max(this.#touchdownSpeedMps,LIMITS.EPS),0,1);
+        const aeroSupport=Math.pow(pressureRatio,g.pitchAerodynamicSupportExponent);
+        const pilotSupport=g.pitchControlMomentFraction*Maths.clamp(pilotPitch,-1,1);
+        const moment=gravityMoment*(aeroSupport+pilotSupport-1)-g.pitchDampingMomentNms*this.#pitchRate;
+        const inertia=this.#profile.inertia.pitch*g.groundPitchInertiaMultiplier;
+        this.#pitchRate=Maths.clamp(this.#pitchRate+(moment/inertia)*dt,
+            -g.maxNosePitchRateDegPerSec*UNITS.DEG,g.maxNosePitchRateDegPerSec*UNITS.DEG);
+        this.#pitch=Math.max(0,this.#pitch+this.#pitchRate*dt);
+        if(GroundContactGeometry.noseWheelClearance(this.#pitch,this.#ground)<=g.noseContactToleranceM){
+            this.#pitch=0;
+            this.#pitchRate=0;
+            this.#noseWheelOnGround=true;
+        }
+    }
+    #computeAerodynamicDrag(speedMps,systems){
+        const g=this.#ground,angleFactor=Maths.clamp(this.#pitch*UNITS.RAD/g.aeroBrakeReferencePitchDeg,0,1);
+        const cd=g.groundBaseDragCoefficient+g.aeroBrakeDragCoefficientAtTenDeg*angleFactor+
+            this.#profile.systems.speedbrake.deltaCD*systems.speedbrakeFraction;
+        const pressure=0.5*ENVIRONMENT.rho0*speedMps*speedMps;
+        return pressure*this.#profile.wingAreaM2*cd;
+    }
+    #computeYawRate(speedMps,rudder){
+        const g=this.#ground;
+        const aeroAuthority=speedMps*speedMps/(speedMps*speedMps+
+            g.rudderReferenceSpeedMps*g.rudderReferenceSpeedMps);
+        const rudderRate=g.rudderSteerRateDegPerSec*UNITS.DEG*aeroAuthority;
+        const wheelAuthority=this.#noseWheelOnGround?1-aeroAuthority:0;
+        const noseWheelRate=g.noseWheelSteerRateDegPerSec*UNITS.DEG*wheelAuthority*
+            speedMps/(speedMps+g.noseWheelSteerFadeSpeedMps);
+        return Maths.clamp(rudder,-1,1)*(rudderRate+noseWheelRate);
+    }
+    step(dt,controls,braking,systems,thrustN,reverser=false) {
+        if(this.#stopped)return;
+        if(!Number.isFinite(dt)||dt<=0||!Number.isFinite(thrustN)) {
+            throw new RangeError('Ground dynamics require positive dt and finite engine thrust');
+        }
+        const speed=this.speedMps;
+        const aeroDragN=this.#computeAerodynamicDrag(speed,systems);
+        const tireDeceleration=this.#ground.rollingDecel+(braking?this.#ground.brakeDecel:0);
+        this.#reverseActive=Boolean(reverser && this.#profile.engine.reverseFraction);
+        const reverseN=this.#reverseActive?(this.#profile.engine.reverseFraction??0)*this.#profile.engine.maxDryNewton:0;
+        const thrustAcceleration=(this.#reverseActive?0:thrustN)/this.#profile.massKg-reverseN/this.#profile.massKg;
+        const acceleration=thrustAcceleration-tireDeceleration-aeroDragN/this.#profile.massKg;
+        const nextSpeed=Math.max(0,speed+acceleration*dt);
+        this.#updatePitch(dt,nextSpeed,controls.pitch);
+        this.#yaw=Maths.wrapRad(this.#yaw+this.#computeYawRate(nextSpeed,controls.yaw)*dt);
+        const idealDirection=new Vector3(Math.sin(this.#yaw),0,Math.cos(this.#yaw));
+        const currentDirection=speed>LIMITS.EPS?this.#velocity.scale(1/speed):idealDirection;
+        const blend=1-Math.exp(-dt/this.#ground.lateralDrag);
+        const blendedDirection=currentDirection.scale(1-blend).add(idealDirection.scale(blend)).normalized();
+        this.#velocity=blendedDirection.scale(nextSpeed);
+        const advance=this.#velocity.scale(dt);
+        this.#position=this.#position.add(advance);
+        this.#position.y=GroundContactGeometry.mainGearBodyHeight(this.#pitch,0,1,this.#ground);
+        this.#distance+=Math.hypot(advance.x,advance.z);
+        this.#elapsed+=dt;
+        if(nextSpeed<LIMITS.STOP_SPEED){
+            this.#velocity=new Vector3();this.#stopped=true;
+            this.#pitch=0;this.#noseWheelOnGround=true;this.#position.y=this.#ground.gearHeight;
+        }
+    }
+}
+
+// ============================================================================
+// 5. KEYBOARD + GAMEPAD INPUT / LOCAL-ONLY SETTINGS
+// ============================================================================
+class JoystickConfiguration {
+    constructor() {
+        this.mapping={pitch:{index:1,invert:false},roll:{index:0,invert:false},
+            yaw:{index:3,invert:false},throttle:{index:2,invert:true},
+            view:{index:0},brake:{index:2},pause:{index:9},restart:{index:8},
+            gear:{index:3},flap:{index:4},speedbrakeExtend:{index:5},speedbrakeRetract:{index:6},reverse:{index:7}};
+        this.load();
+    }
+    static get items() { return [
+        {id:'pitch',label:'Pitch',kind:'axis'}, {id:'roll',label:'Roll',kind:'axis'},
+        {id:'yaw',label:'Rudder',kind:'axis'}, {id:'throttle',label:'Throttle',kind:'axis'},
+        {id:'view',label:'Camera',kind:'button'}, {id:'brake',label:'Wheel Brake',kind:'button'},
+        {id:'pause',label:'Pause',kind:'button'}, {id:'restart',label:'Restart',kind:'button'},
+        {id:'gear',label:'Gear Toggle',kind:'button'}, {id:'flap',label:'Flaps UP/DOWN',kind:'button'},
+        {id:'speedbrakeExtend',label:'Speedbrake Extend (hold)',kind:'button'},
+        {id:'speedbrakeRetract',label:'Speedbrake Retract (hold)',kind:'button'},
+        {id:'reverse',label:'Reverse Thrust (E170 ground, hold)',kind:'button'} ]; }
+    load() {
+        try {
+            const stored=JSON.parse(localStorage.getItem(INPUT.storageKey));
+            if (!stored || typeof stored!=='object') return;
+            for(const item of JoystickConfiguration.items) {
+                const source=stored[item.id];
+                if (source && Number.isInteger(source.index) && source.index>=0 && source.index<128) {
+                    this.mapping[item.id].index=source.index;
+                    if(item.kind==='axis' && typeof source.invert==='boolean') this.mapping[item.id].invert=source.invert;
+                }
+            }
+        } catch(error) { console.warn('Could not load local joystick configuration:',error); }
+    }
+    save() {
+        try { localStorage.setItem(INPUT.storageKey,JSON.stringify(this.mapping)); }
+        catch(error){console.warn('Could not save local joystick configuration:',error);}
+    }
+}
+class KeyboardController {
+    #pressed=new Set();
+    #queuedActions=new Set();
+    #axes={pitch:0,roll:0,yaw:0};
+    #throttle=INPUT.defaultThrottle;
+    constructor() {
+        document.addEventListener('keydown',event=>this.#onKey(event,true));
+        document.addEventListener('keyup',event=>this.#onKey(event,false));
+        window.addEventListener('blur',()=>{this.#pressed.clear();this.#queuedActions.clear();});
+    }
+    #onKey(event,down) {
+        if(Object.values(INPUT.keyboard).includes(event.code))event.preventDefault();
+        if(down && !this.#pressed.has(event.code)) {
+            for(const action of ['view','pause','restart','menu','gear','flap','lighting']) {
+                if(INPUT.keyboard[action]===event.code)this.#queuedActions.add(action);
+            }
+        }
+        if(down)this.#pressed.add(event.code);else this.#pressed.delete(event.code);
+    }
+    consume(action) {const queued=this.#queuedActions.has(action);this.#queuedActions.delete(action);return queued;}
+    isPressed(action) { return this.#pressed.has(INPUT.keyboard[action]); }
+    setThrottle(value) { this.#throttle=Maths.clamp(value,0,1); }
+    update(dt) {
+        const k=INPUT.keyboard;
+        const axis=(positive,negative)=>Number(this.#pressed.has(positive))-Number(this.#pressed.has(negative));
+        const pressBlend=1-Math.exp(-INPUT.keyResponse*dt);
+        const releaseBlend=1-Math.exp(-INPUT.keyReleaseResponse*dt);
+        for(const [name,target] of Object.entries({pitch:axis(k.pitchUp,k.pitchDown),
+            roll:axis(k.rollRight,k.rollLeft),yaw:axis(k.yawRight,k.yawLeft)})) {
+            // A released key represents a spring-centered stick, so recenter faster.
+            this.#axes[name]+=(target-this.#axes[name])*(target===0?releaseBlend:pressBlend);
+        }
+        this.#throttle=Maths.clamp(this.#throttle+axis(k.throttleUp,k.throttleDown)*INPUT.throttleRate*dt,0,1);
+    }
+    get axes() { return {...this.#axes,throttle:this.#throttle}; }
+    reset() {this.#axes={pitch:0,roll:0,yaw:0};this.#pressed.clear();this.#queuedActions.clear();}
+}
+class GamepadController {
+    constructor(configuration) { this.configuration=configuration;this.activeIndex=null; }
+    get pad() {
+        if (typeof navigator.getGamepads!=='function') return null;
+        const devices=navigator.getGamepads();
+        if(this.activeIndex!==null && devices[this.activeIndex]?.connected)return devices[this.activeIndex];
+        const detected=Array.from(devices).find(device=>device?.connected)||null;
+        this.activeIndex=detected?detected.index:null;
+        return detected;
+    }
+    get connected() { return this.pad!==null; }
+    getAxis(name) {
+        const pad=this.pad,setting=this.configuration.mapping[name];
+        if(!pad || setting.index>=pad.axes.length)return null;
+        const axis=pad.axes[setting.index];
+        if (!Number.isFinite(axis)) return null;
+        if(name==='throttle') {
+            const signed=setting.invert?-axis:axis;
+            return Maths.clamp((signed+1)/2,0,1);
+        }
+        const signed=setting.invert?-axis:axis;
+        const deadzone=INPUT.deadzone;
+        return Math.abs(signed)<deadzone?0:Math.sign(signed)*(Math.abs(signed)-deadzone)/(1-deadzone);
+    }
+    getButton(action) {
+        const pad=this.pad,setting=this.configuration.mapping[action];
+        return !!pad?.buttons[setting.index]?.pressed;
+    }
+}
+class InputManager {
+    #keyboard;
+    #gamepad;
+    #previousActions={};
+    constructor(configuration) {
+        this.#keyboard=new KeyboardController();
+        this.#gamepad=new GamepadController(configuration);
+    }
+    get gamepad() {return this.#gamepad;}
+    setInitialThrottle(value) {this.#keyboard.setThrottle(value);}
+    reset() {this.#keyboard.reset();this.#previousActions={};}
+    update(dt) {this.#keyboard.update(dt);}
+    get controls() {
+        const keyboard=this.#keyboard.axes;
+        const combined={...keyboard};
+        for(const name of ['pitch','roll','yaw']) {
+            const gamepadValue=this.#gamepad.getAxis(name);
+            if(gamepadValue!==null && Math.abs(gamepadValue)>Math.abs(keyboard[name]))combined[name]=gamepadValue;
+        }
+        const throttle=this.#gamepad.getAxis('throttle');
+        if(throttle!==null)combined.throttle=throttle;
+        return combined;
+    }
+    isDown(action) {return this.#keyboard.isPressed(action)||(['view','pause','restart','brake','gear','flap',
+        'speedbrakeExtend','speedbrakeRetract','reverse'].includes(action)&&this.#gamepad.getButton(action));}
+    get speedbrakeDirection(){return Number(this.isDown('speedbrakeExtend'))-Number(this.isDown('speedbrakeRetract'));}
+    justPressed(action) {
+        const gamepadPressed=['view','pause','restart','gear','flap'].includes(action)&&this.#gamepad.getButton(action);
+        const gamepadPrevious=!!this.#previousActions[action];
+        this.#previousActions[action]=gamepadPressed;
+        return this.#keyboard.consume(action)||(gamepadPressed&&!gamepadPrevious);
+    }
+}
+class JoystickSettingsView {
+    #awaiting=null;
+    #baseline=[];
+    #waitFrames=0;
+    constructor(configuration,gamepad) {
+        this.configuration=configuration;this.gamepad=gamepad;
+        this.element=document.getElementById('settings');
+        this.rows=document.getElementById('settings-rows');
+        this.status=document.getElementById('settings-status');
+        this.rows.addEventListener('click',event=>{
+            const button=event.target.closest('[data-bind]');
+            if(!button)return;
+            this.beginAssign(button.dataset.bind);
+        });
+        this.rows.addEventListener('change',event=>{
+            const checkbox=event.target.closest('[data-invert]');
+            if(!checkbox)return;
+            this.configuration.mapping[checkbox.dataset.invert].invert=checkbox.checked;
+            this.configuration.save();
+        });
+    }
+    get visible() {return this.element.style.display==='block';}
+    open() {this.element.style.display='block';this.#awaiting=null;this.render();}
+    close() {this.element.style.display='none';this.#awaiting=null;this.configuration.save();}
+    beginAssign(id) {
+        const item=JoystickConfiguration.items.find(entry=>entry.id===id);
+        if(!item)return;
+        if(this.#awaiting?.id===id){this.#awaiting=null;this.render();return;}
+        this.#awaiting=item;
+        const pad=this.gamepad.pad;
+        this.#baseline=pad?[...pad.axes]:[];
+        this.#waitFrames=INPUT.captureDelayFrames;
+        this.render();
+    }
+    update() {
+        if(!this.visible)return;
+        const pad=this.gamepad.pad;
+        if(!pad){this.status.textContent='JOYSTICK: NOT CONNECTED';return;}
+        if(!this.#awaiting){this.status.textContent=`JOYSTICK: ${pad.id}`;return;}
+        if(this.#waitFrames>0){this.#waitFrames--;return;}
+        let assigned=null;
+        if(this.#awaiting.kind==='axis') {
+            for(let index=0;index<pad.axes.length;index++) {
+                if(Math.abs(pad.axes[index]-this.#baseline[index])>=INPUT.captureThreshold) {assigned=index;break;}
+            }
+        } else {
+            assigned=pad.buttons.findIndex(button=>button.pressed);
+            if(assigned<0)assigned=null;
+        }
+        if(assigned===null)return;
+        this.configuration.mapping[this.#awaiting.id].index=assigned;
+        this.configuration.save();this.#awaiting=null;this.render();
+    }
+    render() {
+        this.rows.replaceChildren();
+        for(const item of JoystickConfiguration.items) {
+            if(item.id==='view' && !UI_FEATURES.CHASE_VIEW_ENABLED)continue;
+            const setting=this.configuration.mapping[item.id];
+            const row=document.createElement('tr');
+            const label=document.createElement('td');label.textContent=item.label;
+            const current=document.createElement('td');current.textContent=`${item.kind==='axis'?'AXIS':'BTN'} ${setting.index}`;
+            const invert=document.createElement('td');
+            if(item.kind==='axis') {
+                const box=document.createElement('input');box.type='checkbox';box.checked=setting.invert;
+                box.dataset.invert=item.id;box.setAttribute('aria-label',`Reverse ${item.label}`);
+                invert.append(box);
+            } else {invert.textContent='—';}
+            const buttonCell=document.createElement('td');
+            const button=document.createElement('button');button.dataset.bind=item.id;
+            button.textContent=this.#awaiting?.id===item.id?'CANCEL':'ASSIGN';
+            buttonCell.append(button);row.append(label,current,invert,buttonCell);this.rows.append(row);
+        }
+        this.status.textContent=this.#awaiting?`MOVE ${this.#awaiting.label.toUpperCase()} ${this.#awaiting.kind.toUpperCase()} ...`:
+            (this.gamepad.connected?'JOYSTICK READY':'JOYSTICK: NOT CONNECTED');
+    }
+}
+
+// ============================================================================
+// 6. CANVAS 3D PROJECTION WITH NEAR-PLANE / VIEWPORT CLIPPING (V41 PRINCIPLE)
+// ============================================================================
+class SegmentClipper {
+    constructor(margin) {this.margin=margin;}
+    clip(x1,y1,x2,y2,width,height) {
+        if(![x1,y1,x2,y2,width,height].every(Number.isFinite))return null;
+        const left=-this.margin,right=width+this.margin,top=-this.margin,bottom=height+this.margin;
+        const dx=x2-x1,dy=y2-y1;
+        const p=[-dx,dx,-dy,dy],q=[x1-left,right-x1,y1-top,bottom-y1];
+        let min=0,max=1;
+        for(let i=0;i<p.length;i++) {
+            if(Math.abs(p[i])<LIMITS.EPS){if(q[i]<0)return null;continue;}
+            const t=q[i]/p[i];
+            if(p[i]<0)min=Math.max(min,t);else max=Math.min(max,t);
+            if(min>max)return null;
+        }
+        return {x1:x1+min*dx,y1:y1+min*dy,x2:x1+max*dx,y2:y1+max*dy};
+    }
+}
+class Graphics3D {
+    constructor(context) {
+        this.ctx=context;this.width=0;this.height=0;this.focal=0;
+        this.clipper=new SegmentClipper(DISPLAY.CLIP_MARGIN);
+        this.camera={position:new Vector3(),pitch:0,roll:0,yaw:0};
+    }
+    resize(width,height) {this.width=width;this.height=height;this.focal=(height/2)/Math.tan(DISPLAY.FOV/2);}
+    setCamera(camera) {this.camera=camera;}
+    transform(point) {
+        const v=point.sub(this.camera.position),c=this.camera;
+        const cy=Math.cos(c.yaw),sy=Math.sin(c.yaw);
+        const x=v.x*cy-v.z*sy, z=v.x*sy+v.z*cy;
+        const cp=Math.cos(c.pitch),sp=Math.sin(c.pitch);
+        const y=v.y*cp-z*sp, z2=v.y*sp+z*cp;
+        const cr=Math.cos(c.roll),sr=Math.sin(c.roll);
+        return {x:x*cr-y*sr,y:x*sr+y*cr,z:z2};
+    }
+    projectPoint(point) {
+        const projected=this.transform(point);
+        if (![projected.x,projected.y,projected.z].every(Number.isFinite) || projected.z<DISPLAY.NEAR ||
+            projected.z>LIGHTING_CONFIG.MAX_VISIBLE_DISTANCE_M)return null;
+        const x=this.width/2+projected.x*this.focal/projected.z;
+        const y=this.height/2-projected.y*this.focal/projected.z;
+        if(x<-DISPLAY.CLIP_MARGIN || x>this.width+DISPLAY.CLIP_MARGIN ||
+           y<-DISPLAY.CLIP_MARGIN || y>this.height+DISPLAY.CLIP_MARGIN)return null;
+        return {x,y,depth:projected.z};
+    }
+    draw(a,b,color='#43ff87',width=1) {
+        const p=this.transform(a),q=this.transform(b);
+        if(![p.x,p.y,p.z,q.x,q.y,q.z].every(Number.isFinite))return;
+        if(p.z<DISPLAY.NEAR&&q.z<DISPLAY.NEAR)return;
+        if(p.z<DISPLAY.NEAR) {
+            const t=(DISPLAY.NEAR-p.z)/(q.z-p.z);p.x+=(q.x-p.x)*t;p.y+=(q.y-p.y)*t;p.z=DISPLAY.NEAR;
+        } else if(q.z<DISPLAY.NEAR) {
+            const t=(DISPLAY.NEAR-q.z)/(p.z-q.z);q.x+=(p.x-q.x)*t;q.y+=(p.y-q.y)*t;q.z=DISPLAY.NEAR;
+        }
+        const x1=this.width/2+p.x*this.focal/p.z,y1=this.height/2-p.y*this.focal/p.z;
+        const x2=this.width/2+q.x*this.focal/q.z,y2=this.height/2-q.y*this.focal/q.z;
+        const segment=this.clipper.clip(x1,y1,x2,y2,this.width,this.height);
+        if(!segment)return;
+        this.ctx.beginPath();this.ctx.moveTo(segment.x1,segment.y1);
+        this.ctx.lineTo(segment.x2,segment.y2);this.ctx.strokeStyle=color;
+        this.ctx.lineWidth=width;this.ctx.stroke();
+    }
+}
+// ============================================================================
+// 6A. RUNWAY LIGHTING AND OPTICAL PAPI GUIDANCE (V3)
+// ============================================================================
+class LightingModeController {
+    #index=0;
+    get current(){return LIGHTING_CONFIG.MODES[this.#index];}
+    get palette(){return LIGHTING_CONFIG.MODE_SETTINGS[this.current];}
+    cycle(){this.#index=(this.#index+1)%LIGHTING_CONFIG.MODES.length;return this.current;}
+}
+class PapiGuidanceModel {
+    constructor(runway,config,ground=GROUND){this.runway=runway;this.config=config;this.ground=ground;}
+    setGround(ground){this.ground=ground;}
+    get lampPositions(){
+        const rightmost=-this.runway.width/2-this.config.PAPI_OFFSET_FROM_EDGE_M;
+        const total=this.config.PAPI_CUTOFFS_DEG.length;
+        return Array.from({length:total},(_,i)=>new Vector3(
+            rightmost-(total-i-1)*this.config.PAPI_LIGHT_SPACING_M,
+            this.config.FIXTURE_HEIGHT_M,this.runway.z+this.config.PAPI_STATION_Z_M));
+    }
+    evaluate(state){
+        const c=this.config,stationZ=this.runway.z+c.PAPI_STATION_Z_M;
+        const eye=state.position.add(Maths.rotate(new Vector3(0,
+            this.ground.cockpitHeight-this.ground.gearHeight,4),state.pitch,state.roll,state.yaw));
+        const range=stationZ-eye.z;
+        const bearing=Math.atan2(Math.abs(eye.x-this.runway.x),range)*UNITS.RAD;
+        const visible=range>=c.PAPI_MIN_RANGE_M &&
+            range<=c.PAPI_MAX_RANGE_NM*UNITS.NM && bearing<=c.PAPI_HALF_BEAM_DEG;
+        if(!visible)return {visible:false,angleDeg:null,whiteCount:0,redCount:0,
+            colors:[],status:'OUT OF RANGE'};
+        const angleDeg=Math.atan2(eye.y-c.FIXTURE_HEIGHT_M,range)*UNITS.RAD;
+        const colors=c.PAPI_CUTOFFS_DEG.map(cutoff=>angleDeg>=cutoff?'white':'red');
+        const whiteCount=colors.filter(color=>color==='white').length;
+        const status=whiteCount===2?'ON PATH':whiteCount<2?'LOW':'HIGH';
+        return {visible:true,angleDeg,whiteCount,redCount:colors.length-whiteCount,
+            colors,status};
+    }
+}
+class RunwayLightingRenderer {
+    constructor(graphics,papi){this.graphics=graphics;this.ctx=graphics.ctx;this.papi=papi;}
+    draw(state,mode,timeSeconds){
+        const c=this.ctx,config=LIGHTING_CONFIG,palette=config.MODE_SETTINGS[mode];
+        if(!palette)throw new RangeError(`Invalid lighting mode: ${mode}`);
+        c.save();
+        c.globalAlpha=palette.intensity;
+        c.shadowBlur=palette.glow;
+        if(mode!==LIGHTING_MODE.DAY) {
+            this.#edgeLights();
+            this.#centerlineLights();
+            this.#thresholdAndEndLights();
+            this.#approachLights(timeSeconds);
+        }
+        // PAPI remains visible in daylight, as it is also a daytime guidance aid.
+        this.#papiLights(state);
+        c.restore();
+    }
+    #lamp(position,color,extraRadius=0){
+        const projected=this.graphics.projectPoint(position);
+        if(!projected)return;
+        this.#screenLamp(projected,color,extraRadius);
+    }
+    #screenLamp(projected,color,extraRadius=0){
+        const config=LIGHTING_CONFIG,c=this.ctx;
+        const size=Maths.clamp(config.LIGHT_DEPTH_SCALE/projected.depth,
+            config.LIGHT_MIN_RADIUS_PX,config.LIGHT_MAX_RADIUS_PX)+extraRadius;
+        c.shadowColor=color;
+        c.fillStyle=color;
+        c.beginPath();c.arc(projected.x,projected.y,size,0,Math.PI*2);c.fill();
+    }
+    #edgeLights(){
+        const cfg=LIGHTING_CONFIG,half=RUNWAY.width/2+cfg.EDGE_OUTSET_M;
+        for(let z=0;z<=RUNWAY.length;z+=cfg.EDGE_SPACING_M){
+            const color=z>=RUNWAY.length-cfg.EDGE_CAUTION_ZONE_M?cfg.COLORS.yellow:cfg.COLORS.white;
+            this.#lamp(new Vector3(-half,cfg.FIXTURE_HEIGHT_M,z),color);
+            this.#lamp(new Vector3(half,cfg.FIXTURE_HEIGHT_M,z),color);
+        }
+    }
+    #centerlineLights(){
+        const cfg=LIGHTING_CONFIG;
+        for(let z=cfg.CENTER_SPACING_M,i=0;z<RUNWAY.length;z+=cfg.CENTER_SPACING_M,i++){
+            const remaining=RUNWAY.length-z;
+            let color=cfg.COLORS.white;
+            if(remaining<=cfg.CENTER_RED_FROM_END_M)color=cfg.COLORS.red;
+            else if(remaining<=cfg.CENTER_ALTERNATE_FROM_END_M && i%2===0)color=cfg.COLORS.red;
+            this.#lamp(new Vector3(0,cfg.FIXTURE_HEIGHT_M,z),color);
+        }
+    }
+    #thresholdAndEndLights(){
+        const cfg=LIGHTING_CONFIG;
+        for(let x=-RUNWAY.width/2;x<=RUNWAY.width/2;x+=cfg.THRESHOLD_SPACING_M){
+            this.#lamp(new Vector3(x,cfg.FIXTURE_HEIGHT_M,RUNWAY.z),cfg.COLORS.green);
+            this.#lamp(new Vector3(x,cfg.FIXTURE_HEIGHT_M,RUNWAY.z+RUNWAY.length),cfg.COLORS.red);
+        }
+    }
+    #approachLights(timeSeconds){
+        const cfg=LIGHTING_CONFIG;
+        for(let z=-cfg.APPROACH_LENGTH_M;z<0;z+=cfg.APPROACH_SPACING_M){
+            this.#lamp(new Vector3(0,cfg.FIXTURE_HEIGHT_M,z),cfg.COLORS.white);
+        }
+        for(let z=-cfg.APPROACH_LENGTH_M;z<0;z+=cfg.APPROACH_BAR_INTERVAL_M){
+            for(let x=-cfg.APPROACH_BAR_HALF_WIDTH_M;x<=cfg.APPROACH_BAR_HALF_WIDTH_M;
+                x+=cfg.APPROACH_BAR_LIGHT_SPACING_M){
+                this.#lamp(new Vector3(x,cfg.FIXTURE_HEIGHT_M,z),cfg.COLORS.white);
+            }
+        }
+        // A simplified, repeating sequential flasher ('rabbit') moving toward the threshold.
+        const count=Math.floor(cfg.STROBE_LENGTH_M/cfg.STROBE_SPACING_M);
+        const slot=Math.floor(timeSeconds*cfg.STROBE_RATE_HZ)%(count+cfg.STROBE_CYCLE_PAUSE);
+        if(slot<count){
+            const z=-cfg.STROBE_LENGTH_M+(slot+1)*cfg.STROBE_SPACING_M;
+            this.#lamp(new Vector3(0,cfg.FIXTURE_HEIGHT_M,z),cfg.COLORS.white,
+                cfg.STROBE_RADIUS_BOOST_PX);
+        }
+    }
+    #papiLights(state){
+        const reading=this.papi.evaluate(state);
+        if(!reading.visible)return;
+        const projections=this.papi.lampPositions.map(position=>this.graphics.projectPoint(position));
+        if(projections.some(projected=>!projected))return;
+        const cfg=LIGHTING_CONFIG,c=this.ctx;
+        const count=projections.length;
+        const averageX=projections.reduce((sum,p)=>sum+p.x,0)/count;
+        const physicalStep=(projections[count-1].x-projections[0].x)/(count-1);
+        // Preserve the correct physical glidepath indication but maintain legible lamp separation at distance.
+        const visualStep=Math.sign(physicalStep||1)*Math.max(Math.abs(physicalStep),cfg.PAPI_MIN_SCREEN_SPACING_PX);
+        c.save();c.shadowBlur=Math.min(c.shadowBlur,cfg.PAPI_MAX_GLOW_PX);c.globalAlpha=1;
+        for(let index=0;index<count;index++){
+            const point={...projections[index],x:averageX+(index-(count-1)/2)*visualStep};
+            this.#screenLamp(point,cfg.COLORS[reading.colors[index]],cfg.PAPI_RADIUS_BOOST_PX);
+        }
+        c.restore();
+    }
+}
+class WorldRenderer {
+    constructor(graphics,lightingRenderer){this.gfx=graphics;this.lightingRenderer=lightingRenderer;}
+    drawBackground(camera,lightingMode) {
+        const palette=LIGHTING_CONFIG.MODE_SETTINGS[lightingMode];
+        if(!palette)throw new RangeError(`Invalid lighting mode: ${lightingMode}`);
+        const ctx=this.gfx.ctx,width=this.gfx.width,height=this.gfx.height;
+        ctx.fillStyle=palette.background;
+        ctx.fillRect(0,0,width,height);
+        // The terrain is a simple horizon-plane silhouette; runway/grid geometry is still 3D.
+        const slope=Maths.clamp(-Math.tan(camera.roll),-DISPLAY.HORIZON_MAX_SLOPE,DISPLAY.HORIZON_MAX_SLOPE);
+        const horizonY=height/2+this.gfx.focal*Math.tan(camera.pitch);
+        ctx.fillStyle=palette.groundFill;
+        ctx.beginPath();
+        ctx.moveTo(0,horizonY-slope*width/2);
+        ctx.lineTo(width,horizonY+slope*width/2);
+        ctx.lineTo(width,height);
+        ctx.lineTo(0,height);
+        ctx.closePath();
+        ctx.fill();
+    }
+    drawWorld(state,showAircraft,systems,lightingMode,visualSeconds,profile=AircraftCatalog.get(AIRCRAFT_ID.F15C)) {
+        const palette=LIGHTING_CONFIG.MODE_SETTINGS[lightingMode];
+        this.#groundGrid(state.position,palette.grid);
+        this.#runway(palette);
+        this.lightingRenderer.draw(state,lightingMode,visualSeconds);
+        if(showAircraft){
+            if(profile.id===AIRCRAFT_ID.E170)this.#regionalJet(state,systems,profile);
+            else this.#aircraft(state,systems);
+        }
+    }
+    #groundGrid(position,gridColor) {
+        const size=DISPLAY.GRID_SPACING,extent=DISPLAY.GRID_EXTENT;
+        const minX=Math.floor((position.x-extent)/size)*size;
+        const maxX=Math.ceil((position.x+extent)/size)*size;
+        const minZ=Math.floor((position.z-extent)/size)*size;
+        const maxZ=Math.ceil((position.z+extent)/size)*size;
+        for(let x=minX;x<=maxX;x+=size) {
+            this.gfx.draw(new Vector3(x,0,minZ),new Vector3(x,0,maxZ),gridColor);
+        }
+        for(let z=minZ;z<=maxZ;z+=size) {
+            this.gfx.draw(new Vector3(minX,0,z),new Vector3(maxX,0,z),gridColor);
+        }
+    }
+    #runway(palette) {
+        const w=RUNWAY.width/2,l=RUNWAY.length,g=this.gfx;
+        const edge=(x,z1,z2,color=palette.runway,lineWidth=2)=>
+            g.draw(new Vector3(x,0,z1),new Vector3(x,0,z2),color,lineWidth);
+        edge(-w,0,l);edge(w,0,l);
+        g.draw(new Vector3(-w,0,0),new Vector3(w,0,0),palette.runway,3);
+        g.draw(new Vector3(-w,0,l),new Vector3(w,0,l),palette.runway,2);
+        for(let z=80;z<l-40;z+=90){edge(0,z,z+36,palette.mark,2);}
+        for(let x=-w+5;x<=w-5;x+=6) {
+            g.draw(new Vector3(x,0,8),new Vector3(x,0,34),palette.mark,2);
+        }
+        // Aiming-point rectangles, touchdown-zone bars, and runway lead-in guide.
+        for(const side of [-1,1]) {
+            const inner=side*9,outer=side*17;
+            g.draw(new Vector3(inner,0,300),new Vector3(outer,0,300),palette.mark,2);
+            g.draw(new Vector3(inner,0,345),new Vector3(outer,0,345),palette.mark,2);
+            edge(inner,300,345,palette.mark,2);edge(outer,300,345,palette.mark,2);
+            for(const z of [160,520,700]) {
+                g.draw(new Vector3(side*10,0,z),new Vector3(side*15,0,z),palette.mark);
+            }
+        }
+        for(let z=-2500;z<-100;z+=160) {
+            g.draw(new Vector3(-18,0,z),new Vector3(18,0,z),palette.grid);
+        }
+    }
+    #aircraft(state,systems) {
+        const points=[
+            [0,0,9.8],[-1.2,1,4],[1.2,1,4],[-1.5,-.7,3],[1.5,-.7,3],
+            [-2,0,-5],[2,0,-5],[-6.6,0,-2.8],[6.6,0,-2.8],[-6.2,0,-5.4],[6.2,0,-5.4],
+            [-1.3,1,-9],[1.3,1,-9],[-3.7,0,-9],[3.7,0,-9],
+            [-3.7,2.5,-8.6],[3.7,2.5,-8.6],[-2,0,-10.8],[2,0,-10.8],
+            [-.95,-.4,-7.6],[.95,-.4,-7.6]
+        ];
+        const lines=[[0,1],[0,2],[0,3],[0,4],[1,2],[1,3],[2,4],
+            [1,5],[2,6],[3,5],[4,6],[5,6],[5,11],[6,12],
+            [5,7],[7,9],[9,5],[6,8],[8,10],[10,6],
+            [11,12],[11,13],[13,15],[15,11],[12,14],[14,16],[16,12],
+            [11,17],[12,18],[17,18],[5,19],[6,20],[19,20]];
+        const transformed=points.map(([x,y,z])=>state.position.add(Maths.rotate(new Vector3(x,y,z),state.pitch,state.roll,state.yaw)));
+        for(const [i,j] of lines)this.gfx.draw(transformed[i],transformed[j],'#d6fff1',2);
+        this.#landingGear(state,systems.gearFraction);
+        this.#trailingEdgeFlaps(state,systems.flapFraction);
+        this.#dorsalSpeedBrake(state,systems.speedbrakeFraction);
+    }
+    #regionalJet(state,systems,profile){
+        // Simplified E170 proportions: twin underwing engines, low wing, conventional tail.
+        const outline=[
+            [[0,0,15],[1.55,0,10.5]],[[0,0,15],[-1.55,0,10.5]],
+            [[1.55,0,10.5],[1.55,0,-11.3]],
+            [[-1.55,0,10.5],[-1.55,0,-11.3]],
+            [[1.55,0,-11.3],[0,0,-14.9]],
+            [[-1.55,0,-11.3],[0,0,-14.9]],
+            [[-1.55,0,-1],[-5,0,-1.8]],[[1.55,0,-1],[5,0,-1.8]],
+            [[-5,0,-1.8],[-13,0,-5]],[[5,0,-1.8],[13,0,-5]],
+            [[-13,0,-5],[-10.2,0,-6]],[[13,0,-5],[10.2,0,-6]],
+            [[-10.2,0,-6],[-1.55,0,-5.3]],[[10.2,0,-6],[1.55,0,-5.3]],
+            [[-1.55,0,-11.6],[-5,0,-13.4]],[[1.55,0,-11.6],[5,0,-13.4]],
+            [[-5,0,-13.4],[-1.4,0,-13.8]],[[5,0,-13.4],[1.4,0,-13.8]],
+            [[0,0,-11.2],[0,4.3,-13.1]],[[0,4.3,-13.1],[0,0,-14.9]]
+        ];
+        for(const [a,b] of outline)this.#localLine(state,new Vector3(...a),new Vector3(...b),'#d5fff0');
+        for(const side of [-1,1]){
+            const x=side*4.6,y=-1.35,z=-1.5,radius=0.75,segments=12;
+            for(let i=0;i<segments;i++){
+                const angle=i*Math.PI*2/segments,next=(i+1)*Math.PI*2/segments;
+                this.#localLine(state,new Vector3(x+radius*Math.cos(angle),y+radius*Math.sin(angle),z+1.8),
+                    new Vector3(x+radius*Math.cos(next),y+radius*Math.sin(next),z+1.8),'#c7c9ff');
+            }
+            this.#localLine(state,new Vector3(x+radius,y,z+1.8),new Vector3(x+radius,y,z-2.0),'#c7c9ff');
+            this.#localLine(state,new Vector3(x-radius,y,z+1.8),new Vector3(x-radius,y,z-2.0),'#c7c9ff');
+            this.#localLine(state,new Vector3(side*5,0,-4.35),
+                new Vector3(side*10.1,-0.80*systems.flapFraction,-5.85),'#ffe394');
+            if(systems.speedbrakeFraction>LIMITS.EPS){
+                this.#localLine(state,new Vector3(side*5.5,0,-3.1),
+                    new Vector3(side*8.0,0.85*systems.speedbrakeFraction,-3.6),'#ffb6a0');
+            }
+        }
+        if(systems.gearFraction>LIMITS.EPS){
+            const ground=profile.ground,travel=systems.gearFraction;
+            for(const [x,z] of [[-ground.mainGearLateralOffsetM,ground.mainGearZ],
+                [ground.mainGearLateralOffsetM,ground.mainGearZ],[0,ground.noseGearZ]]){
+                const bottom=-ground.gearHeight*travel;
+                this.#localLine(state,new Vector3(x,-0.65,z),new Vector3(x,bottom,z));
+                this.#localLine(state,new Vector3(x-0.27,bottom,z-0.28),
+                    new Vector3(x+0.27,bottom,z+0.28),'#d5fff0');
+            }
+        }
+    }
+    #localLine(state,localA,localB,color='#b5fff0',width=2){
+        const toWorld=p=>state.position.add(Maths.rotate(p,state.pitch,state.roll,state.yaw));
+        this.gfx.draw(toWorld(localA),toWorld(localB),color,width);
+    }
+    #landingGear(state,fraction) {
+        if(fraction<=LIMITS.EPS)return;
+        const retractedHeight=AIRCRAFT_VISUAL.GEAR_RETRACTED_Y_M;
+        const wheelY=retractedHeight+(-GROUND.gearHeight-retractedHeight)*fraction;
+        const wheelCenters=[new Vector3(-AIRCRAFT_VISUAL.MAIN_GEAR_OFFSET_X_M,
+                wheelY+AIRCRAFT_VISUAL.MAIN_WHEEL_RADIUS_M*fraction,GROUND.mainGearZ),
+            new Vector3(AIRCRAFT_VISUAL.MAIN_GEAR_OFFSET_X_M,
+                wheelY+AIRCRAFT_VISUAL.MAIN_WHEEL_RADIUS_M*fraction,GROUND.mainGearZ),
+            new Vector3(0,wheelY+AIRCRAFT_VISUAL.NOSE_GEAR_RAISE_M+
+                AIRCRAFT_VISUAL.NOSE_WHEEL_RADIUS_M*fraction,GROUND.noseGearZ)];
+        for(let n=0;n<wheelCenters.length;n++) {
+            const center=wheelCenters[n];
+            const top=new Vector3(center.x,AIRCRAFT_VISUAL.STRUT_TOP_Y_M,center.z);
+            this.#localLine(state,top,center);
+            const segments=AIRCRAFT_VISUAL.WHEEL_SEGMENTS;
+            const radius=n===wheelCenters.length-1?AIRCRAFT_VISUAL.NOSE_WHEEL_RADIUS_M:
+                AIRCRAFT_VISUAL.MAIN_WHEEL_RADIUS_M;
+            for(let i=0;i<segments;i++) {
+                const first=i*2*Math.PI/segments,last=(i+1)*2*Math.PI/segments;
+                const a=center.add(new Vector3(0,Math.sin(first)*radius,Math.cos(first)*radius));
+                const b=center.add(new Vector3(0,Math.sin(last)*radius,Math.cos(last)*radius));
+                this.gfx.draw(state.position.add(Maths.rotate(a,state.pitch,state.roll,state.yaw)),
+                    state.position.add(Maths.rotate(b,state.pitch,state.roll,state.yaw)),'#b5fff0');
+            }
+        }
+    }
+    #trailingEdgeFlaps(state,fraction){
+        for(const side of [-1,1]){
+            // The V2 silhouette is a simplified F-15 visual representation, not CAD geometry.
+            const g=AIRCRAFT_VISUAL;
+            const hingeA=new Vector3(side*g.FLAP_INBOARD_X_M,0,g.FLAP_HINGE_Z_M);
+            const hingeB=new Vector3(side*g.FLAP_OUTBOARD_X_M,0,g.FLAP_HINGE_Z_M);
+            const deflection=-g.FLAP_DROP_M*fraction;
+            const trailingA=hingeA.add(new Vector3(0,deflection,-g.FLAP_TRAILING_LENGTH_M));
+            const trailingB=hingeB.add(new Vector3(0,deflection,-g.FLAP_TRAILING_LENGTH_M));
+            this.#localLine(state,hingeA,trailingA,'#83ffe7');
+            this.#localLine(state,trailingA,trailingB,'#83ffe7');
+            this.#localLine(state,trailingB,hingeB,'#83ffe7');
+        }
+    }
+    #dorsalSpeedBrake(state,fraction){
+        if(fraction<=LIMITS.EPS)return;
+        const g=AIRCRAFT_VISUAL;
+        const hingeLeft=new Vector3(-g.BRAKE_HALF_WIDTH_M,g.BRAKE_HINGE_Y_M,g.BRAKE_HINGE_Z_M);
+        const hingeRight=new Vector3(g.BRAKE_HALF_WIDTH_M,g.BRAKE_HINGE_Y_M,g.BRAKE_HINGE_Z_M);
+        const rearLeft=new Vector3(-g.BRAKE_HALF_WIDTH_M,
+            g.BRAKE_HINGE_Y_M+g.BRAKE_RAISE_M*fraction,g.BRAKE_REAR_Z_M);
+        const rearRight=new Vector3(g.BRAKE_HALF_WIDTH_M,
+            g.BRAKE_HINGE_Y_M+g.BRAKE_RAISE_M*fraction,g.BRAKE_REAR_Z_M);
+        this.#localLine(state,hingeLeft,rearLeft,'#ffe27e');
+        this.#localLine(state,hingeRight,rearRight,'#ffe27e');
+        this.#localLine(state,rearLeft,rearRight,'#ffe27e');
+    }
+}
+class CameraController {
+    constructor(ground=GROUND) {this.mode=CAMERA_MODE.COCKPIT;this.ground=ground;}
+    setGround(ground){this.ground=ground;}
+    toggle() {this.mode=this.mode===CAMERA_MODE.COCKPIT?CAMERA_MODE.CHASE:CAMERA_MODE.COCKPIT;}
+    getCamera(state) {
+        if(this.mode===CAMERA_MODE.COCKPIT) {
+            const eye=state.position.add(Maths.rotate(new Vector3(0,this.ground.cockpitHeight-this.ground.gearHeight,4),
+                state.pitch,state.roll,state.yaw));
+            return {position:eye,pitch:state.pitch,roll:state.roll,yaw:state.yaw};
+        }
+        return {position:state.position.add(new Vector3(-Math.sin(state.yaw)*DISPLAY.CHASE_DISTANCE,
+            DISPLAY.CHASE_HEIGHT,-Math.cos(state.yaw)*DISPLAY.CHASE_DISTANCE)),
+            pitch:-Math.atan2(DISPLAY.CHASE_HEIGHT,DISPLAY.CHASE_DISTANCE),roll:0,yaw:state.yaw};
+    }
+}
+
+// ============================================================================
+// 7. HEAD-UP DISPLAY (FPM SEPARATE FROM FIXED AIRCRAFT BORESIGHT)
+// ============================================================================
+class FlightPathMarker {
+    #point=null;
+    constructor(context,graphics) {this.ctx=context;this.gfx=graphics;}
+    reset() {this.#point=null;}
+    static project(velocity,state,focal) {
+        const horizontal=Math.hypot(velocity.x,velocity.z);
+        if(velocity.magnitude()<LIMITS.EPS)return null;
+        const track=Math.atan2(velocity.x,velocity.z);
+        const gamma=Math.atan2(velocity.y,horizontal);
+        const dHeading=Maths.wrapRad(track-state.yaw),dPitch=gamma-state.pitch;
+        const x=Math.tan(dHeading)*focal,y=-Math.tan(dPitch)*focal;
+        const cr=Math.cos(state.roll),sr=Math.sin(state.roll);
+        return {x:x*cr+y*sr,y:-x*sr+y*cr};
+    }
+    render(state,dt,centerX,centerY) {
+        const projected=FlightPathMarker.project(state.velocity,state,this.gfx.focal);
+        if(!projected)return;
+        const spanX=this.gfx.width*.43,spanY=this.gfx.height*.43;
+        const desired={x:centerX+Maths.clamp(projected.x,-spanX,spanX),
+            y:centerY+Maths.clamp(projected.y,-spanY,spanY)};
+        if(!this.#point)this.#point=desired;
+        else {
+            this.#point.x=Maths.smooth(this.#point.x,desired.x,dt,DISPLAY.FPM_SMOOTH);
+            this.#point.y=Maths.smooth(this.#point.y,desired.y,dt,DISPLAY.FPM_SMOOTH);
+        }
+        const {x,y}=this.#point,c=this.ctx;
+        c.save();c.strokeStyle='#fff06b';c.lineWidth=2;
+        c.beginPath();c.moveTo(x-17,y);c.lineTo(x-5,y);c.moveTo(x+5,y);c.lineTo(x+17,y);
+        c.moveTo(x,y-12);c.lineTo(x,y-6);c.stroke();
+        c.beginPath();c.arc(x,y,5,0,Math.PI*2);c.stroke();c.restore();
+    }
+}
+class FlightInstrumentReadings {
+    constructor(atmosphere,ground=GROUND){this.atmosphere=atmosphere;this.ground=ground;}
+    setGround(ground){this.ground=ground;}
+    read(state,flight,phase){
+        const groundRoll=phase===FLIGHT_MODE.ROLLOUT||phase===FLIGHT_MODE.COMPLETE;
+        const trueAirspeed=groundRoll?state.velocity.magnitude():flight.aero.speed;
+        const ias=(groundRoll?this.atmosphere.indicatedSpeed(trueAirspeed,state.position.y):flight.aero.ias)/UNITS.KT;
+        return Object.freeze({iasKts:Math.max(0,ias),
+            altitudeFt:groundRoll?0:Math.max(0,state.position.y-this.ground.gearHeight)/UNITS.FT,
+            aoaDeg:groundRoll?0:flight.aero.aoa*UNITS.RAD,
+            machEstimate:trueAirspeed/ENVIRONMENT.speedOfSoundMps,
+            sinkFps:state.velocity.y/UNITS.FPS,
+            fpaDeg:Math.atan2(state.velocity.y,Math.hypot(state.velocity.x,state.velocity.z))*UNITS.RAD});
+    }
+}
+class HUDTapeRenderer {
+    constructor(context){this.ctx=context;}
+    render(readings,width,height){
+        const offset=Math.max(HUD_TAPE.MIN_OFFSET_PX,
+            Math.min(HUD_TAPE.CENTER_OFFSET_PX,width*HUD_TAPE.OFFSET_VIEWPORT_RATIO));
+        const centerY=height/2;
+        this.#tape(width/2-offset,centerY,readings.iasKts,DISPLAY.TAPE_STEP_SPEED,
+            'IAS','KTS',HUD_TAPE.IAS_MIN_KTS,'left');
+        const altitudeStep=readings.altitudeFt<HUD_TAPE.ALT_FINE_BELOW_FT?HUD_TAPE.ALT_FINE_STEP_FT:
+            readings.altitudeFt<HUD_TAPE.ALT_MEDIUM_BELOW_FT?HUD_TAPE.ALT_MEDIUM_STEP_FT:
+                HUD_TAPE.ALT_COARSE_STEP_FT;
+        this.#tape(width/2+offset,centerY,readings.altitudeFt,altitudeStep,
+            'ALT','FT',HUD_TAPE.ALT_MIN_FT,'right');
+    }
+    #tape(x,cy,value,step,title,unit,minimum,side){
+        const c=this.ctx,conf=HUD_TAPE,half=conf.HEIGHT_PX/2;
+        c.save();c.strokeStyle=conf.BORDER_COLOR;c.fillStyle=conf.BORDER_COLOR;
+        c.lineWidth=1.3;c.font='13px Consolas, monospace';
+        c.textAlign='center';c.fillText(title,x,cy-conf.LABEL_OFFSET_Y_PX);
+        c.fillText(unit,x,cy+conf.LABEL_OFFSET_Y_PX+7);
+        c.beginPath();c.moveTo(x,cy-half);c.lineTo(x,cy+half);c.stroke();
+        c.beginPath();c.rect(x-conf.HALF_WIDTH_PX,cy-half,conf.HALF_WIDTH_PX*2,conf.HEIGHT_PX);c.clip();
+        const first=Math.floor(value/step)*step;
+        for(let index=-conf.TICK_LIMIT;index<=conf.TICK_LIMIT;index++){
+            const v=first+index*step;
+            if(v<minimum)continue;
+            const y=cy+(value-v)/step*conf.TICK_PX;
+            if(y<cy-half||y>cy+half)continue;
+            const major=(Math.abs(v/step)%2)===0;
+            const extent=major?conf.LARGE_TICK_PX:conf.SMALL_TICK_PX;
+            const direction=side==='left'?1:-1;
+            c.beginPath();c.moveTo(x,y);c.lineTo(x+extent*direction,y);c.stroke();
+            c.textAlign=side==='left'?'right':'left';
+            c.fillText(String(Math.round(v)),x-direction*8,y+4);
+        }
+        c.restore();
+        // Opaque central numeric readout is painted last to cover the moving scale.
+        c.save();c.fillStyle=conf.BACKGROUND;c.strokeStyle=conf.BORDER_COLOR;
+        c.lineWidth=2;
+        c.fillRect(x-conf.VALUE_BOX_WIDTH_PX/2,cy-conf.VALUE_BOX_HEIGHT_PX/2,
+            conf.VALUE_BOX_WIDTH_PX,conf.VALUE_BOX_HEIGHT_PX);
+        c.strokeRect(x-conf.VALUE_BOX_WIDTH_PX/2,cy-conf.VALUE_BOX_HEIGHT_PX/2,
+            conf.VALUE_BOX_WIDTH_PX,conf.VALUE_BOX_HEIGHT_PX);
+        c.textAlign='center';c.fillStyle=conf.VALUE_COLOR;
+        c.font='bold 18px Consolas, monospace';
+        c.fillText(side==='left'?value.toFixed(1):String(Math.round(value)),x,cy+6);
+        c.restore();
+    }
+}
+class HUDRenderer {
+    constructor(context,graphics,papi) {
+        this.ctx=context;this.gfx=graphics;this.fpm=new FlightPathMarker(context,graphics);
+        this.instruments=new FlightInstrumentReadings(new AtmosphereModel(ENVIRONMENT));
+        this.tapes=new HUDTapeRenderer(context);this.papi=papi;
+    }
+    setProfile(profile){this.instruments.setGround(profile.ground);}
+    reset() {this.fpm.reset();}
+    render(state,flight,dt,mode,paused,landing,gamepadConnected,phase,lightingMode,rollout) {
+        const c=this.ctx,w=this.gfx.width,h=this.gfx.height;
+        const middleX=w/2,middleY=h/2;
+        c.save();c.strokeStyle='#44ff83';c.fillStyle='#44ff83';c.lineWidth=1.5;
+        c.shadowColor=DISPLAY.TEXT_SHADOW;c.shadowBlur=3;
+        this.#heading(state,middleX);
+        this.#pitchLadder(state,middleX,middleY);
+        this.#boresight(middleX,middleY);
+        this.fpm.render(state,dt,middleX,middleY);
+        const readings=this.instruments.read(state,flight,phase);
+        this.tapes.render(readings,w,h);
+        this.#data(state,flight,w,h,mode,paused,landing,gamepadConnected,phase,readings,lightingMode,rollout);
+        c.restore();
+    }
+    #text(value,x,y,size=16,align='left',color='#44ff83') {
+        const c=this.ctx;c.font=`${size}px Consolas, 'Liberation Mono', monospace`;
+        c.textAlign=align;c.fillStyle=color;c.fillText(value,x,y);
+    }
+    #stroke(x1,y1,x2,y2) {const c=this.ctx;c.beginPath();c.moveTo(x1,y1);c.lineTo(x2,y2);c.stroke();}
+    #boresight(x,y) {
+        const c=this.ctx;c.save();c.strokeStyle='#71ff83';c.lineWidth=2;
+        c.beginPath();c.moveTo(x-36,y-10);c.lineTo(x-22,y-10);c.lineTo(x-15,y);
+        c.lineTo(x-8,y-8);c.lineTo(x,y);c.lineTo(x+8,y-8);c.lineTo(x+15,y);
+        c.lineTo(x+22,y-10);c.lineTo(x+36,y-10);c.stroke();c.restore();
+    }
+    #pitchLadder(state,cx,cy) {
+        const c=this.ctx,deg=UNITS.DEG;
+        c.save();c.strokeStyle='#198b4e';c.lineWidth=1;
+        for(let angle=-40;angle<=40;angle+=DISPLAY.PITCH_LADDER_STEP) {
+            const delta=state.pitch-angle*deg;
+            if(Math.abs(delta)>50*deg)continue;
+            const offset=Math.tan(delta)*this.gfx.focal;
+            const left=angle%10===0?56:28;
+            const cosine=Math.cos(state.roll),sine=Math.sin(state.roll);
+            const toScreen=(x,y)=>({x:cx+x*cosine+y*sine,y:cy-x*sine+y*cosine});
+            const start=toScreen(-left,offset),end=toScreen(left,offset);
+            this.#stroke(start.x,start.y,end.x,end.y);
+            if(angle%10===0) {
+                const label=toScreen(left+15,offset+4);
+                this.#text(`${angle}`,label.x,label.y,12,'center','#289d5b');
+            }
+        }
+        c.restore();
+    }
+    #heading(state,cx) {
+        const c=this.ctx,hdg=Maths.headingDeg(state.yaw),y=55;
+        this.#stroke(cx-185,y,cx+185,y);
+        for(let delta=-60;delta<=60;delta+=10) {
+            const x=cx+delta*3;
+            this.#stroke(x,y,x,y+(delta%30===0?12:6));
+            if(delta%30===0)this.#text(`${(Maths.headingDeg(state.yaw+delta*UNITS.DEG)).toString().padStart(3,'0')}`,x,y+29,13,'center');
+        }
+        this.#text(`HDG ${String(hdg).padStart(3,'0')}°`,cx,y-14,18,'center','#fff06b');
+    }
+    #data(state,flight,w,h,mode,paused,landing,gamepadConnected,phase,readings,lightingMode,rollout) {
+        const narrow=w<960, left=16,right=w-16,top=34,spacing=narrow?21:25;
+        const speed=readings.iasKts,aoa=readings.aoaDeg,alt=readings.altitudeFt;
+        const sink=readings.sinkFps,fpa=readings.fpaDeg;
+        const leftLines=[`IAS : ${speed.toFixed(1).padStart(6)} KTS`,
+            `MACH: ${readings.machEstimate.toFixed(2).padStart(6)} EST`,
+            `AOA : ${aoa.toFixed(1).padStart(6)} DEG`,
+            `FPA : ${fpa.toFixed(1).padStart(6)} DEG`,
+            `ROLL: ${(state.roll*UNITS.RAD).toFixed(1).padStart(6)} DEG`];
+        const rightLines=[`ALT : ${Math.round(alt).toString().padStart(6)} FT`,
+            `V/S : ${sink.toFixed(1).padStart(6)} FPS`,
+            `PITCH:${(state.pitch*UNITS.RAD).toFixed(1).padStart(6)} DEG`,
+            `THR : ${(flight.throttle*100).toFixed(1).padStart(6)} %`,
+            `JET : ${(flight.thrustN/1000).toFixed(1).padStart(6)} kN`];
+        leftLines.forEach((line,index)=>this.#text(line,left,top+index*spacing,narrow?12:16));
+        rightLines.forEach((line,index)=>this.#text(line,right,top+index*spacing,narrow?12:16,'right'));
+        const rightPanelTop=top+rightLines.length*spacing+17;
+        this.#text(flight.profile.name,right,rightPanelTop,narrow?13:17,'right','#baffc3');
+        const sys=flight.systems;
+        const configLines=[
+            `GEAR: ${sys.gearStatus} ${Math.round(sys.gearFraction*100)}%`,
+            `FLAP: ${sys.flapStatus} ${Math.round(sys.flapFraction*100)}%`,
+            `SPDB: ${sys.speedbrakeStatus} ${Math.round(sys.speedbrakeFraction*100)}%`,
+            ...(UI_FEATURES.CHASE_VIEW_ENABLED ? [`CAM : ${mode}`] : []),
+            `JOY : ${gamepadConnected?'CONNECTED':'KEYBOARD'}`,
+            `LIGHT: ${lightingMode}`,
+            ...(flight.profile.engine.reverseFraction && phase===FLIGHT_MODE.ROLLOUT ?
+                [`REV : ${rollout?.reverseActive?'ACTIVE':'OFF'}`]:[])
+        ];
+        configLines.forEach((text,index)=>this.#text(text,right,rightPanelTop+(index+1)*spacing,
+            narrow?11:14,'right',index<3?'#e6e269':'#44ff83'));
+        if(sys.gearWarning)this.#text(sys.gearWarning,right,rightPanelTop+(configLines.length+2)*spacing,
+            narrow?10:13,'right','#ff6666');
+        if(phase===FLIGHT_MODE.ROLLOUT&&rollout){
+            this.#text(rollout.noseWheelOnGround?'NOSE WHEEL: ON GROUND':
+                `NOSE WHEEL: AIRBORNE ${rollout.noseWheelClearanceM.toFixed(2)} m`,
+                right,rightPanelTop+(configLines.length+2)*spacing,narrow?10:13,'right','#fff09b');
+        }
+        this.#text('[ APPROACH / LANDING ]',left,h-150,narrow?12:16);
+        this.#text(`RWY  00  |  DIST ${Math.max(0,-state.position.z/UNITS.NM).toFixed(2)} NM`,left,h-127,narrow?11:14);
+        this.#text('CALM · 3 DEG GLIDESLOPE · MANUAL',left,h-107,narrow?11:14);
+        const papi=this.papi.evaluate(state);
+        const papiText=papi.visible?`PAPI  ${papi.whiteCount} WHITE / ${papi.redCount} RED  ${papi.status}`:
+            'PAPI  OUT OF RANGE';
+        this.#text(papiText,left,h-84,narrow?11:14,'left',
+            !papi.visible?'#809e8b':papi.status==='ON PATH'?'#b4ffd3':'#ffd477');
+        if (landing) {
+            this.#text(`${landing.passed?'LANDING: PASS':'LANDING: FAIL'}  IAS ${landing.iasKts.toFixed(1)}  SINK ${landing.sinkFps.toFixed(1)} FPS`,
+                left,h-61,narrow?11:14,'left',landing.passed?'#44ff83':'#ff6666');
+        }
+        if(paused)this.#text('|| PAUSED ||',w/2,h*.24,25,'center','#fff06b');
+    }
+}
+
+// ============================================================================
+// 8. APPLICATION LIFECYCLE / EVENTS / TEST HOOK
+// ============================================================================
+class AircraftLandingApplication {
+    constructor() {
+        this.canvas=document.getElementById('flight-canvas');
+        this.ctx=this.canvas.getContext('2d',{alpha:false});
+        if(!this.ctx)throw new Error('Canvas 2D is unavailable');
+        this.graphics=new Graphics3D(this.ctx);
+        this.papi=new PapiGuidanceModel(RUNWAY,LIGHTING_CONFIG);
+        this.lighting=new LightingModeController();
+        this.lightsRenderer=new RunwayLightingRenderer(this.graphics,this.papi);
+        this.world=new WorldRenderer(this.graphics,this.lightsRenderer);
+        this.hud=new HUDRenderer(this.ctx,this.graphics,this.papi);
+        this.visualClock=0;
+        this.camera=new CameraController();
+        this.config=new JoystickConfiguration();
+        this.input=new InputManager(this.config);
+        this.settings=new JoystickSettingsView(this.config,this.input.gamepad);
+        this.profile=AircraftCatalog.get(AIRCRAFT_ID.F15C);
+        this.atmosphere=new AtmosphereModel(ENVIRONMENT);
+        this.scenarioFactory=new ScenarioFactory(this.profile,this.atmosphere);
+        this.landingEvaluator=new LandingEvaluator();
+        this.landingSession=new LandingSession();
+        this.reportView=new LandingReportView(document.getElementById('landing-report'));
+        this.mode=FLIGHT_MODE.MENU;this.paused=false;this.landing=null;this.rollout=null;
+        this.message=document.getElementById('message');
+        this.menu=document.getElementById('menu');
+        this.lastFrame=performance.now();
+        this.resize=()=>this.#resize();
+        window.addEventListener('resize',this.resize);
+        document.addEventListener('click',event=>this.#onClick(event));
+        document.addEventListener('visibilitychange',()=>{if(document.hidden&&this.mode!==FLIGHT_MODE.MENU)this.paused=true;});
+        this.#resize();
+        this.#refreshLightingButton();
+        this.#refreshAircraftMenu();
+        this.loop=this.loop.bind(this);
+        requestAnimationFrame(this.loop);
+    }
+    #resize() {
+        const w=window.innerWidth,h=window.innerHeight;
+        const dpr=Math.min(LIMITS.MAX_DPR,window.devicePixelRatio||1);
+        this.canvas.width=Math.round(w*dpr);this.canvas.height=Math.round(h*dpr);
+        this.ctx.setTransform(dpr,0,0,dpr,0,0);
+        this.graphics.resize(w,h);
+    }
+    #onClick(event) {
+        const aircraft=event.target.closest('[data-aircraft]');
+        if(aircraft){this.selectAircraft(aircraft.dataset.aircraft);return;}
+        const start=event.target.closest('[data-start]');
+        if(start){this.start(Number(start.dataset.start));return;}
+        const action=event.target.closest('[data-action]')?.dataset.action;
+        if(action==='settings')this.settings.open();
+        if(action==='close-settings')this.settings.close();
+        if(action==='lighting')this.#cycleLighting();
+        if(action==='restart-flight' && this.currentDistanceNm!==undefined)this.restart();
+        if(action==='return-menu')this.#showMenu();
+    }
+    selectAircraft(id){
+        if(this.mode!==FLIGHT_MODE.MENU)throw new Error('Aircraft may be changed only in the menu');
+        const profile=AircraftCatalog.get(id);
+        this.profile=profile;
+        this.scenarioFactory=new ScenarioFactory(profile,this.atmosphere);
+        this.landingEvaluator=new LandingEvaluator(profile);
+        this.reportView.setProfile(profile);
+        document.getElementById('landing-report-heading').textContent=`[ ${profile.name} LANDING ASSESSMENT ]`;
+        this.papi.setGround(profile.ground);
+        this.camera.setGround(profile.ground);
+        this.hud.setProfile(profile);
+        this.#refreshAircraftMenu();
+    }
+    #refreshAircraftMenu(){
+        document.getElementById('aircraft-selection-title').textContent=`${this.profile.name} · V6.0`;
+        for(const button of this.menu.querySelectorAll('[data-aircraft]')){
+            const selected=button.dataset.aircraft===this.profile.id;
+            button.setAttribute('aria-pressed',String(selected));
+            button.textContent=`[ ${selected?'● ':'  '}AIRCRAFT: ${AircraftCatalog.get(button.dataset.aircraft).name} ]`;
+        }
+    }
+    #refreshLightingButton(){
+        const button=document.getElementById('lighting-mode-button');
+        const nextMode=this.lighting.current===LIGHTING_MODE.DAY?LIGHTING_MODE.NIGHT:LIGHTING_MODE.DAY;
+        button.textContent=`[ LIGHTING: ${this.lighting.current} → ${nextMode} ]`;
+    }
+    #cycleLighting(){this.lighting.cycle();this.#refreshLightingButton();}
+    start(distanceNm,entrySide=null) {
+        if(!UI_FEATURES.SELECTABLE_APPROACH_NM.includes(distanceNm)) {
+            throw new RangeError('Approach mode is not available in V6.0');
+        }
+        const initial=this.scenarioFactory.create(distanceNm,entrySide);
+        this.flight=new AircraftFlightDynamics(this.profile,ENVIRONMENT,initial);
+        this.input.reset();this.input.setInitialThrottle(initial.throttle);
+        this.camera.mode=CAMERA_MODE.COCKPIT;
+        this.hud.reset();this.landing=null;this.rollout=null;this.paused=false;
+        this.landingSession=new LandingSession();this.reportView.hide();
+        this.mode=FLIGHT_MODE.FLIGHT;
+        this.currentDistanceNm=distanceNm;
+        this.currentApproachSide=initial.approachSide;
+        this.visualClock=0;
+        this.touchdownNoticeExpires=undefined;
+        this.menu.hidden=true;this.message.style.display='none';
+        this.lastFrame=performance.now();
+    }
+    restart() {
+        if(this.currentDistanceNm===undefined)return;
+        // Preserve left/right entry across R retries so the same approach can be practiced.
+        this.start(this.currentDistanceNm,this.currentApproachSide);
+    }
+    #showMenu() {
+        this.mode=FLIGHT_MODE.MENU;
+        this.menu.hidden=false;this.message.style.display='none';this.reportView.hide();
+        this.input.reset();
+    }
+    #showMessage(title,details) {
+        this.message.textContent=`${title}\n${details}`;
+        this.message.style.display='block';
+    }
+    #handleInput() {
+        if(this.input.justPressed('menu')){this.#showMenu();return;}
+        if(this.input.justPressed('restart')){this.restart();return;}
+        if(UI_FEATURES.CHASE_VIEW_ENABLED && this.input.justPressed('view'))this.camera.toggle();
+        if(this.input.justPressed('lighting'))this.#cycleLighting();
+        if(this.input.justPressed('pause'))this.paused=!this.paused;
+        if(this.mode===FLIGHT_MODE.FLIGHT&&!this.paused){
+            if(this.input.justPressed('gear'))this.flight.toggleGear();
+            if(this.input.justPressed('flap'))this.flight.toggleFlaps();
+        }
+    }
+    #touchdown(previousState) {
+        const state=this.flight.state;
+        const sys=this.flight.systems;
+        const contactHeight=GroundContactGeometry.mainGearBodyHeight(
+            state.pitch,state.roll,sys.gearFraction,this.profile.ground);
+        if(state.position.y>contactHeight)return;
+        const sampled=TouchdownContactSampler.atFirstContact(previousState,state,sys.gearFraction,this.profile.ground);
+        const contact=this.landingEvaluator.evaluate(sampled,this.flight.aero,sys);
+        this.landingSession.recordTouchdown(contact);
+        this.landing=this.landingSession.result;
+        if(!contact.passed) {
+            this.mode=FLIGHT_MODE.CRASH;
+            this.message.style.display='none';
+            this.reportView.show(this.landing);
+            return;
+        }
+        this.flight.deployGroundSpoilers();
+        this.rollout=new GroundRolloutModel(state,this.profile);
+        this.mode=FLIGHT_MODE.ROLLOUT;
+        this.#showMessage('MAIN GEAR TOUCHDOWN','B: WHEEL BRAKE  ·  R: RESTART');
+        this.touchdownNoticeExpires=this.visualClock+this.profile.ground.statusMessageSeconds;
+    }
+    #update(dt) {
+        this.input.update(dt);
+        this.#handleInput();
+        if(this.mode===FLIGHT_MODE.MENU ||this.paused||this.mode===FLIGHT_MODE.CRASH||this.mode===FLIGHT_MODE.COMPLETE)return;
+        this.visualClock+=dt;
+        if(this.mode===FLIGHT_MODE.FLIGHT) {
+            const previousState=this.flight.state;
+            this.flight.step(dt,{...this.input.controls,speedbrake:this.input.speedbrakeDirection});
+            this.#touchdown(previousState);
+        } else if(this.mode===FLIGHT_MODE.ROLLOUT) {
+            const controls={...this.input.controls,speedbrake:this.input.speedbrakeDirection};
+            this.flight.updateGroundSystems(dt,this.rollout.speedMps/UNITS.KT,controls);
+            const noseWasAirborne=!this.rollout.noseWheelOnGround;
+            this.rollout.step(dt,controls,this.input.isDown('brake'),this.flight.systems,
+                this.flight.thrustN,this.input.isDown('reverse'));
+            if(this.rollout.isOutsideRunway || this.rollout.stopped){
+                const outside=this.rollout.isOutsideRunway;
+                this.landingSession.finalizeRollout(this.rollout.distance,
+                    this.rollout.state.position.z-RUNWAY.z,outside);
+                this.landing=this.landingSession.result;
+                this.mode=outside?FLIGHT_MODE.CRASH:FLIGHT_MODE.COMPLETE;
+                this.message.style.display='none';
+                this.reportView.show(this.landing);
+            } else if(noseWasAirborne&&this.rollout.noseWheelOnGround) {
+                this.#showMessage('NOSE WHEEL TOUCHDOWN','B: WHEEL BRAKE  ·  R: RESTART');
+                this.touchdownNoticeExpires=this.visualClock+this.profile.ground.statusMessageSeconds;
+            } else if(this.touchdownNoticeExpires!==undefined &&
+                this.visualClock>=this.touchdownNoticeExpires) {
+                this.message.style.display='none';
+            }
+        }
+    }
+    loop(now) {
+        const dt=Math.max(0,Math.min((now-this.lastFrame)/1000,LIMITS.FRAME_DT));
+        this.lastFrame=now;
+        this.lastDelta=dt;
+        if(this.settings.visible) {
+            this.settings.update();
+            this.#draw();
+        } else {
+            if(this.mode!==FLIGHT_MODE.MENU) this.#update(dt);
+            this.#draw();
+        }
+        requestAnimationFrame(this.loop);
+    }
+    #draw() {
+        const w=this.graphics.width,h=this.graphics.height;
+        if(this.mode===FLIGHT_MODE.MENU){
+            this.ctx.fillStyle=LIGHTING_CONFIG.MODE_SETTINGS[LIGHTING_MODE.NIGHT].background;
+            this.ctx.fillRect(0,0,w,h);
+            return;
+        }
+        const state=this.rollout && (this.mode===FLIGHT_MODE.ROLLOUT||this.mode===FLIGHT_MODE.CRASH||this.mode===FLIGHT_MODE.COMPLETE)?
+            this.rollout.state:this.flight.state;
+        const cameraState=this.camera.getCamera(state);
+        this.graphics.setCamera(cameraState);
+        this.world.drawBackground(cameraState,this.lighting.current);
+        this.world.drawWorld(state,this.camera.mode===CAMERA_MODE.CHASE,this.flight.systems,
+            this.lighting.current,this.visualClock,this.profile);
+        this.hud.render(state,this.flight,this.lastDelta,this.camera.mode,this.paused,this.landing,
+            this.input.gamepad.connected,this.mode,this.lighting.current,this.rollout);
+    }
+}
+
+// Separate regression coverage for attitude rate-command and neutral-stick capture.
+class FlightControlAugmentationTests {
+    static run() {
+        const test=Object.freeze({TIME_STEP_SECONDS:1/120, SETTLE_SECONDS:2,
+            PULSE_SECONDS:0.6, RELEASE_SECONDS:1.0, PILOT_COMMAND:0.5,
+            MAX_RELEASE_RATE_DEG_PER_SEC:0.10, MIN_ANGLE_CHANGE_DEG:0.35,
+            MAX_NEUTRAL_RATE_DEG_PER_SEC:0.02});
+        const assert=(valid,label)=>{if(!valid)throw new Error(`Control augmentation test failed: ${label}`);};
+        const aircraft=AircraftCatalog.get('F15C');
+        const environment=new AtmosphereModel(ENVIRONMENT);
+        const factory=new ScenarioFactory(aircraft,environment);
+        const integrate=(flight,commands,seconds)=>{
+            const iterations=Math.round(seconds/test.TIME_STEP_SECONDS);
+            for(let step=0;step<iterations;step++)flight.step(test.TIME_STEP_SECONDS,commands);
+        };
+        for(const approachNm of UI_FEATURES.SELECTABLE_APPROACH_NM) {
+            for(const axis of ['pitch','roll','yaw']) {
+                const scenario=factory.create(approachNm);
+                const flight=new AircraftFlightDynamics(aircraft,ENVIRONMENT,scenario);
+                const commands={pitch:0,roll:0,yaw:0,throttle:scenario.throttle,speedbrake:0};
+                integrate(flight,commands,test.SETTLE_SECONDS);
+                const initialAngle=flight.state[axis];
+                assert(Math.abs(flight.state[`${axis}Rate`]*UNITS.RAD)<test.MAX_NEUTRAL_RATE_DEG_PER_SEC,
+                    `${approachNm} NM ${axis}: neutral flight does not drift in attitude`);
+                commands[axis]=test.PILOT_COMMAND;
+                integrate(flight,commands,test.PULSE_SECONDS);
+                const change=(flight.state[axis]-initialAngle)*UNITS.RAD;
+                assert(change>test.MIN_ANGLE_CHANGE_DEG,
+                    `${approachNm} NM ${axis}: control produces prompt positive response`);
+                commands[axis]=0;
+                integrate(flight,commands,test.RELEASE_SECONDS);
+                const finalRate=flight.state[`${axis}Rate`]*UNITS.RAD;
+                assert(Math.abs(finalRate)<test.MAX_RELEASE_RATE_DEG_PER_SEC,
+                    `${approachNm} NM ${axis}: rate settles without counter-steering`);
+            }
+        }
+        // No aerodynamic dynamic pressure means augmentation cannot generate servo torque.
+        const profile=aircraft;
+        const law=new FlightControlAugmentation(profile);
+        const state={pitchRate:0.7,rollRate:-0.4,yawRate:0.2};
+        const aero={speed:0,aoa:0,sideslip:0,q:0};
+        const controlled=law.calculate(state,aero,{pitch:1,roll:-1,yaw:1},{flapFraction:0});
+        assert(Object.values(controlled).every(moment=>moment===0),
+            'augmentation does not supply fictitious aerodynamic torque without airspeed');
+        return true;
+    }
+}
+
+
+// Dedicated regional-jet checks; F-15C regression checks above remain intact.
+class E170RegressionTests {
+    static run(){
+        const assert=(valid,desc)=>{if(!valid)throw new Error(`E170 regression failed: ${desc}`);};
+        const profile=AircraftCatalog.get(AIRCRAFT_ID.E170);
+        const atmosphere=new AtmosphereModel(ENVIRONMENT);
+        const factory=new ScenarioFactory(profile,atmosphere);
+        assert(AircraftCatalog.available().length===2,'both aircraft are available');
+        assert(profile.spanM===26 && profile.wingAreaM2===72.72,'E170 source dimensions');
+        for(const nm of UI_FEATURES.SELECTABLE_APPROACH_NM){
+            const left=factory.create(nm,APPROACH_SIDE.LEFT);
+            const right=factory.create(nm,APPROACH_SIDE.RIGHT);
+            assert(left.position.x<0&&right.position.x>0&&left.yaw>0&&right.yaw<0,
+                `${nm}NM has left/right interception geometry`);
+            assert(Math.abs(left.entryAngleDeg-profile.approach.ENTRY_ANGLES_DEG[nm])<LIMITS.EPS,
+                `${nm}NM uses E170 approach angle`);
+            assert(Math.abs(atmosphere.indicatedSpeed(left.velocity.magnitude(),left.position.y)/UNITS.KT-
+                profile.approach.presets[nm].iasKts)<0.1,`${nm}NM has E170 IAS`);
+            const flight=new AircraftFlightDynamics(profile,ENVIRONMENT,left);
+            assert(flight.systems.gearLockedDown===profile.approach.presets[nm].gearDown,
+                `${nm}NM starts with correct gear state`);
+            for(let step=0;step<120;step++)flight.step(1/120,{pitch:0,roll:0,yaw:0,
+                throttle:left.throttle,speedbrake:0});
+            assert(Number.isFinite(flight.state.position.y)&&Number.isFinite(flight.aero.ias),
+                `${nm}NM flight integration remains finite`);
+        }
+        const flaps=new FlapSystem(profile.systems.flaps);
+        for(const target of [0.25,0.50,0.75,1,0]){
+            flaps.toggle();flaps.update(profile.systems.flaps.travelSeconds,135);
+            assert(Math.abs(flaps.fraction-target)<LIMITS.EPS,`flap setting ${target}`);
+        }
+        const brakes=new SpeedBrakeSystem(profile.systems.speedbrake,0);
+        brakes.deployGroundSpoilers();
+        brakes.update(profile.systems.speedbrake.travelSeconds,0);
+        assert(brakes.fraction===1,'ground spoilers deploy after contact');
+        const g=profile.ground;
+        assert(GroundContactGeometry.mainGearBodyHeight(5*UNITS.DEG,0,1,g)>g.gearHeight,
+            'E170 main gear contacts first');
+        const evaluator=new LandingEvaluator(profile);
+        const touchdown={position:new Vector3(0,g.gearHeight,400),
+            velocity:new Vector3(0,-1,136*UNITS.KT),pitch:4*UNITS.DEG,roll:0,yaw:0};
+        const result=evaluator.evaluate(touchdown,{ias:136*UNITS.KT},
+            {gearLockedDown:true,flapFraction:1,speedbrakeFraction:0});
+        assert(result.passed,'nominal E170 touchdown accepted');
+        assert(!evaluator.evaluate(touchdown,{ias:170*UNITS.KT},
+            {gearLockedDown:true}).passed,'E170 rejects F-15C landing speed');
+        const base={...touchdown,velocity:new Vector3(0,0,136*UNITS.KT)};
+        const coast=new GroundRolloutModel(base,profile);
+        const reverse=new GroundRolloutModel(base,profile);
+        const zero={pitch:0,roll:0,yaw:0};
+        coast.step(1,zero,true,{speedbrakeFraction:1},profile.engine.idleNewton,false);
+        reverse.step(1,zero,true,{speedbrakeFraction:1},profile.engine.idleNewton,true);
+        assert(reverse.reverseActive&&reverse.speedMps<coast.speedMps,'reverse reduces ground speed');
+        const fighter=AircraftCatalog.get(AIRCRAFT_ID.F15C);
+        assert(!fighter.engine.reverseFraction && fighter.ground===GROUND && fighter.approach===APPROACH,
+            'F-15C retains original configuration');
+        return true;
+    }
+}
+
+class SimulatorSelfTest {
+    static run() {
+        const assert=(condition,explanation)=>{if(!condition)throw new Error(`Self-test failed: ${explanation}`);};
+        const profile=AircraftCatalog.get('F15C');
+        const atmosphere=new AtmosphereModel(ENVIRONMENT);
+        const factory=new ScenarioFactory(profile,atmosphere);
+        const scenario=factory.create(5,APPROACH_SIDE.LEFT);
+        assert(scenario.position.z===-5*UNITS.NM,'distance preset');
+        assert(UI_FEATURES.SELECTABLE_APPROACH_NM.length===2 &&
+            UI_FEATURES.SELECTABLE_APPROACH_NM.includes(5) &&
+            UI_FEATURES.SELECTABLE_APPROACH_NM.includes(2) &&
+            !UI_FEATURES.SELECTABLE_APPROACH_NM.includes(10) &&
+            !UI_FEATURES.SELECTABLE_APPROACH_NM.includes(1),
+            'only 5NM and 2NM are available as user modes');
+        assert(!UI_FEATURES.CHASE_VIEW_ENABLED,'Chase view disabled for users');
+        assert(APPROACH.presets[10] && APPROACH.presets[1] &&
+            typeof CameraController.prototype.toggle==='function',
+            'unused scenarios and Chase implementation are retained');
+        assert(scenario.position.y>GROUND.gearHeight,'initial height');
+        assert(scenario.throttle>=0&&scenario.throttle<=1,'valid throttle trim');
+        const approachAngles=Object.freeze({5:20,2:5});
+        for(const [nmText,angleDeg] of Object.entries(approachAngles)){
+            const nm=Number(nmText);
+            const left=factory.create(nm,APPROACH_SIDE.LEFT);
+            const right=factory.create(nm,APPROACH_SIDE.RIGHT);
+            const approachDistanceM=nm*UNITS.NM+APPROACH.INTERCEPT_POINT_FROM_THRESHOLD_M;
+            const expectedOffsetM=approachDistanceM*Math.tan(angleDeg*UNITS.DEG);
+            assert(left.position.x<RUNWAY.x && right.position.x>RUNWAY.x,
+                `${nm}NM: left/right start positions straddle runway`);
+            assert(Math.abs(left.position.x-RUNWAY.x+expectedOffsetM)<LIMITS.EPS &&
+                Math.abs(right.position.x-RUNWAY.x-expectedOffsetM)<LIMITS.EPS,
+                `${nm}NM: runway-relative initial offset agrees with entry angle`);
+            assert(Math.abs(left.yaw-angleDeg*UNITS.DEG)<LIMITS.EPS &&
+                Math.abs(right.yaw+angleDeg*UNITS.DEG)<LIMITS.EPS,
+                `${nm}NM: headings point inward at ${angleDeg} degrees`);
+            for(const entry of [left,right]){
+                const travelRange=approachDistanceM/Math.cos(entry.yaw);
+                const interceptX=entry.position.x+travelRange*Math.sin(entry.yaw);
+                const interceptZ=entry.position.z+travelRange*Math.cos(entry.yaw);
+                const horizontalVel=Math.atan2(entry.velocity.x,entry.velocity.z);
+                assert(Math.abs(interceptX-RUNWAY.x)<LIMITS.EPS &&
+                    Math.abs(interceptZ-(RUNWAY.z+APPROACH.INTERCEPT_POINT_FROM_THRESHOLD_M))<LIMITS.EPS,
+                    `${nm}NM ${entry.approachSide}: geometric intercept is runway aiming point`);
+                assert(Math.abs(Maths.wrapRad(horizontalVel-entry.yaw))<LIMITS.EPS,
+                    `${nm}NM ${entry.approachSide}: velocity and boresight initially aligned`);
+            }
+        }
+        const leftSample=new ScenarioFactory(profile,atmosphere,()=>0.1).create(5);
+        const rightSample=new ScenarioFactory(profile,atmosphere,()=>0.9).create(5);
+        assert(leftSample.approachSide===APPROACH_SIDE.LEFT &&
+            rightSample.approachSide===APPROACH_SIDE.RIGHT,
+            'randomized entry can choose either side');
+        assert(factory.create(5,APPROACH_SIDE.RIGHT).approachSide===APPROACH_SIDE.RIGHT,
+            'explicit entry side supports repeatable R restart');
+        const straightDormant=factory.create(10,APPROACH_SIDE.LEFT);
+        assert(straightDormant.position.x===RUNWAY.x && straightDormant.yaw===0,
+            'dormant approach geometry is unchanged');
+        for(const invalid of [-1,0,2,'CENTER',undefined]){
+            if(invalid===undefined)continue;
+            let rejected=false;
+            try{factory.create(5,invalid);}catch(error){rejected=error instanceof RangeError;}
+            assert(rejected,'invalid approach-side parameter rejected');
+        }
+
+        for (const distanceNm of APPROACH.distancesNm) {
+            const expected=APPROACH.presets[distanceNm];
+            const initial=factory.create(distanceNm);
+            const indicatedKts=atmosphere.indicatedSpeed(initial.velocity.magnitude(),initial.position.y)/UNITS.KT;
+            assert(Math.abs(indicatedKts-expected.iasKts)<0.1,
+                `${distanceNm} NM starts at ${expected.iasKts} KTS IAS`);
+            const systems=new AircraftFlightDynamics(profile,ENVIRONMENT,initial).systems;
+            assert(systems.gearFraction===Number(expected.gearDown) &&
+                systems.flapFraction===Number(expected.flapsDown) &&
+                systems.speedbrakeFraction===expected.speedbrakeFraction,
+                `${distanceNm} NM starts with the requested system positions`);
+            assert(systems.gearLockedDown===expected.gearDown &&
+                systems.gearLockedUp===!expected.gearDown &&
+                systems.flapSelectorDown===expected.flapsDown,
+                `${distanceNm} NM initial lock and flap selector states`);
+        }
+        const physics=new AircraftFlightDynamics(profile,ENVIRONMENT,scenario);
+        const before=physics.state;
+        physics.step(1/60,{pitch:0,roll:0,yaw:0,throttle:scenario.throttle});
+        const after=physics.state;
+        assert(after.position.z>before.position.z,'forward flight');
+        assert(Math.abs(after.position.y-before.position.y)<3,'bounded initial vertical motion');
+        assert(Number.isFinite(physics.aero.aoa),'finite angle of attack');
+        const p=FlightPathMarker.project(new Vector3(0,0,100),{yaw:0,pitch:0,roll:0},500);
+        assert(p&&Math.abs(p.x)<0.001&&Math.abs(p.y)<0.001,'FPM aligned');
+        const clip=new SegmentClipper(0).clip(-10,5,10,5,10,10);
+        assert(clip&&Math.abs(clip.x1)<0.001,'screen clipping');
+        assert(new LandingEvaluator().evaluate({position:new Vector3(0,GROUND.gearHeight,250),
+            velocity:new Vector3(0,-2,75),pitch:5*UNITS.DEG,roll:0,yaw:0}, {ias:75},{...physics.systems,gearLockedDown:true}).passed,
+            'landing criteria positive case');
+        assert(!new LandingEvaluator().evaluate({position:new Vector3(60,GROUND.gearHeight,250),
+            velocity:new Vector3(0,-2,75),pitch:5*UNITS.DEG,roll:0,yaw:0}, {ias:75},{...physics.systems,gearLockedDown:true}).passed,
+            'landing criteria off-runway failure');
+        const gearSystem=new LandingGearSystem(profile.systems.landingGear);
+        assert(gearSystem.lockedUp,'gear initially stowed and locked');
+        assert(physics.systems.gearLockedUp,'initial flight gear is stowed');
+        assert(gearSystem.toggle(165),'gear accepts safe extension');
+        gearSystem.update(profile.systems.landingGear.travelSeconds);
+        assert(gearSystem.lockedDown,'gear finishes extension');
+        assert(!gearSystem.toggle(275)&&gearSystem.lockedDown,'gear rejects overspeed command');
+        const flapSystem=new FlapSystem(profile.systems.flaps);
+        flapSystem.toggle();flapSystem.update(profile.systems.flaps.travelSeconds,165);
+        assert(Math.abs(flapSystem.fraction-1)<LIMITS.EPS,'flaps deploy over time');
+        flapSystem.update(profile.systems.flaps.travelSeconds,260);
+        assert(flapSystem.fraction===0,'flaps retract automatically at high speed');
+        flapSystem.update(profile.systems.flaps.travelSeconds,230);
+        assert(flapSystem.fraction===1,'flaps re-extend after slowdown');
+        const speedbrake=new SpeedBrakeSystem(profile.systems.speedbrake);
+        speedbrake.update(profile.systems.speedbrake.travelSeconds,1);
+        assert(speedbrake.fraction===1,'speedbrake reaches full extension');
+        speedbrake.update(profile.systems.speedbrake.travelSeconds,-1);
+        assert(speedbrake.fraction===0,'speedbrake retracts');
+        const papiModel=new PapiGuidanceModel(RUNWAY,LIGHTING_CONFIG);
+        const onPath=factory.create(1);
+        const optimal=papiModel.evaluate({position:onPath.position,
+            pitch:onPath.pitch,roll:0,yaw:0});
+        assert(optimal.visible && optimal.whiteCount===2 && optimal.redCount===2,
+            '3 degree path yields two white and two red PAPI lights');
+        const high=papiModel.evaluate({position:onPath.position.add(new Vector3(0,35,0)),
+            pitch:onPath.pitch,roll:0,yaw:0});
+        const low=papiModel.evaluate({position:onPath.position.add(new Vector3(0,-35,0)),
+            pitch:onPath.pitch,roll:0,yaw:0});
+        assert(high.visible && high.whiteCount>optimal.whiteCount,'PAPI indicates high path');
+        assert(low.visible && low.whiteCount<optimal.whiteCount,'PAPI indicates low path');
+        assert(!papiModel.evaluate({position:new Vector3(0,100,RUNWAY.length+100),
+            pitch:0,roll:0,yaw:0}).visible,'PAPI invisible behind light array');
+        // Runway/approach lights are suppressed during clear daylight while PAPI remains active.
+        const projectedPositions=[];
+        const dummyContext={save(){},restore(){},globalAlpha:1,shadowBlur:0};
+        const lightingProbe=new RunwayLightingRenderer({ctx:dummyContext,
+            projectPoint(point){projectedPositions.push(point);return null;}},papiModel);
+        lightingProbe.draw({position:onPath.position,pitch:onPath.pitch,roll:0,yaw:0},LIGHTING_MODE.DAY,0);
+        assert(projectedPositions.length===LIGHTING_CONFIG.PAPI_CUTOFFS_DEG.length,
+            'daylighting projects only PAPI fixtures, not runway/approach lights');
+        projectedPositions.length=0;
+        lightingProbe.draw({position:onPath.position,pitch:onPath.pitch,roll:0,yaw:0},LIGHTING_MODE.NIGHT,0);
+        assert(projectedPositions.length>LIGHTING_CONFIG.PAPI_CUTOFFS_DEG.length,
+            'runway lighting system runs in night mode');
+        const modeController=new LightingModeController();
+        assert(modeController.current===LIGHTING_MODE.DAY,'daytime default');
+        assert(LIGHTING_CONFIG.MODES.length===2 &&
+            LIGHTING_CONFIG.MODES.every(mode=>mode===LIGHTING_MODE.DAY || mode===LIGHTING_MODE.NIGHT) &&
+            modeController.cycle()===LIGHTING_MODE.NIGHT &&
+            modeController.cycle()===LIGHTING_MODE.DAY,'DAY and NIGHT are the only lighting modes');
+        const readings=new FlightInstrumentReadings(atmosphere).read(before,physics,FLIGHT_MODE.FLIGHT);
+        assert(readings.iasKts>195 && readings.iasKts<205 && readings.altitudeFt>0,
+            'instrument tapes have finite IAS and altitude source data');
+        const model=new AerodynamicsModel(profile,atmosphere);
+        const reference=model.calculate(before,{pitch:0,roll:0,yaw:0},{gearFraction:0,flapFraction:0,speedbrakeFraction:0});
+        const withFlaps=model.calculate(before,{pitch:0,roll:0,yaw:0},{gearFraction:0,flapFraction:1,speedbrakeFraction:0});
+        const withBrake=model.calculate(before,{pitch:0,roll:0,yaw:0},{gearFraction:0,flapFraction:0,speedbrakeFraction:1});
+        assert(withFlaps.cl>reference.cl&&withFlaps.cd>reference.cd,'flap increases lift and drag');
+        assert(profile.systems.flaps.deltaCL<0.20 && Math.abs(profile.systems.flaps.pitchMoment)<0.003,
+            'flap aerodynamic increments are restrained');
+        assert(profile.control.maxRollRate<=45*UNITS.DEG && profile.control.maxPitchRate<=18*UNITS.DEG &&
+            profile.control.maxYawRate<=14*UNITS.DEG,
+            'aircraft angular-rate limits remain bounded after V5.1 tuning');
+        assert(withBrake.cd>reference.cd,'speedbrake increases drag');
+        const gearDown=model.calculate(before,{pitch:0,roll:0,yaw:0},{gearFraction:1,flapFraction:0,speedbrakeFraction:0});
+        assert(gearDown.cd>reference.cd,'extending gear increases drag');
+        assert(LIGHTING_CONFIG.MODE_SETTINGS.DAY.background==='#000000' &&
+            LIGHTING_CONFIG.MODE_SETTINGS.DAY.groundFill==='#000000' &&
+            LIGHTING_CONFIG.MODE_SETTINGS.DAY.grid.startsWith('#') &&
+            LIGHTING_CONFIG.MODE_SETTINGS.DAY.runway.startsWith('#'),
+            'day mode uses black background with wireframe geometry');
+        assert(GroundContactGeometry.mainGearBodyHeight(5*UNITS.DEG,0,1)>GROUND.gearHeight,
+            'main gear reaches runway before fuselage center at positive pitch');
+        assert(GroundContactGeometry.noseWheelClearance(5*UNITS.DEG)>0.5,
+            'nose gear is still airborne on main-wheel contact');
+        assert(GroundContactGeometry.noseWheelClearance(0)===0,
+            'nose gear is on the runway at neutral pitch');
+        const contact={position:new Vector3(0,GROUND.gearHeight,300),velocity:new Vector3(0,-1,75),
+            pitch:5*UNITS.DEG,roll:0,yaw:0};
+        const ground=new GroundRolloutModel(contact,profile);
+        assert(!ground.noseWheelOnGround,'ground roll starts with nose wheel airborne');
+        for(let index=0;index<60*60&&!ground.stopped;index++) {
+            ground.step(1/60,{pitch:0,roll:0,yaw:0},true,
+                {speedbrakeFraction:0},profile.engine.idleNewton);
+            if(ground.noseWheelOnGround)break;
+        }
+        assert(ground.noseWheelOnGround&&ground.speedMps>LIMITS.STOP_SPEED,
+            'nose wheel touches down while aircraft is still rolling');
+        const overrun=new GroundRolloutModel({position:new Vector3(0,GROUND.gearHeight,RUNWAY.length-1),
+            velocity:new Vector3(0,0,75),pitch:3*UNITS.DEG,roll:0,yaw:0},profile);
+        overrun.step(1,{pitch:0,roll:0,yaw:0},false,{speedbrakeFraction:0},profile.engine.idleNewton);
+        assert(overrun.isOutsideRunway,'rollout flags a runway overrun');
+        assert(!new LandingEvaluator().evaluate({position:new Vector3(0,GROUND.bellyHeight,250),
+            velocity:new Vector3(0,-2,75),pitch:5*UNITS.DEG,roll:0,yaw:0}, {ias:75},
+            {gearLockedDown:false}).passed,'gear-up landing failure');
+        const sampledContact=TouchdownContactSampler.atFirstContact(
+            {position:new Vector3(0,4,200),velocity:new Vector3(0,-2,80),pitch:0,roll:0,yaw:0},
+            {position:new Vector3(0,2,210),velocity:new Vector3(0,-4,80),pitch:0,roll:0,yaw:0},1);
+        assert(Math.abs(sampledContact.position.z-209.5)<LIMITS.EPS &&
+            sampledContact.position.y===GROUND.gearHeight,
+            'V5 estimates touchdown time within a physics frame');
+        const evaluator=new LandingEvaluator();
+        const validTouchdown=evaluator.evaluate({position:new Vector3(3,GROUND.gearHeight,450),
+            velocity:new Vector3(0.5,-1.1,81),pitch:7*UNITS.DEG,roll:1*UNITS.DEG,yaw:1*UNITS.DEG},
+            {ias:81},{gearLockedDown:true,flapFraction:1,speedbrakeFraction:1});
+        assert(validTouchdown.passed && validTouchdown.touchdownPositionM===450 &&
+            Math.abs(validTouchdown.lateralOffsetM-3)<LIMITS.EPS,'V5 records touchdown location');
+        assert(Math.abs(validTouchdown.verticalSpeedFps+1.1/UNITS.FPS)<LIMITS.EPS &&
+            validTouchdown.yawAlignmentDeg>0,'V5 records signed vertical speed and heading error');
+        const successSession=new LandingSession();
+        successSession.recordTouchdown(validTouchdown);
+        assert(successSession.result.status===LANDING_REPORT.STATUS.IN_ROLLOUT &&
+            successSession.result.checks.rollout===undefined,'V5 reports rollout in progress');
+        successSession.finalizeRollout(850,1300,false);
+        assert(successSession.isFinished && successSession.result.passed &&
+            successSession.result.rolloutDistanceM===850 && successSession.result.checks.rollout,
+            'V5 landing complete captures stop distance');
+        const failedSession=new LandingSession();
+        const gearUpContact=evaluator.evaluate({position:new Vector3(0,GROUND.bellyHeight,450),
+            velocity:new Vector3(0,-1,81),pitch:7*UNITS.DEG,roll:0,yaw:0},
+            {ias:81},{gearLockedDown:false,flapFraction:1,speedbrakeFraction:1});
+        failedSession.recordTouchdown(gearUpContact);
+        assert(failedSession.isFinished && !failedSession.result.passed &&
+            failedSession.result.rolloutDistanceM===null,'V5 gear-up failure is finalized immediately');
+        const overrunSession=new LandingSession();
+        overrunSession.recordTouchdown(validTouchdown);
+        overrunSession.finalizeRollout(2950,RUNWAY.length+1,true);
+        assert(!overrunSession.result.passed && !overrunSession.result.checks.rollout &&
+            overrunSession.result.iasKts===validTouchdown.iasKts,
+            'V5 overrun fails without altering first-contact readings');
+        let duplicateRejected=false;
+        try{overrunSession.recordTouchdown(validTouchdown);}catch(error){duplicateRejected=true;}
+        assert(duplicateRejected,'V5 touchdown is immutable and recorded once');
+        assert(FlightControlAugmentationTests.run(),
+            'V5.2 flight-control augmentation regression tests passed');
+        assert(E170RegressionTests.run(),'V6.0 E170 integration tests passed');
+        return true;
+    }
+}
+try {
+    SimulatorSelfTest.run();
+    window.flightSimulator=new AircraftLandingApplication();
+} catch(error) {
+    console.error('Aircraft Landing Simulator V6.0 initialization error:',error);
+    const message=document.getElementById('message');
+    message.textContent=`INITIALIZATION ERROR: ${error.message}`;message.style.display='block';
+}
+</script>
+</body>
+</html>
