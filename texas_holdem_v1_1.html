@@ -1,0 +1,867 @@
+<!--
+ Program      : Texas Hold'em — 4-Player Points Edition
+ Version      : 1.2
+ Release Date : 2026-11-10
+ Copyright    : Copyright (C) 2026 [Yasuhiro Kaizu]. All rights reserved.
+ Development  : Developed with assistance from ChatGPT (OpenAI).
+ Note         : One-file, offline, points-only poker game. No real-money gambling,
+                deposits, purchases, withdrawals, transfers, external services,
+                third-party libraries, network requests, or external assets.
+-->
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'none'; font-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Texas Hold'em — 4-Player Points Edition</title>
+<style>
+:root {
+  color-scheme: dark;
+  --background: #0c1720;
+  --surface: #14252d;
+  --surface-raised: #1b3138;
+  --outline: #395057;
+  --felt: #11624f;
+  --felt-dark: #073b32;
+  --accent: #f2c970;
+  --text: #edf5f3;
+  --muted: #a8bebc;
+  --danger: #ff8a84;
+  --success: #9febba;
+  --card-width: 51px;
+  --card-height: 73px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 310px; background: radial-gradient(circle at 50% 0, #1a343b, var(--background) 72%); color: var(--text); }
+button, input { font: inherit; }
+button { border: 1px solid #587471; border-radius: 9px; color: var(--text); background: var(--surface-raised); padding: 11px 15px; cursor: pointer; transition: background .12s, border-color .12s; }
+button:hover:not(:disabled) { background: #29434a; border-color: var(--accent); }
+button:disabled { opacity: .38; cursor: not-allowed; }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+button.primary { background: #b68a3b; color: #131c1a; border-color: #e6bd70; font-weight: 800; }
+button.primary:hover:not(:disabled) { background: #e8b963; }
+button.danger { border-color: #87534e; }
+button.danger:hover:not(:disabled) { background: #58312f; }
+.shell { width: min(1100px, calc(100% - 26px)); margin: 0 auto; padding: 18px 0 24px; }
+.header { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+h1 { font-size: clamp(1.35rem, 3vw, 1.9rem); margin: 0; font-weight: 800; letter-spacing: .015em; }
+h1 small { color: var(--accent); font-size: .63em; font-weight: 650; }
+.subhead { font-size: .84rem; margin: 5px 0 0; color: var(--muted); }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-bottom: 12px; }
+.stat { padding: 11px 14px; border: 1px solid var(--outline); border-radius: 10px; background: rgba(20,37,45,.95); min-width: 0; }
+.stat-label { display: block; color: var(--muted); font-size: .74rem; margin-bottom: 5px; }
+.stat-value { display: block; font-size: 1.18rem; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.table-stage { position: relative; height: 440px; border: 1px solid #455e64; border-radius: 18px; background: linear-gradient(150deg, rgba(16,31,38,.84), rgba(8,22,29,.95)); isolation: isolate; overflow: hidden; }
+.felt { position: absolute; inset: 48px 100px; border: 12px solid #6b4d30; border-radius: 46% / 46%; background: radial-gradient(ellipse at 50% 45%, #147461 0%, var(--felt) 55%, var(--felt-dark) 100%); box-shadow: 0 0 0 4px #35291f, inset 0 0 0 3px #238371, inset 0 0 50px #032821, 0 16px 25px #020c0d70; z-index: 0; }
+.felt::after { content: ""; position: absolute; inset: 22px; border: 1px dashed #acd6ad36; border-radius: 48% / 47%; }
+.board-center { position: absolute; top: 47%; left: 50%; transform: translate(-50%, -50%); z-index: 1; display: grid; gap: 10px; justify-items: center; width: 420px; max-width: 80%; }
+.board-label { font-size: .76rem; color: #e3f8ea; letter-spacing: .07em; font-weight: 800; text-shadow: 0 1px 2px #031e19; }
+.community { display: flex; justify-content: center; gap: 5px; min-height: var(--card-height); }
+.board-pot { font-size: .89rem; font-weight: 800; background: #062e27bc; border: 1px solid #75a89388; border-radius: 999px; padding: 6px 15px; }
+.seat { position: absolute; display: grid; justify-items: center; width: 194px; padding: 9px 10px 10px; background: #132830f2; border: 2px solid #5d7478; border-radius: 15px; z-index: 2; box-shadow: 0 5px 12px #0005; font-size: .85rem; text-align: center; }
+.seat.active { border-color: var(--accent); box-shadow: 0 0 0 3px #f2c9704a, 0 5px 12px #0008; }
+.seat.folded { opacity: .64; }
+.seat.eliminated { opacity: .42; }
+.seat-1 { left: 24px; top: 25px; }
+.seat-2 { left: 50%; top: 12px; transform: translateX(-50%); }
+.seat-3 { right: 24px; top: 25px; }
+.seat-0 { left: 50%; bottom: 16px; transform: translateX(-50%); border-color: #77af9d; }
+.seat-name { font-weight: 800; white-space: nowrap; }
+.seat-role { font-size: .68rem; background: #94763f; color: #0d1c19; border-radius: 999px; padding: 2px 6px; margin-left: 4px; font-weight: 900; }
+.seat-points { font-size: .78rem; color: #c6e9cf; padding: 4px 0 6px; font-variant-numeric: tabular-nums; }
+.seat-cards { display: flex; gap: 5px; min-height: 61px; }
+.seat-status { font-size: .74rem; min-height: 18px; margin-top: 4px; color: var(--accent); }
+.card { display: flex; flex-direction: column; align-items: center; justify-content: space-between; flex: 0 0 var(--card-width); width: var(--card-width); height: var(--card-height); padding: 6px 3px 5px; border-radius: 6px; border: 1px solid #cbd2d7; background: #fafaf7; box-shadow: 0 2px 5px #0008; color: #101d25; font-weight: 900; line-height: 1; user-select: none; }
+.card.red { color: #d3303d; }
+.card .rank { font-size: 1rem; }
+.card .suit { font-size: 1.44rem; }
+.card.back { background: repeating-linear-gradient(45deg, #274a78 0, #274a78 4px, #d9e3ed 4px, #d9e3ed 6px); border: 4px solid #f7fafb; box-shadow: inset 0 0 0 2px #13385c, 0 2px 5px #0006; }
+.card.slot { background: #072e286e; border: 1px dashed #a6d8bc8a; box-shadow: none; }
+.seat .card { --card-width: 40px; --card-height: 56px; padding: 3px; }
+.seat .card .rank { font-size: .88rem; }
+.seat .card .suit { font-size: 1.1rem; }
+.controls { margin-top: 12px; border: 1px solid var(--outline); border-radius: 12px; background: #152931; padding: 14px; }
+.status-line { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 11px; }
+.status-main { font-weight: 750; color: var(--accent); }
+.status-detail { color: var(--muted); font-size: .86rem; }
+.actions { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
+.raise-box { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 5px 9px; border: 1px solid #486161; border-radius: 9px; }
+.raise-box label { color: var(--muted); font-size: .8rem; }
+.raise-box input { width: 101px; background: #0b1e23; border: 1px solid #62817a; color: white; border-radius: 6px; padding: 8px; font-variant-numeric: tabular-nums; }
+.next-hand { margin-left: auto; }
+.message { min-height: 1.8em; color: #d4eadd; font-size: .9rem; padding-top: 12px; line-height: 1.6; }
+.message.error { color: var(--danger); }
+.bottom { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; margin-top: 12px; }
+.panel { border: 1px solid var(--outline); border-radius: 12px; background: #14262e; padding: 12px 14px; min-height: 145px; }
+.panel h2 { margin: 0 0 9px; font-size: .93rem; color: var(--accent); }
+.log { margin: 0; padding-left: 19px; font-size: .78rem; line-height: 1.66; max-height: 187px; overflow: auto; color: #cadad8; }
+.rules { margin: 0; padding-left: 18px; font-size: .81rem; line-height: 1.8; color: #cadad8; }
+.footer { padding: 13px 0 0; color: #9bb0b4; font-size: .76rem; text-align: center; }
+[hidden] { display: none !important; }
+@media (max-width: 800px) {
+  .felt { inset: 52px 33px; }
+  .seat { width: 150px; padding: 7px 3px 6px; }
+  .seat-1 { left: 7px; top: 12px; }
+  .seat-2 { top: 4px; }
+  .seat-3 { right: 7px; top: 12px; }
+  .seat-0 { bottom: 5px; }
+  .board-center { top: 54%; }
+  .table-stage { height: 415px; }
+  .seat .card { --card-width: 34px; --card-height: 48px; }
+  .seat-cards { min-height: 51px; }
+}
+@media (max-width: 540px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .table-stage { height: 385px; }
+  .felt { inset: 62px 10px 48px; border-width: 8px; }
+  .seat { width: 110px; font-size: .74rem; }
+  .seat-1 { left: 2px; top: 7px; }
+  .seat-2 { top: 2px; }
+  .seat-3 { right: 2px; top: 7px; }
+  .seat-0 { bottom: 2px; }
+  .seat-points { font-size: .69rem; }
+  .seat-role { font-size: .57rem; }
+  .seat .card { --card-width: 30px; --card-height: 41px; padding: 2px; }
+  .seat .card .rank { font-size: .69rem; }
+  .seat .card .suit { font-size: .85rem; }
+  .seat-cards { min-height: 43px; }
+  .seat-status { font-size: .65rem; }
+  .board-center { top: 53%; max-width: 94%; }
+  .community { --card-width: 38px; --card-height: 56px; gap: 4px; min-height: 56px; }
+  .community .card .rank { font-size: .85rem; }
+  .community .card .suit { font-size: 1.05rem; }
+  .bottom { grid-template-columns: 1fr; }
+  .actions button { padding: 9px 10px; }
+  .next-hand { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<main class="shell">
+  <header class="header">
+    <div>
+      <h1>Texas Hold'em <small>4-PLAYER</small></h1>
+      <p class="subhead">プレイヤー1人 対 CPU 3人 ／ ノーリミット・テキサスホールデム</p>
+    </div>
+  </header>
+  <section class="stats" aria-label="ゲームの状況">
+    <div class="stat"><span class="stat-label">ハンド</span><span class="stat-value" id="hand-count">—</span></div>
+    <div class="stat"><span class="stat-label">ラウンド</span><span class="stat-value" id="street-name">—</span></div>
+    <div class="stat"><span class="stat-label">合計ポット（pt）</span><span class="stat-value" id="pot-total">0</span></div>
+    <div class="stat"><span class="stat-label">現在の最高ベット（pt）</span><span class="stat-value" id="current-bet">0</span></div>
+  </section>
+  <section class="table-stage" aria-label="ポーカーテーブル">
+    <div class="felt" aria-hidden="true"></div>
+    <div class="board-center">
+      <div class="board-label">COMMUNITY CARDS</div>
+      <div class="community" id="community" aria-label="共通カード"></div>
+      <div class="board-pot" id="table-pot">POT 0 pt</div>
+    </div>
+    <div class="seat seat-0" id="seat-0"></div>
+    <div class="seat seat-1" id="seat-1"></div>
+    <div class="seat seat-2" id="seat-2"></div>
+    <div class="seat seat-3" id="seat-3"></div>
+  </section>
+  <section class="controls" aria-label="操作">
+    <div class="status-line">
+      <div class="status-main" id="turn-status" role="status">ゲーム開始中</div>
+      <div class="status-detail" id="call-info"></div>
+    </div>
+    <div class="actions">
+      <button class="danger" id="fold-button">フォールド</button>
+      <button class="primary" id="call-button">チェック</button>
+      <div class="raise-box">
+        <label for="raise-input">ベット総額 (pt)</label>
+        <input id="raise-input" type="number" inputmode="numeric" step="1" min="0" max="0" value="0">
+        <button id="raise-button">ベット</button>
+      </div>
+      <button id="allin-button">オールイン</button>
+      <button class="primary next-hand" id="next-button" hidden>次のハンド</button>
+      <button id="restart-button">最初から</button>
+    </div>
+    <div class="message" id="message" aria-live="polite"></div>
+  </section>
+  <div class="bottom">
+    <section class="panel"><h2>対局ログ</h2><ol class="log" id="game-log" aria-label="対局ログ"></ol></section>
+    <section class="panel">
+      <h2>はじめてのテキサスホールデム</h2>
+      <ol class="rules">
+        <li>各プレイヤーに2枚の手札。場には最大5枚の共通カードが出ます。</li>
+        <li>計7枚から最強の5枚の役を作ります。役の強さは通常のポーカーと同じです。</li>
+        <li>チェック＝追加なし、コール＝必要分を合わせる、レイズ＝上乗せ、フォールド＝降りる。</li>
+        <li>ベット総額は「このラウンドで自分が出す合計ポイント」です。</li>
+        <li>スモールブラインド50pt／ビッグブラインド100pt。サイドポットにも対応。</li>
+        <li>ポイントがなくなったプレイヤーは脱落。全員を脱落させたら優勝です。</li>
+      </ol>
+    </section>
+  </div>
+  <footer class="footer">Copyright &copy; 2026 [Yasuhiro Kaizu]. All rights reserved.</footer>
+</main>
+<script>
+"use strict";
+(() => {
+  const CONFIG = Object.freeze({
+    PLAYER_COUNT: 4,
+    HUMAN_SEAT: 0,
+    STARTING_POINTS: 5000,
+    SMALL_BLIND: 50,
+    BIG_BLIND: 100,
+    MIN_RANK: 2,
+    MAX_RANK: 14,
+    HAND_SIZE: 2,
+    BOARD_SIZE: 5,
+    CPU_DELAY_MS: 430,
+    AI_SAMPLES: 115,
+    LOG_LIMIT: 35,
+    CARD_SUITS: Object.freeze(["♠", "♥", "♦", "♣"]),
+    RANK_SYMBOLS: Object.freeze({11: "J", 12: "Q", 13: "K", 14: "A"}),
+    STREETS: Object.freeze({PREFLOP: "preflop", FLOP: "flop", TURN: "turn", RIVER: "river"}),
+    HAND_NAMES: Object.freeze(["ハイカード", "ワンペア", "ツーペア", "スリーカード", "ストレート", "フラッシュ", "フルハウス", "フォーカード", "ストレートフラッシュ"])
+  });
+
+  class PokerError extends Error {
+    constructor(message) { super(message); this.name = "PokerError"; }
+  }
+
+  class RandomSource {
+    nextInt(exclusiveMax) {
+      if (!Number.isSafeInteger(exclusiveMax) || exclusiveMax <= 0) throw new RangeError("Invalid random range");
+      return Math.floor(Math.random() * exclusiveMax);
+    }
+    probability() { return Math.random(); }
+  }
+
+  class Deck {
+    #cards;
+    constructor(random) {
+      this.#cards = [];
+      for (const suit of CONFIG.CARD_SUITS) {
+        for (let rank = CONFIG.MIN_RANK; rank <= CONFIG.MAX_RANK; rank++) {
+          this.#cards.push(Object.freeze({rank, suit}));
+        }
+      }
+      for (let i = this.#cards.length - 1; i > 0; i--) {
+        const j = random.nextInt(i + 1);
+        [this.#cards[i], this.#cards[j]] = [this.#cards[j], this.#cards[i]];
+      }
+    }
+    draw() {
+      if (this.#cards.length === 0) throw new PokerError("山札が空になりました。");
+      return this.#cards.pop();
+    }
+  }
+
+  class HandEvaluator {
+    static #straightHigh(ranks) {
+      const distinct = new Set(ranks);
+      if (distinct.has(CONFIG.MAX_RANK)) distinct.add(1);
+      for (let high = CONFIG.MAX_RANK; high >= 5; high--) {
+        let complete = true;
+        for (let offset = 0; offset < 5; offset++) {
+          if (!distinct.has(high - offset)) { complete = false; break; }
+        }
+        if (complete) return high;
+      }
+      return 0;
+    }
+
+    static evaluateFive(cards) {
+      if (cards.length !== 5) throw new PokerError("役判定には5枚が必要です。");
+      const ranks = cards.map(card => card.rank).sort((a, b) => b - a);
+      const flush = cards.every(card => card.suit === cards[0].suit);
+      const straight = HandEvaluator.#straightHigh(ranks);
+      const counts = new Map();
+      for (const rank of ranks) counts.set(rank, (counts.get(rank) ?? 0) + 1);
+      const groups = [...counts.entries()].map(([rank, count]) => ({rank, count}));
+      groups.sort((a, b) => b.count - a.count || b.rank - a.rank);
+      const byFrequency = groups.map(group => group.rank);
+      const pairs = groups.filter(group => group.count === 2).map(group => group.rank).sort((a, b) => b - a);
+      if (flush && straight) return [8, straight];
+      if (groups[0].count === 4) return [7, byFrequency[0], byFrequency[1]];
+      if (groups[0].count === 3 && groups[1].count === 2) return [6, byFrequency[0], byFrequency[1]];
+      if (flush) return [5, ...ranks];
+      if (straight) return [4, straight];
+      if (groups[0].count === 3) return [3, byFrequency[0], ...byFrequency.slice(1).sort((a, b) => b - a)];
+      if (pairs.length === 2) return [2, pairs[0], pairs[1], ...byFrequency.filter(rank => !pairs.includes(rank))];
+      if (pairs.length === 1) return [1, pairs[0], ...byFrequency.filter(rank => rank !== pairs[0]).sort((a, b) => b - a)];
+      return [0, ...ranks];
+    }
+
+    static compare(left, right) {
+      const length = Math.max(left.length, right.length);
+      for (let i = 0; i < length; i++) {
+        const difference = (left[i] ?? 0) - (right[i] ?? 0);
+        if (difference !== 0) return Math.sign(difference);
+      }
+      return 0;
+    }
+
+    static bestOfSeven(cards) {
+      if (cards.length !== 7) throw new PokerError("7枚のカードが必要です。");
+      let best = null;
+      for (let a = 0; a < 3; a++) for (let b = a + 1; b < 4; b++) {
+        for (let c = b + 1; c < 5; c++) for (let d = c + 1; d < 6; d++) {
+          for (let e = d + 1; e < 7; e++) {
+            const rank = HandEvaluator.evaluateFive([cards[a], cards[b], cards[c], cards[d], cards[e]]);
+            if (best === null || HandEvaluator.compare(rank, best) > 0) best = rank;
+          }
+        }
+      }
+      return best;
+    }
+  }
+
+  class PokerAI {
+    #random;
+    constructor(random) { this.#random = random; }
+
+    #estimateEquity(snapshot, player) {
+      const opponents = snapshot.players.filter(other => other.id !== player.id && other.inHand && !other.folded).length;
+      if (opponents === 0) return 1;
+      const seen = new Set([...player.hand, ...snapshot.community].map(card => `${card.rank}:${card.suit}`));
+      const available = [];
+      for (const suit of CONFIG.CARD_SUITS) for (let rank = CONFIG.MIN_RANK; rank <= CONFIG.MAX_RANK; rank++) {
+        const card = {rank, suit};
+        if (!seen.has(`${rank}:${suit}`)) available.push(card);
+      }
+      const missingBoard = CONFIG.BOARD_SIZE - snapshot.community.length;
+      const needed = missingBoard + CONFIG.HAND_SIZE * opponents;
+      if (needed > available.length) throw new PokerError("カードのシミュレーションに失敗しました。");
+      let winShare = 0;
+      for (let sample = 0; sample < CONFIG.AI_SAMPLES; sample++) {
+        const shuffled = available.slice();
+        for (let index = 0; index < needed; index++) {
+          const exchange = index + this.#random.nextInt(shuffled.length - index);
+          [shuffled[index], shuffled[exchange]] = [shuffled[exchange], shuffled[index]];
+        }
+        const board = snapshot.community.concat(shuffled.slice(0, missingBoard));
+        const selfRank = HandEvaluator.bestOfSeven([...player.hand, ...board]);
+        let tied = 1;
+        let better = false;
+        for (let opponent = 0; opponent < opponents; opponent++) {
+          const start = missingBoard + CONFIG.HAND_SIZE * opponent;
+          const rivalCards = shuffled.slice(start, start + CONFIG.HAND_SIZE);
+          const comparison = HandEvaluator.compare(HandEvaluator.bestOfSeven([...rivalCards, ...board]), selfRank);
+          if (comparison > 0) { better = true; break; }
+          if (comparison === 0) tied++;
+        }
+        if (!better) winShare += 1 / tied;
+      }
+      return winShare / CONFIG.AI_SAMPLES;
+    }
+
+    decide(snapshot, legal) {
+      const player = snapshot.players.find(item => item.id === snapshot.actor);
+      if (!player || player.isHuman) throw new PokerError("CPUの手番ではありません。");
+      const equity = this.#estimateEquity(snapshot, player);
+      const toCall = legal.toCall;
+      const actualCall = Math.min(toCall, player.stack);
+      const potOdds = actualCall / Math.max(1, snapshot.pot + actualCall);
+      const random = this.#random.probability();
+      const canRaise = legal.canFullRaise;
+      const drawPotential = snapshot.community.length < CONFIG.BOARD_SIZE;
+      const strong = equity >= (drawPotential ? 0.63 : 0.68);
+      const excellent = equity >= 0.83;
+      const bluffChance = snapshot.community.length >= 3 ? 0.075 : 0.035;
+
+      if (toCall === 0) {
+        if (canRaise && ((strong && random < (excellent ? 0.77 : 0.38)) || random < bluffChance)) {
+          return {type: "raise", amount: this.#raiseTarget(legal, excellent)};
+        }
+        return {type: "check"};
+      }
+
+      const riskAdjustedEquity = equity - (toCall > player.stack * 0.38 ? 0.065 : 0);
+      const farBehind = riskAdjustedEquity < potOdds - 0.055;
+      const weakHand = equity < 0.18 && toCall > CONFIG.BIG_BLIND && toCall > snapshot.pot * 0.16;
+      if ((farBehind && random < 0.92) || (weakHand && random < 0.78)) return {type: "fold"};
+      if (canRaise && strong && random < (excellent ? 0.58 : 0.22)) {
+        return {type: "raise", amount: this.#raiseTarget(legal, excellent)};
+      }
+      return {type: "call"};
+    }
+
+    #raiseTarget(legal, excellent) {
+      const extra = excellent ? CONFIG.BIG_BLIND * 3 : CONFIG.BIG_BLIND;
+      const proposed = legal.minRaiseTo + (this.#random.nextInt(3) * extra);
+      return Math.min(proposed, legal.maxRaiseTo);
+    }
+  }
+
+  class PokerGame {
+    #random;
+    #deck;
+    #players;
+    #dealer;
+    #handNumber;
+    #community;
+    #street;
+    #phase;
+    #currentBet;
+    #lastFullRaise;
+    #pending;
+    #raiseRights;
+    #actor;
+    #log;
+    #headline;
+    #result;
+    #smallBlindSeat;
+    #bigBlindSeat;
+
+    constructor(random) {
+      this.#random = random;
+      this.#players = Array.from({length: CONFIG.PLAYER_COUNT}, (_, id) => ({
+        id, name: id === CONFIG.HUMAN_SEAT ? "あなた" : `CPU ${id}`,
+        isHuman: id === CONFIG.HUMAN_SEAT, stack: CONFIG.STARTING_POINTS,
+        hand: [], inHand: false, folded: false, allIn: false, streetBet: 0, totalBet: 0
+      }));
+      this.#dealer = -1;
+      this.#handNumber = 0;
+      this.#log = [];
+      this.#resetHandFields();
+      this.startHand();
+    }
+
+    #resetHandFields() {
+      this.#community = [];
+      this.#street = CONFIG.STREETS.PREFLOP;
+      this.#phase = "betting";
+      this.#currentBet = 0;
+      this.#lastFullRaise = CONFIG.BIG_BLIND;
+      this.#pending = new Set();
+      this.#raiseRights = new Set();
+      this.#actor = -1;
+      this.#headline = "";
+      this.#result = null;
+      this.#smallBlindSeat = -1;
+      this.#bigBlindSeat = -1;
+    }
+
+    #writeLog(message) {
+      this.#log.push(message);
+      if (this.#log.length > CONFIG.LOG_LIMIT) this.#log.shift();
+    }
+
+    #nextSeat(start, eligible) {
+      for (let delta = 1; delta <= CONFIG.PLAYER_COUNT; delta++) {
+        const index = (start + delta + CONFIG.PLAYER_COUNT) % CONFIG.PLAYER_COUNT;
+        if (eligible.has(index)) return index;
+      }
+      return -1;
+    }
+
+    #playersInHand() { return this.#players.filter(player => player.inHand && !player.folded); }
+    #canAct(player) { return player.inHand && !player.folded && !player.allIn; }
+    #actorsSet() { return new Set(this.#players.filter(player => this.#canAct(player)).map(player => player.id)); }
+    #pot() { return this.#players.reduce((sum, player) => sum + player.totalBet, 0); }
+
+    #postBlind(id, amount, label) {
+      const player = this.#players[id];
+      const posted = Math.min(player.stack, amount);
+      this.#commit(player, posted);
+      this.#writeLog(`${player.name}: ${label} ${posted.toLocaleString()} pt`);
+    }
+
+    #commit(player, amount) {
+      if (!Number.isSafeInteger(amount) || amount < 0 || amount > player.stack) throw new PokerError("不正なポイント操作です。");
+      player.stack -= amount;
+      player.streetBet += amount;
+      player.totalBet += amount;
+      if (player.stack === 0) player.allIn = true;
+    }
+
+    startHand() {
+      if (this.#handNumber > 0 && this.#phase !== "showdown") throw new PokerError("まだハンドが終了していません。");
+      const remaining = new Set(this.#players.filter(player => player.stack > 0).map(player => player.id));
+      if (remaining.size < 2 || !remaining.has(CONFIG.HUMAN_SEAT)) {
+        this.#phase = "complete";
+        return;
+      }
+      this.#resetHandFields();
+      this.#handNumber++;
+      this.#dealer = this.#dealer < 0 ? this.#nextSeat(CONFIG.PLAYER_COUNT - 1, remaining) : this.#nextSeat(this.#dealer, remaining);
+      this.#deck = new Deck(this.#random);
+      for (const player of this.#players) {
+        player.hand = [];
+        player.inHand = remaining.has(player.id);
+        player.folded = false;
+        player.allIn = false;
+        player.streetBet = 0;
+        player.totalBet = 0;
+      }
+      for (let deal = 0; deal < CONFIG.HAND_SIZE; deal++) {
+        for (let step = 1; step <= CONFIG.PLAYER_COUNT; step++) {
+          const id = (this.#dealer + step) % CONFIG.PLAYER_COUNT;
+          if (remaining.has(id)) this.#players[id].hand.push(this.#deck.draw());
+        }
+      }
+      this.#smallBlindSeat = remaining.size === 2 ? this.#dealer : this.#nextSeat(this.#dealer, remaining);
+      this.#bigBlindSeat = this.#nextSeat(this.#smallBlindSeat, remaining);
+      this.#writeLog(`── ハンド ${this.#handNumber} 開始 ──`);
+      this.#postBlind(this.#smallBlindSeat, CONFIG.SMALL_BLIND, "SB");
+      this.#postBlind(this.#bigBlindSeat, CONFIG.BIG_BLIND, "BB");
+      this.#currentBet = CONFIG.BIG_BLIND;
+      this.#pending = this.#actorsSet();
+      this.#raiseRights = new Set(this.#pending);
+      this.#advanceUntilAction(this.#bigBlindSeat);
+    }
+
+    #newStreet() {
+      this.#deck.draw(); // Burn one card before each community-card round.
+      let count;
+      let caption;
+      if (this.#street === CONFIG.STREETS.PREFLOP) {
+        this.#street = CONFIG.STREETS.FLOP;
+        count = 3;
+        caption = "フロップ";
+      } else if (this.#street === CONFIG.STREETS.FLOP) {
+        this.#street = CONFIG.STREETS.TURN;
+        count = 1;
+        caption = "ターン";
+      } else {
+        this.#street = CONFIG.STREETS.RIVER;
+        count = 1;
+        caption = "リバー";
+      }
+      for (let i = 0; i < count; i++) this.#community.push(this.#deck.draw());
+      for (const player of this.#players) player.streetBet = 0;
+      this.#currentBet = 0;
+      this.#lastFullRaise = CONFIG.BIG_BLIND;
+      this.#pending = this.#actorsSet();
+      this.#raiseRights = new Set(this.#pending);
+      this.#writeLog(`── ${caption} ──`);
+    }
+
+    #advanceUntilAction(lastActedSeat) {
+      let last = lastActedSeat;
+      while (this.#phase === "betting") {
+        const contenders = this.#playersInHand();
+        if (contenders.length === 1) { this.#awardUncontested(contenders[0]); return; }
+        const actors = this.#actorsSet();
+        this.#pending = new Set([...this.#pending].filter(id => actors.has(id)));
+        if (actors.size === 1) {
+          const only = this.#players[[...actors][0]];
+          if (this.#currentBet <= only.streetBet) this.#pending.clear();
+        }
+        if (this.#pending.size > 0) {
+          this.#actor = this.#nextSeat(last, this.#pending);
+          return;
+        }
+        if (this.#street === CONFIG.STREETS.RIVER) { this.#settleShowdown(); return; }
+        this.#newStreet();
+        last = this.#dealer;
+      }
+    }
+
+    getLegalActions() {
+      if (this.#phase !== "betting" || this.#actor < 0) return null;
+      const player = this.#players[this.#actor];
+      const toCall = Math.max(0, this.#currentBet - player.streetBet);
+      const maxRaiseTo = player.streetBet + player.stack;
+      const minRaiseTo = this.#currentBet < CONFIG.BIG_BLIND ? CONFIG.BIG_BLIND : this.#currentBet + this.#lastFullRaise;
+      const canRaise = this.#raiseRights.has(player.id) && maxRaiseTo > this.#currentBet;
+      return {
+        toCall, callAmount: Math.min(toCall, player.stack), maxRaiseTo, minRaiseTo,
+        canFullRaise: canRaise && maxRaiseTo >= minRaiseTo,
+        canAllIn: player.stack > 0 && (maxRaiseTo <= this.#currentBet || canRaise),
+        canShortAllInRaise: canRaise && maxRaiseTo < minRaiseTo
+      };
+    }
+
+    act(id, action) {
+      if (this.#phase !== "betting" || this.#actor !== id) throw new PokerError("現在はそのプレイヤーの手番ではありません。");
+      if (!action || typeof action.type !== "string") throw new PokerError("操作が不正です。");
+      const player = this.#players[id];
+      const legal = this.getLegalActions();
+      const previouslyBet = this.#currentBet;
+      const baseToCall = legal.toCall;
+      const type = action.type;
+      if (type === "fold") {
+        player.folded = true;
+        this.#writeLog(`${player.name}: フォールド`);
+      } else if (type === "check") {
+        if (baseToCall !== 0) throw new PokerError("チェックできません。コールかフォールドを選んでください。");
+        this.#writeLog(`${player.name}: チェック`);
+      } else if (type === "call") {
+        this.#commit(player, legal.callAmount);
+        this.#writeLog(`${player.name}: ${baseToCall === 0 ? "チェック" : `コール ${legal.callAmount.toLocaleString()} pt`}${player.allIn ? "（オールイン）" : ""}`);
+      } else if (type === "raise" || type === "allin") {
+        const target = type === "allin" ? legal.maxRaiseTo : action.amount;
+        if (!Number.isSafeInteger(target) || target <= player.streetBet || target > legal.maxRaiseTo) throw new PokerError("ベット総額が不正です。");
+        if (type === "raise" && target <= previouslyBet) throw new PokerError("レイズは現在の最高ベットを超える必要があります。");
+        const increasesBet = target > previouslyBet;
+        if (increasesBet) {
+          if (!this.#raiseRights.has(id)) throw new PokerError("この手番では再レイズできません。");
+          if (target < legal.minRaiseTo && target !== legal.maxRaiseTo) throw new PokerError(`最低レイズ総額は ${legal.minRaiseTo} pt です。`);
+        }
+        if (type === "allin" && !legal.canAllIn) throw new PokerError("この手番ではオールインできません。");
+        this.#commit(player, target - player.streetBet);
+        this.#writeLog(`${player.name}: ${increasesBet ? "レイズ" : "オールイン・コール"} ${target.toLocaleString()} pt${player.allIn ? "（オールイン）" : ""}`);
+        if (increasesBet) {
+          const raiseSize = target - previouslyBet;
+          this.#currentBet = target;
+          if (raiseSize >= this.#lastFullRaise) {
+            this.#lastFullRaise = raiseSize;
+            this.#pending = this.#actorsSet();
+            this.#pending.delete(id);
+            this.#raiseRights = new Set(this.#pending);
+          } else {
+            for (const other of this.#players) {
+              if (other.id !== id && this.#canAct(other) && other.streetBet < this.#currentBet) this.#pending.add(other.id);
+            }
+          }
+        }
+      } else {
+        throw new PokerError("未対応の操作です。");
+      }
+      this.#pending.delete(id);
+      this.#raiseRights.delete(id);
+      this.#headline = "";
+      this.#advanceUntilAction(id);
+    }
+
+    #awardUncontested(winner) {
+      const amount = this.#pot();
+      winner.stack += amount;
+      this.#result = {winnerIds: [winner.id], details: [`${winner.name} が全員を降ろして ${amount.toLocaleString()} pt 獲得。`], ranks: {}};
+      this.#writeLog(this.#result.details[0]);
+      this.#finishHand();
+    }
+
+    #splitAward(amount, winners) {
+      const share = Math.floor(amount / winners.length);
+      for (const winner of winners) winner.stack += share;
+      const remainder = amount % winners.length;
+      const order = [...winners].sort((left, right) => {
+        const leftOffset = (left.id - this.#dealer + CONFIG.PLAYER_COUNT) % CONFIG.PLAYER_COUNT;
+        const rightOffset = (right.id - this.#dealer + CONFIG.PLAYER_COUNT) % CONFIG.PLAYER_COUNT;
+        const leftPosition = leftOffset === 0 ? CONFIG.PLAYER_COUNT : leftOffset;
+        const rightPosition = rightOffset === 0 ? CONFIG.PLAYER_COUNT : rightOffset;
+        return leftPosition - rightPosition;
+      });
+      for (let i = 0; i < remainder; i++) order[i].stack++;
+    }
+
+    #settleShowdown() {
+      const ranks = new Map();
+      for (const player of this.#playersInHand()) {
+        ranks.set(player.id, HandEvaluator.bestOfSeven([...player.hand, ...this.#community]));
+      }
+      const levels = [...new Set(this.#players.map(player => player.totalBet).filter(value => value > 0))].sort((a, b) => a - b);
+      const awardDetails = [];
+      const winnerIds = new Set();
+      let previousLevel = 0;
+      for (const level of levels) {
+        const contributors = this.#players.filter(player => player.totalBet >= level);
+        const amount = (level - previousLevel) * contributors.length;
+        previousLevel = level;
+        const eligible = contributors.filter(player => player.inHand && !player.folded);
+        if (eligible.length === 0) throw new PokerError("ポット配分対象が存在しません。");
+        let best = ranks.get(eligible[0].id);
+        for (const player of eligible.slice(1)) if (HandEvaluator.compare(ranks.get(player.id), best) > 0) best = ranks.get(player.id);
+        const winners = eligible.filter(player => HandEvaluator.compare(ranks.get(player.id), best) === 0);
+        this.#splitAward(amount, winners);
+        for (const winner of winners) winnerIds.add(winner.id);
+        const label = eligible.length === 1 ? "単独対象" : CONFIG.HAND_NAMES[best[0]];
+        awardDetails.push(`${winners.map(player => player.name).join("・")}：${amount.toLocaleString()} pt（${label}${winners.length > 1 ? "／分割" : ""}）`);
+      }
+      this.#result = {winnerIds: [...winnerIds], details: awardDetails, ranks: Object.fromEntries([...ranks].map(([id, value]) => [id, CONFIG.HAND_NAMES[value[0]]]))};
+      for (const detail of awardDetails) this.#writeLog(detail);
+      this.#finishHand();
+    }
+
+    #finishHand() {
+      this.#actor = -1;
+      this.#pending.clear();
+      this.#raiseRights.clear();
+      const viable = this.#players.filter(player => player.stack > 0);
+      if (viable.length === 1) {
+        this.#phase = "complete";
+        this.#headline = viable[0].isHuman ? "優勝！ すべてのポイントを獲得しました。" : `${viable[0].name} が優勝しました。`;
+      } else if (this.#players[CONFIG.HUMAN_SEAT].stack === 0) {
+        this.#phase = "complete";
+        this.#headline = "ポイントがなくなりました。ゲーム終了です。";
+      } else {
+        this.#phase = "showdown";
+        this.#headline = this.#result.details.join("　／　");
+      }
+      const balance = this.#players.reduce((sum, player) => sum + player.stack, 0);
+      const expected = CONFIG.PLAYER_COUNT * CONFIG.STARTING_POINTS;
+      if (balance !== expected) throw new PokerError("ポイント保存則に違反しました。");
+    }
+
+    snapshot() {
+      return {
+        players: this.#players.map(player => ({...player, hand: [...player.hand]})),
+        community: [...this.#community], dealer: this.#dealer, handNumber: this.#handNumber,
+        street: this.#street, phase: this.#phase, currentBet: this.#currentBet,
+        smallBlind: this.#smallBlindSeat, bigBlind: this.#bigBlindSeat,
+        pot: this.#pot(), actor: this.#actor, log: [...this.#log],
+        headline: this.#headline,
+        result: this.#result === null ? null : {winnerIds: [...this.#result.winnerIds], details: [...this.#result.details], ranks: {...this.#result.ranks}}
+      };
+    }
+  }
+
+  class GameView {
+    #elements;
+    #onAction;
+    #onNextHand;
+    #onRestart;
+    constructor() {
+      const ids = ["hand-count", "street-name", "pot-total", "current-bet", "table-pot", "community", "turn-status", "call-info", "fold-button", "call-button", "raise-input", "raise-button", "allin-button", "next-button", "restart-button", "message", "game-log"];
+      this.#elements = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
+      this.#onAction = null;
+      this.#onNextHand = null;
+      this.#onRestart = null;
+      this.#elements["fold-button"].addEventListener("click", () => this.#onAction?.({type: "fold"}));
+      this.#elements["call-button"].addEventListener("click", () => this.#onAction?.({type: this.#elements["call-button"].dataset.action}));
+      this.#elements["raise-button"].addEventListener("click", () => this.#onAction?.({type: "raise", amount: Number(this.#elements["raise-input"].value)}));
+      this.#elements["allin-button"].addEventListener("click", () => this.#onAction?.({type: "allin"}));
+      this.#elements["next-button"].addEventListener("click", () => this.#onNextHand?.());
+      this.#elements["restart-button"].addEventListener("click", () => this.#onRestart?.());
+    }
+    bind({onAction, onNextHand, onRestart}) {
+      this.#onAction = onAction;
+      this.#onNextHand = onNextHand;
+      this.#onRestart = onRestart;
+    }
+    #element(tag, className, text) {
+      const element = document.createElement(tag);
+      if (className) element.className = className;
+      if (text !== undefined) element.textContent = text;
+      return element;
+    }
+    #card(card, hidden = false, slot = false) {
+      const className = `card${hidden ? " back" : slot ? " slot" : ["♥", "♦"].includes(card.suit) ? " red" : ""}`;
+      const node = this.#element("span", className);
+      if (!hidden && !slot) {
+        node.append(this.#element("span", "rank", CONFIG.RANK_SYMBOLS[card.rank] ?? String(card.rank)));
+        node.append(this.#element("span", "suit", card.suit));
+      }
+      node.setAttribute("aria-label", hidden ? "伏せられたカード" : slot ? "未公開" : `${CONFIG.RANK_SYMBOLS[card.rank] ?? card.rank}${card.suit}`);
+      return node;
+    }
+    #seat(snapshot, player) {
+      const node = document.getElementById(`seat-${player.id}`);
+      node.className = `seat seat-${player.id}${snapshot.actor === player.id ? " active" : ""}${player.folded ? " folded" : ""}${player.stack === 0 && !player.inHand ? " eliminated" : ""}`;
+      const role = player.id === snapshot.dealer ? "D" : player.id === snapshot.smallBlind ? "SB" : player.id === snapshot.bigBlind ? "BB" : "";
+      const title = this.#element("div", "seat-name", player.name);
+      if (role) title.append(this.#element("span", "seat-role", role));
+      const points = this.#element("div", "seat-points", `${player.stack.toLocaleString()} pt · 投入 ${player.streetBet.toLocaleString()} pt`);
+      const cards = this.#element("div", "seat-cards");
+      const reveal = player.isHuman || (snapshot.phase !== "betting" && player.inHand && !player.folded && snapshot.community.length === CONFIG.BOARD_SIZE);
+      if (player.hand.length) cards.append(...player.hand.map(card => this.#card(card, !reveal)));
+      const rank = snapshot.result?.ranks[player.id];
+      const state = !player.inHand ? "脱落" : player.folded ? "フォールド" : snapshot.phase === "betting" && player.allIn ? "オールイン" : rank ?? (snapshot.result?.winnerIds.includes(player.id) ? "勝利" : "");
+      const status = this.#element("div", "seat-status", state);
+      node.replaceChildren(title, points, cards, status);
+    }
+    #turnControls(snapshot, legal) {
+      const humanTurn = snapshot.phase === "betting" && snapshot.actor === CONFIG.HUMAN_SEAT;
+      const fold = this.#elements["fold-button"];
+      const call = this.#elements["call-button"];
+      const raise = this.#elements["raise-button"];
+      const allin = this.#elements["allin-button"];
+      const input = this.#elements["raise-input"];
+      fold.disabled = !humanTurn;
+      call.disabled = !humanTurn;
+      raise.disabled = !humanTurn || !legal?.canFullRaise;
+      allin.disabled = !humanTurn || !legal?.canAllIn;
+      input.disabled = raise.disabled;
+      input.min = String(legal?.minRaiseTo ?? 0);
+      input.max = String(legal?.maxRaiseTo ?? 0);
+      input.value = String(legal?.minRaiseTo ?? 0);
+      call.textContent = humanTurn && legal.toCall > 0 ? `コール ${legal.callAmount.toLocaleString()} pt` : "チェック";
+      call.dataset.action = humanTurn && legal.toCall > 0 ? "call" : "check";
+      raise.textContent = snapshot.currentBet > 0 ? "レイズ" : "ベット";
+      const human = snapshot.players[CONFIG.HUMAN_SEAT];
+      this.#elements["next-button"].hidden = snapshot.phase !== "showdown";
+      this.#elements["turn-status"].textContent = snapshot.phase === "complete" ? "ゲーム終了" : snapshot.phase === "showdown" ? "ハンド終了" : humanTurn ? "あなたの手番" : `${snapshot.players[snapshot.actor]?.name ?? "CPU"} が考えています…`;
+      this.#elements["call-info"].textContent = humanTurn ? `必要コール ${legal.toCall.toLocaleString()} pt ／ 手持ち ${human.stack.toLocaleString()} pt${legal.canShortAllInRaise ? " ／ 短いレイズはオールインのみ" : ""}` : `初期ポイント 各 ${CONFIG.STARTING_POINTS.toLocaleString()} pt`;
+    }
+    render(snapshot, legal, error = "") {
+      const e = this.#elements;
+      e["hand-count"].textContent = String(snapshot.handNumber);
+      e["street-name"].textContent = ({preflop: "プリフロップ", flop: "フロップ", turn: "ターン", river: "リバー"})[snapshot.street];
+      e["pot-total"].textContent = snapshot.pot.toLocaleString();
+      e["current-bet"].textContent = snapshot.currentBet.toLocaleString();
+      e["table-pot"].textContent = `POT ${snapshot.pot.toLocaleString()} pt`;
+      const community = [...snapshot.community.map(card => this.#card(card))];
+      while (community.length < CONFIG.BOARD_SIZE) community.push(this.#card(null, false, true));
+      e.community.replaceChildren(...community);
+      for (const player of snapshot.players) this.#seat(snapshot, player);
+      this.#turnControls(snapshot, legal);
+      e.message.textContent = error || snapshot.headline || (snapshot.phase === "betting" ? "CPUの手札は非公開です。共通カードとベット状況を参考に判断してください。" : "");
+      e.message.classList.toggle("error", Boolean(error));
+      e["game-log"].replaceChildren(...snapshot.log.slice(-12).reverse().map(line => this.#element("li", "", line)));
+    }
+  }
+
+  class PokerController {
+    #game;
+    #ai;
+    #view;
+    #random;
+    #timer;
+    constructor(view, random) {
+      this.#view = view;
+      this.#random = random;
+      this.#ai = new PokerAI(random);
+      this.#timer = null;
+      this.#game = new PokerGame(random);
+      this.#view.bind({
+        onAction: action => this.#performHumanAction(action),
+        onNextHand: () => this.#nextHand(),
+        onRestart: () => this.#restart()
+      });
+    }
+    start() { this.#sync(); }
+    #clearTimer() {
+      if (this.#timer !== null) clearTimeout(this.#timer);
+      this.#timer = null;
+    }
+    #sync(error = "") {
+      this.#clearTimer();
+      const snapshot = this.#game.snapshot();
+      this.#view.render(snapshot, this.#game.getLegalActions(), error);
+      if (snapshot.phase === "betting" && snapshot.actor !== CONFIG.HUMAN_SEAT) {
+        const expectedHand = snapshot.handNumber;
+        const expectedActor = snapshot.actor;
+        this.#timer = setTimeout(() => {
+          this.#timer = null;
+          const latest = this.#game.snapshot();
+          if (latest.phase !== "betting" || latest.handNumber !== expectedHand || latest.actor !== expectedActor) return;
+          try {
+            const decision = this.#ai.decide(latest, this.#game.getLegalActions());
+            this.#game.act(expectedActor, decision);
+            this.#sync();
+          } catch (error) {
+            this.#view.render(this.#game.snapshot(), this.#game.getLegalActions(), `CPU処理エラー: ${error.message}`);
+          }
+        }, CONFIG.CPU_DELAY_MS);
+      }
+    }
+    #performHumanAction(action) {
+      try { this.#game.act(CONFIG.HUMAN_SEAT, action); this.#sync(); }
+      catch (error) { this.#sync(error.message); }
+    }
+    #nextHand() {
+      try { this.#game.startHand(); this.#sync(); }
+      catch (error) { this.#sync(error.message); }
+    }
+    #restart() {
+      this.#clearTimer();
+      this.#game = new PokerGame(this.#random);
+      this.#sync();
+    }
+  }
+
+  new PokerController(new GameView(), new RandomSource()).start();
+})();
+</script>
+</body>
+</html>
