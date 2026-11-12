@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<!--
+  Program      : Chess - Computer Match
+  Version      : 1.1 (Square Size Fix)
+  Release Date : 2026-11-05
+  Copyright    : (C) 2026 [Yasuhiro Kaizu]
+  Development  : Developed with assistance from ChatGPT (OpenAI)
+  Note         : Standalone offline HTML/JavaScript game. No network connections,
+                 external scripts, remote resources, storage, or analytics.
+                 One human player versus computer; no two-human mode.
+-->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>チェス［コンピューター対戦］</title>
+<style>
+  :root {
+    --page: #111922;
+    --panel: #1b2835;
+    --panel-edge: #344757;
+    --cream: #ece4d4;
+    --muted: #bbc9d1;
+    --light-square: #e8ead8;
+    --dark-square: #72928a;
+    --accent: #f1c96f;
+    --success: #a5d9bb;
+    --danger: #f79e9c;
+    --board-size: min(68vh, 65vw, 594px);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: radial-gradient(circle at 45% -30%, #304254, var(--page) 67%);
+    color: var(--cream);
+    font-family: system-ui, -apple-system, "Noto Sans JP", "Meiryo", sans-serif;
+  }
+  button, select { font: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: .45; }
+  header { text-align: center; padding: 14px 12px 8px; }
+  h1 { margin: 0; font-size: clamp(22px, 2.7vw, 29px); letter-spacing: .07em; font-weight: 700; }
+  header p { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
+  main {
+    display: grid;
+    flex: 1;
+    width: 100%;
+    grid-template-columns: var(--board-size) minmax(274px, 336px);
+    align-items: start;
+    justify-content: center;
+    gap: 22px;
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 8px 14px 24px;
+  }
+  .board-shell { width: 100%; }
+  .opponent {
+    display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
+    margin-bottom: 7px; font-size: 14px; color: var(--muted);
+  }
+  .opponent strong { color: var(--cream); font-size: 15px; }
+  .board {
+    width: 100%; aspect-ratio: 1; display: grid;
+    grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr);
+    border: 5px solid #43544f; border-radius: 4px; overflow: hidden;
+    box-shadow: 0 12px 32px #0007;
+  }
+  .square {
+    min-width: 0; min-height: 0; width: 100%; height: 100%; aspect-ratio: 1 / 1; overflow: hidden;
+    border: none; border-radius: 0; padding: 0;
+    position: relative; display: grid; place-items: center; font-size: clamp(24px, 5.1vw, 56px);
+    line-height: 1; user-select: none; -webkit-user-select: none;
+    transition: background-color 80ms;
+  }
+  .square.light { background: var(--light-square); }
+  .square.dark { background: var(--dark-square); }
+  .square.last-move.light { background: #e7d78c; }
+  .square.last-move.dark { background: #b4a35e; }
+  .square.selected.light, .square.selected.dark { background: #f2c870; }
+  .square.in-check { background: #d77875 !important; }
+  .square:focus-visible { outline: 3px solid #fff; outline-offset: -4px; z-index: 2; }
+  .square.target::after {
+    content: ""; position: absolute; width: 25%; height: 25%; border-radius: 50%;
+    background: #1a4735a8; pointer-events: none;
+  }
+  .square.target.has-piece::after {
+    width: 80%; height: 80%; background: transparent; border: 5px solid #32664cbd;
+  }
+  .piece { position: relative; z-index: 1; pointer-events: none; font-family: "DejaVu Sans", "Noto Sans Symbols 2", "Segoe UI Symbol", serif; }
+  .piece.white { color: #fffaf0; -webkit-text-stroke: 1.2px #344047; text-shadow: 0 2px 2px #1a2735a0; }
+  .piece.black { color: #1b2830; -webkit-text-stroke: .45px #e9e8d7; text-shadow: 0 1px 1px #ffffff70; }
+  .coord { position: absolute; z-index: 2; font-size: clamp(9px, 1vw, 12px); font-weight: 650; line-height: 1; pointer-events: none; }
+  .coord.file { right: 3px; bottom: 3px; }
+  .coord.rank { left: 4px; top: 4px; }
+  .light .coord { color: #536d61; }
+  .dark .coord { color: #e5eee8; }
+  .under-board { font-size: 12px; color: var(--muted); padding: 10px 0; text-align: center; }
+  .panel {
+    border: 1px solid var(--panel-edge); border-radius: 12px;
+    padding: 17px; background: #1b2835f0; box-shadow: 0 10px 30px #0003;
+  }
+  .panel h2 { font-size: 16px; margin: 0 0 13px; letter-spacing: .035em; }
+  .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+  label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 12px; }
+  select {
+    background: #101c28; color: var(--cream); width: 100%; padding: 9px 8px;
+    border-radius: 6px; border: 1px solid #536979; font-size: 13px;
+  }
+  .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 12px; }
+  .buttons button, .claim-button {
+    min-height: 37px; padding: 8px 9px; border-radius: 6px;
+    border: 1px solid #637686; color: var(--cream); background: #304253; font-size: 13px;
+  }
+  .buttons button.primary { background: #b8944b; border-color: #dbbc75; color: #101922; font-weight: 700; }
+  .buttons button:not(:disabled):hover, .claim-button:not(:disabled):hover { filter: brightness(1.15); }
+  .claim-button { display: block; margin-top: 9px; width: 100%; }
+  .status-card {
+    margin-top: 15px; padding: 11px; min-height: 87px; border-radius: 8px;
+    background: #0f1a25; border: 1px solid #3a4b58;
+  }
+  .status-title { font-weight: 750; font-size: 15px; color: var(--accent); }
+  .status-detail { font-size: 12px; line-height: 1.65; color: var(--muted); margin-top: 6px; }
+  .history-heading { font-size: 14px; margin: 17px 0 7px; }
+  .move-list {
+    height: min(26vh, 194px); min-height: 92px; overflow-y: auto;
+    background: #101b26; border: 1px solid #3a4b58; border-radius: 7px;
+    padding: 8px 10px; font: 13px/1.65 ui-monospace, "Noto Sans Mono", monospace;
+  }
+  .move-row { display: grid; grid-template-columns: 43px 1fr 1fr; gap: 5px; }
+  .move-row span:first-child { color: #9eabb8; }
+  .move-row .recent { color: var(--accent); font-weight: bold; }
+  .empty-history { color: #80929f; }
+  .info { font-size: 11px; line-height: 1.65; color: var(--muted); margin-top: 11px; }
+  .modal-backdrop {
+    position: fixed; inset: 0; display: grid; place-items: center;
+    z-index: 10; background: #050d15bc; padding: 20px;
+  }
+  .modal-backdrop[hidden] { display: none; }
+  .promotion-dialog {
+    border: 1px solid #6a808e; border-radius: 10px;
+    background: #1b2938; padding: 18px; text-align: center;
+    box-shadow: 0 16px 40px #0009;
+  }
+  .promotion-dialog h2 { margin: 0 0 12px; font-size: 17px; }
+  .promotion-choices { display: flex; gap: 10px; }
+  .promotion-choices button {
+    width: 68px; height: 74px; border: 1px solid #566c7c; border-radius: 7px;
+    background: #e8ead8; font-size: 45px;
+  }
+  .promotion-choices button:hover { background: #f1c96f; }
+  .promotion-choices .piece.black { color: #182530; }
+  .promotion-dialog p { color: var(--muted); font-size: 12px; margin: 12px 0 0; }
+  @media (max-width: 720px) {
+    :root { --board-size: min(94vw, 68vh); }
+    main { grid-template-columns: minmax(0, var(--board-size)); gap: 8px; }
+    .square { font-size: clamp(28px, 8vw, 53px); }
+    .panel { padding: 14px; }
+    .move-list { height: 112px; }
+  }
+  @media (max-height: 650px) and (min-width: 721px) {
+    :root { --board-size: min(76vh, 60vw, 540px); }
+    header { padding-top: 6px; }
+    main { padding-top: 3px; }
+    .panel { padding: 12px; }
+    .status-card { min-height: 70px; }
+    .move-list { height: 100px; }
+  }
+  /* Footer remains in normal flow so it does not cover the board. */
+  .copyright-footer {
+    padding: 6px 12px 12px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>チェス［コンピューター対戦］</h1>
+  <p>CHESS · STANDALONE OFFLINE GAME</p>
+</header>
+<main>
+  <section class="board-shell" aria-label="チェス盤">
+    <div class="opponent"><strong id="opponent-label">コンピューター（黒）</strong><span id="turn-label">白番</span></div>
+    <div id="chessboard" class="board" role="group" aria-label="チェス盤 8×8"></div>
+    <div class="under-board" id="player-label">あなた：白（先手）</div>
+  </section>
+  <aside class="panel">
+    <h2>対局設定</h2>
+    <div class="input-grid">
+      <label for="player-color">あなたの駒
+        <select id="player-color">
+          <option value="w">白（先手）</option>
+          <option value="b">黒（後手）</option>
+        </select>
+      </label>
+      <label for="difficulty">難易度
+        <select id="difficulty">
+          <option value="easy">初級</option>
+          <option value="normal" selected>中級</option>
+          <option value="hard">上級</option>
+        </select>
+      </label>
+    </div>
+    <div class="buttons">
+      <button id="new-game" class="primary" type="button">新しい対局</button>
+      <button id="undo" type="button">待った</button>
+    </div>
+    <button id="claim-draw" class="claim-button" type="button" disabled>引き分けを申請</button>
+    <div class="status-card" aria-live="polite" aria-atomic="true">
+      <div id="status-title" class="status-title">対局開始</div>
+      <div id="status-detail" class="status-detail">駒をクリックして移動先を選んでください。</div>
+    </div>
+    <h3 class="history-heading">棋譜（標準代数式）</h3>
+    <div id="move-list" class="move-list" aria-label="棋譜"></div>
+    <div class="info">
+      駒を選ぶと、移動可能なマスが表示されます。<br>
+      キャスリング・アンパッサン・ポーン昇格に対応。<br>
+      同一局面3回／50手ルールの引き分けは申請制です。<br>
+      ネット接続・インストール・外部ライブラリは不要です。
+    </div>
+  </aside>
+</main>
+<footer class="copyright-footer" aria-label="著作権表示">© 2026 Yasuhiro Kaizu. All rights reserved.</footer>
+<div id="promotion-modal" class="modal-backdrop" hidden>
+  <div class="promotion-dialog" role="dialog" aria-modal="true" aria-labelledby="promotion-title">
+    <h2 id="promotion-title">昇格する駒を選択</h2>
+    <div id="promotion-choices" class="promotion-choices"></div>
+    <p>クイーン・ルーク・ビショップ・ナイトから選べます。</p>
+  </div>
+</div>
+<script>
+"use strict";
+(() => {
+  const CONFIG = Object.freeze({
+    BOARD_SIZE: 8,
+    BOARD_SQUARES: 64,
+    INITIAL_FEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    FILES: "abcdefgh",
+    WHITE: "w",
+    BLACK: "b",
+    EMPTY: null,
+    PAWN: "P",
+    KING: "K",
+    ROOK: "R",
+    PROMOTIONS: Object.freeze(["Q", "R", "B", "N"]),
+    KNIGHT_STEPS: Object.freeze([[1, 2], [2, 1], [-1, 2], [-2, 1], [1, -2], [2, -1], [-1, -2], [-2, -1]]),
+    KING_STEPS: Object.freeze([[1, 1], [1, 0], [1, -1], [0, 1], [0, -1], [-1, 1], [-1, 0], [-1, -1]]),
+    DIAGONALS: Object.freeze([[1, 1], [1, -1], [-1, 1], [-1, -1]]),
+    ORTHOGONALS: Object.freeze([[1, 0], [-1, 0], [0, 1], [0, -1]]),
+    CASTLES: Object.freeze([
+      { side: "w", right: "K", kingFrom: 60, kingTo: 62, rookFrom: 63, rookTo: 61, empty: [61, 62], safe: [60, 61, 62] },
+      { side: "w", right: "Q", kingFrom: 60, kingTo: 58, rookFrom: 56, rookTo: 59, empty: [59, 58, 57], safe: [60, 59, 58] },
+      { side: "b", right: "k", kingFrom: 4, kingTo: 6, rookFrom: 7, rookTo: 5, empty: [5, 6], safe: [4, 5, 6] },
+      { side: "b", right: "q", kingFrom: 4, kingTo: 2, rookFrom: 0, rookTo: 3, empty: [3, 2, 1], safe: [4, 3, 2] }
+    ]),
+    ROOK_CASTLING_RIGHTS: Object.freeze({ 63: "K", 56: "Q", 7: "k", 0: "q" }),
+    PIECE_VALUES: Object.freeze({ P: 100, N: 320, B: 335, R: 500, Q: 900, K: 20000 }),
+    MATE_SCORE: 1000000,
+    DRAW_HALF_MOVES_CLAIM: 100,
+    DRAW_HALF_MOVES_AUTO: 150,
+    DRAW_REPETITIONS_CLAIM: 3,
+    DRAW_REPETITIONS_AUTO: 5,
+    AI_SETTINGS: Object.freeze({
+      easy: { depth: 2, budgetMs: 350 },
+      normal: { depth: 3, budgetMs: 1200 },
+      hard: { depth: 4, budgetMs: 2300 }
+    }),
+    AI_DELAY_MS: 95,
+    SEARCH_CLOCK_INTERVAL: 1024,
+    QUIESCENCE_DEPTH: 3,
+    CENTER_WEIGHT: 4,
+    PAWN_ADVANCE_WEIGHT: 5,
+    PAWN_CENTER_ADVANCE_WEIGHT: 5,
+    CASTLED_KING_BONUS: 35,
+    BISHOP_PAIR_BONUS: 25
+  });
+
+  class ChessPosition {
+    constructor(board, turn, castling, enPassant, halfmoveClock, fullmoveNumber) {
+      this.board = board;
+      this.turn = turn;
+      this.castling = castling;
+      this.enPassant = enPassant;
+      this.halfmoveClock = halfmoveClock;
+      this.fullmoveNumber = fullmoveNumber;
+    }
+
+    static fromFEN(fen) {
+      const [pieces, turn, rights, ep, halfmove, fullmove] = fen.split(" ");
+      const ranks = pieces.split("/");
+      if (ranks.length !== CONFIG.BOARD_SIZE || ![CONFIG.WHITE, CONFIG.BLACK].includes(turn)) {
+        throw new Error("Invalid FEN: board or turn");
+      }
+      const board = [];
+      for (const rank of ranks) {
+        let count = 0;
+        for (const token of rank) {
+          if (/[1-8]/.test(token)) {
+            const empties = Number(token);
+            for (let index = 0; index < empties; index++) board.push(CONFIG.EMPTY);
+            count += empties;
+          } else if (/[prnbqkPRNBQK]/.test(token)) {
+            board.push(token);
+            count++;
+          } else {
+            throw new Error("Invalid FEN: piece");
+          }
+        }
+        if (count !== CONFIG.BOARD_SIZE) throw new Error("Invalid FEN: rank length");
+      }
+      if (board.filter(piece => piece === "K").length !== 1 || board.filter(piece => piece === "k").length !== 1) {
+        throw new Error("Invalid FEN: kings");
+      }
+      const enPassant = ep === "-" ? -1 : ChessPosition.indexFromName(ep);
+      if (enPassant < -1 || !Number.isInteger(Number(halfmove)) || !Number.isInteger(Number(fullmove))) {
+        throw new Error("Invalid FEN: counters");
+      }
+      return new ChessPosition(board, turn, rights === "-" ? "" : rights, enPassant, Number(halfmove), Number(fullmove));
+    }
+
+    static indexFromName(name) {
+      if (!/^[a-h][1-8]$/.test(name)) return -2;
+      return (CONFIG.BOARD_SIZE - Number(name[1])) * CONFIG.BOARD_SIZE + CONFIG.FILES.indexOf(name[0]);
+    }
+
+    static squareName(index) {
+      const row = Math.floor(index / CONFIG.BOARD_SIZE);
+      return CONFIG.FILES[index % CONFIG.BOARD_SIZE] + String(CONFIG.BOARD_SIZE - row);
+    }
+
+    static pieceSide(piece) {
+      if (!piece) return null;
+      return piece === piece.toUpperCase() ? CONFIG.WHITE : CONFIG.BLACK;
+    }
+
+    static opposite(side) { return side === CONFIG.WHITE ? CONFIG.BLACK : CONFIG.WHITE; }
+
+    clone() {
+      return new ChessPosition(this.board.slice(), this.turn, this.castling,
+        this.enPassant, this.halfmoveClock, this.fullmoveNumber);
+    }
+
+    makeMove(move) {
+      const moving = this.board[move.from];
+      if (!moving) throw new Error("Cannot move an empty square");
+      const type = moving.toUpperCase();
+      const toRow = Math.floor(move.to / CONFIG.BOARD_SIZE);
+      const isEnPassant = type === CONFIG.PAWN && move.to === this.enPassant && !this.board[move.to];
+      const capturedSquare = isEnPassant ? move.to + (this.turn === CONFIG.WHITE ? CONFIG.BOARD_SIZE : -CONFIG.BOARD_SIZE) : move.to;
+      const captured = this.board[capturedSquare];
+      const castle = type === CONFIG.KING && Math.abs(move.to - move.from) === 2
+        ? CONFIG.CASTLES.find(spec => spec.side === this.turn && spec.kingTo === move.to) : null;
+      const undo = {
+        moved: moving, captured, capturedSquare, castle,
+        turn: this.turn, castling: this.castling, enPassant: this.enPassant,
+        halfmoveClock: this.halfmoveClock, fullmoveNumber: this.fullmoveNumber
+      };
+
+      this.board[move.from] = CONFIG.EMPTY;
+      this.board[move.to] = move.promotion
+        ? (this.turn === CONFIG.WHITE ? move.promotion : move.promotion.toLowerCase()) : moving;
+      if (isEnPassant) this.board[capturedSquare] = CONFIG.EMPTY;
+      if (castle) {
+        this.board[castle.rookTo] = this.board[castle.rookFrom];
+        this.board[castle.rookFrom] = CONFIG.EMPTY;
+      }
+      if (type === CONFIG.KING) {
+        const remove = this.turn === CONFIG.WHITE ? /[KQ]/g : /[kq]/g;
+        this.castling = this.castling.replace(remove, "");
+      }
+      for (const [square, right] of Object.entries(CONFIG.ROOK_CASTLING_RIGHTS)) {
+        if (Number(square) === move.from || (Number(square) === capturedSquare && captured)) {
+          this.castling = this.castling.replace(right, "");
+        }
+      }
+      this.enPassant = type === CONFIG.PAWN && Math.abs(move.to - move.from) === 2 * CONFIG.BOARD_SIZE
+        ? (move.from + move.to) / 2 : -1;
+      this.halfmoveClock = type === CONFIG.PAWN || captured ? 0 : this.halfmoveClock + 1;
+      if (this.turn === CONFIG.BLACK) this.fullmoveNumber++;
+      this.turn = ChessPosition.opposite(this.turn);
+      return undo;
+    }
+
+    unmakeMove(move, undo) {
+      this.turn = undo.turn;
+      this.castling = undo.castling;
+      this.enPassant = undo.enPassant;
+      this.halfmoveClock = undo.halfmoveClock;
+      this.fullmoveNumber = undo.fullmoveNumber;
+      this.board[move.from] = undo.moved;
+      this.board[move.to] = CONFIG.EMPTY;
+      this.board[undo.capturedSquare] = undo.captured;
+      if (undo.castle) {
+        this.board[undo.castle.rookFrom] = this.board[undo.castle.rookTo];
+        this.board[undo.castle.rookTo] = CONFIG.EMPTY;
+      }
+    }
+
+    positionKey(includeEp = true) {
+      return this.board.map(piece => piece || ".").join("") + " " + this.turn + " " +
+        (this.castling || "-") + " " + (includeEp && this.enPassant >= 0 ? this.enPassant : "-");
+    }
+  }
+
+  class ChessRules {
+    static inBounds(row, column) {
+      return row >= 0 && row < CONFIG.BOARD_SIZE && column >= 0 && column < CONFIG.BOARD_SIZE;
+    }
+
+    static sidePawn(side) { return side === CONFIG.WHITE ? "P" : "p"; }
+
+    static isSquareAttacked(position, square, bySide) {
+      const row = Math.floor(square / CONFIG.BOARD_SIZE);
+      const col = square % CONFIG.BOARD_SIZE;
+      const pawnDirection = bySide === CONFIG.WHITE ? -1 : 1;
+      const pawnRow = row - pawnDirection;
+      for (const dc of [-1, 1]) {
+        if (ChessRules.inBounds(pawnRow, col + dc) &&
+          position.board[pawnRow * CONFIG.BOARD_SIZE + col + dc] === ChessRules.sidePawn(bySide)) return true;
+      }
+      if (ChessRules.#anyMatchingStep(position, row, col, CONFIG.KNIGHT_STEPS, bySide, "N")) return true;
+      if (ChessRules.#anyMatchingStep(position, row, col, CONFIG.KING_STEPS, bySide, "K")) return true;
+      if (ChessRules.#rayAttacks(position, row, col, CONFIG.DIAGONALS, bySide, ["B", "Q"])) return true;
+      return ChessRules.#rayAttacks(position, row, col, CONFIG.ORTHOGONALS, bySide, ["R", "Q"]);
+    }
+
+    static #anyMatchingStep(position, row, col, steps, side, type) {
+      const expected = side === CONFIG.WHITE ? type : type.toLowerCase();
+      return steps.some(([dr, dc]) => ChessRules.inBounds(row + dr, col + dc) &&
+        position.board[(row + dr) * CONFIG.BOARD_SIZE + col + dc] === expected);
+    }
+
+    static #rayAttacks(position, row, col, directions, side, types) {
+      for (const [dr, dc] of directions) {
+        let r = row + dr;
+        let c = col + dc;
+        while (ChessRules.inBounds(r, c)) {
+          const occupant = position.board[r * CONFIG.BOARD_SIZE + c];
+          if (occupant) {
+            if (ChessPosition.pieceSide(occupant) === side && types.includes(occupant.toUpperCase())) return true;
+            break;
+          }
+          r += dr;
+          c += dc;
+        }
+      }
+      return false;
+    }
+
+    static isKingInCheck(position, side) {
+      const kingIndex = position.board.indexOf(side === CONFIG.WHITE ? "K" : "k");
+      if (kingIndex < 0) throw new Error("Invalid position: king is missing");
+      return ChessRules.isSquareAttacked(position, kingIndex, ChessPosition.opposite(side));
+    }
+
+    static legalMoves(position) {
+      const side = position.turn;
+      const pseudo = ChessRules.#pseudoMoves(position);
+      const legal = [];
+      for (const move of pseudo) {
+        const undo = position.makeMove(move);
+        const valid = !ChessRules.isKingInCheck(position, side);
+        position.unmakeMove(move, undo);
+        if (valid) legal.push(move);
+      }
+      return legal;
+    }
+
+    static #pseudoMoves(position) {
+      const result = [];
+      for (let from = 0; from < CONFIG.BOARD_SQUARES; from++) {
+        const piece = position.board[from];
+        if (!piece || ChessPosition.pieceSide(piece) !== position.turn) continue;
+        const row = Math.floor(from / CONFIG.BOARD_SIZE);
+        const col = from % CONFIG.BOARD_SIZE;
+        switch (piece.toUpperCase()) {
+          case "P": ChessRules.#pawnMoves(position, from, row, col, result); break;
+          case "N": ChessRules.#stepMoves(position, from, row, col, CONFIG.KNIGHT_STEPS, result); break;
+          case "B": ChessRules.#slideMoves(position, from, row, col, CONFIG.DIAGONALS, result); break;
+          case "R": ChessRules.#slideMoves(position, from, row, col, CONFIG.ORTHOGONALS, result); break;
+          case "Q": ChessRules.#slideMoves(position, from, row, col,
+            [...CONFIG.DIAGONALS, ...CONFIG.ORTHOGONALS], result); break;
+          case "K":
+            ChessRules.#stepMoves(position, from, row, col, CONFIG.KING_STEPS, result);
+            ChessRules.#castleMoves(position, from, result);
+            break;
+        }
+      }
+      return result;
+    }
+
+    static #addPawnMove(result, from, to, promotion) {
+      if (promotion) {
+        for (const piece of CONFIG.PROMOTIONS) result.push({ from, to, promotion: piece });
+      } else {
+        result.push({ from, to, promotion: null });
+      }
+    }
+
+    static #pawnMoves(position, from, row, col, result) {
+      const white = position.turn === CONFIG.WHITE;
+      const direction = white ? -1 : 1;
+      const promotionRow = white ? 0 : CONFIG.BOARD_SIZE - 1;
+      const startRow = white ? CONFIG.BOARD_SIZE - 2 : 1;
+      const nextRow = row + direction;
+      if (!ChessRules.inBounds(nextRow, col)) return;
+      const forward = nextRow * CONFIG.BOARD_SIZE + col;
+      if (!position.board[forward]) {
+        ChessRules.#addPawnMove(result, from, forward, nextRow === promotionRow);
+        const doubleRow = row + direction * 2;
+        if (row === startRow && !position.board[doubleRow * CONFIG.BOARD_SIZE + col]) {
+          result.push({ from, to: doubleRow * CONFIG.BOARD_SIZE + col, promotion: null });
+        }
+      }
+      for (const dc of [-1, 1]) {
+        const attackCol = col + dc;
+        if (!ChessRules.inBounds(nextRow, attackCol)) continue;
+        const to = nextRow * CONFIG.BOARD_SIZE + attackCol;
+        const target = position.board[to];
+        if (target && ChessPosition.pieceSide(target) !== position.turn && target.toUpperCase() !== CONFIG.KING) {
+          ChessRules.#addPawnMove(result, from, to, nextRow === promotionRow);
+        } else if (!target && to === position.enPassant) {
+          const captured = position.board[row * CONFIG.BOARD_SIZE + attackCol];
+          if (captured === ChessRules.sidePawn(ChessPosition.opposite(position.turn))) {
+            result.push({ from, to, promotion: null });
+          }
+        }
+      }
+    }
+
+    static #canLand(position, to) {
+      const target = position.board[to];
+      return !target || (ChessPosition.pieceSide(target) !== position.turn && target.toUpperCase() !== CONFIG.KING);
+    }
+
+    static #stepMoves(position, from, row, col, steps, result) {
+      for (const [dr, dc] of steps) {
+        const r = row + dr;
+        const c = col + dc;
+        if (!ChessRules.inBounds(r, c)) continue;
+        const to = r * CONFIG.BOARD_SIZE + c;
+        if (ChessRules.#canLand(position, to)) result.push({ from, to, promotion: null });
+      }
+    }
+
+    static #slideMoves(position, from, row, col, directions, result) {
+      for (const [dr, dc] of directions) {
+        let r = row + dr;
+        let c = col + dc;
+        while (ChessRules.inBounds(r, c)) {
+          const to = r * CONFIG.BOARD_SIZE + c;
+          if (ChessRules.#canLand(position, to)) result.push({ from, to, promotion: null });
+          if (position.board[to]) break;
+          r += dr;
+          c += dc;
+        }
+      }
+    }
+
+    static #castleMoves(position, from, result) {
+      const opponent = ChessPosition.opposite(position.turn);
+      const rook = position.turn === CONFIG.WHITE ? CONFIG.ROOK : CONFIG.ROOK.toLowerCase();
+      for (const spec of CONFIG.CASTLES) {
+        if (spec.side !== position.turn || spec.kingFrom !== from || !position.castling.includes(spec.right)) continue;
+        if (position.board[spec.rookFrom] !== rook || spec.empty.some(square => position.board[square])) continue;
+        if (spec.safe.some(square => ChessRules.isSquareAttacked(position, square, opponent))) continue;
+        result.push({ from, to: spec.kingTo, promotion: null });
+      }
+    }
+
+    static repetitionKey(position) {
+      if (position.enPassant < 0) return position.positionKey(false);
+      const hasLegalEnPassant = ChessRules.legalMoves(position).some(move =>
+        move.to === position.enPassant && position.board[move.from]?.toUpperCase() === CONFIG.PAWN);
+      return position.positionKey(hasLegalEnPassant);
+    }
+
+    static hasInsufficientMaterial(position) {
+      const active = [];
+      for (let square = 0; square < CONFIG.BOARD_SQUARES; square++) {
+        const piece = position.board[square];
+        if (piece && piece.toUpperCase() !== CONFIG.KING) active.push({ piece: piece.toUpperCase(), square });
+      }
+      if (!active.length) return true;
+      if (active.length === 1 && ["B", "N"].includes(active[0].piece)) return true;
+      if (active.every(({ piece }) => piece === "B")) {
+        const colors = new Set(active.map(({ square }) =>
+          (Math.floor(square / CONFIG.BOARD_SIZE) + square % CONFIG.BOARD_SIZE) % 2));
+        return colors.size === 1;
+      }
+      return false;
+    }
+  }
+
+  class ChessNotation {
+    static toSAN(position, move, legalMoves) {
+      const piece = position.board[move.from];
+      const type = piece.toUpperCase();
+      const isCastle = type === CONFIG.KING && Math.abs(move.to - move.from) === 2;
+      let san;
+      if (isCastle) {
+        san = move.to > move.from ? "O-O" : "O-O-O";
+      } else {
+        const enPassant = type === CONFIG.PAWN && move.to === position.enPassant && !position.board[move.to];
+        const capture = !!position.board[move.to] || enPassant;
+        const destination = ChessPosition.squareName(move.to);
+        if (type === CONFIG.PAWN) {
+          const file = CONFIG.FILES[move.from % CONFIG.BOARD_SIZE];
+          san = (capture ? file + "x" : "") + destination;
+        } else {
+          const peers = legalMoves.filter(other => other.from !== move.from && other.to === move.to &&
+            position.board[other.from]?.toUpperCase() === type);
+          let distinguish = "";
+          if (peers.length) {
+            const file = move.from % CONFIG.BOARD_SIZE;
+            const rank = Math.floor(move.from / CONFIG.BOARD_SIZE);
+            const sameFile = peers.some(peer => peer.from % CONFIG.BOARD_SIZE === file);
+            const sameRank = peers.some(peer => Math.floor(peer.from / CONFIG.BOARD_SIZE) === rank);
+            distinguish = !sameFile ? CONFIG.FILES[file] : !sameRank
+              ? String(CONFIG.BOARD_SIZE - rank) : ChessPosition.squareName(move.from);
+          }
+          san = type + distinguish + (capture ? "x" : "") + destination;
+        }
+        if (move.promotion) san += "=" + move.promotion;
+      }
+      const undo = position.makeMove(move);
+      if (ChessRules.isKingInCheck(position, position.turn)) {
+        san += ChessRules.legalMoves(position).length ? "+" : "#";
+      }
+      position.unmakeMove(move, undo);
+      return san;
+    }
+  }
+
+  class ChessGame {
+    #position;
+    #history;
+    #repetitions;
+    #claimedDraw;
+
+    constructor() { this.reset(); }
+
+    reset() {
+      this.#position = ChessPosition.fromFEN(CONFIG.INITIAL_FEN);
+      this.#history = [];
+      this.#repetitions = new Map([[ChessRules.repetitionKey(this.#position), 1]]);
+      this.#claimedDraw = null;
+    }
+
+    snapshot() {
+      return {
+        board: this.#position.board.slice(), turn: this.#position.turn,
+        history: this.#history.map(item => ({ side: item.side, san: item.san, move: { ...item.move } })),
+        status: this.status(), canClaim: this.drawClaimReason()
+      };
+    }
+
+    searchPosition() { return this.#position.clone(); }
+    legalMoves() { return ChessRules.legalMoves(this.#position); }
+    historyHasMoveBy(side) { return this.#history.some(item => item.side === side); }
+
+    play(move) {
+      if (this.status().ended) throw new Error("The game has ended");
+      const legal = this.legalMoves();
+      const matching = legal.find(candidate => candidate.from === move.from && candidate.to === move.to &&
+        candidate.promotion === (move.promotion || null));
+      if (!matching) throw new Error("Illegal chess move");
+      const side = this.#position.turn;
+      const san = ChessNotation.toSAN(this.#position, matching, legal);
+      const undo = this.#position.makeMove(matching);
+      this.#history.push({ side, san, move: matching, undo });
+      const key = ChessRules.repetitionKey(this.#position);
+      this.#repetitions.set(key, (this.#repetitions.get(key) || 0) + 1);
+    }
+
+    undoLast() {
+      if (!this.#history.length) return false;
+      const key = ChessRules.repetitionKey(this.#position);
+      const count = this.#repetitions.get(key);
+      if (count <= 1) this.#repetitions.delete(key);
+      else this.#repetitions.set(key, count - 1);
+      const entry = this.#history.pop();
+      this.#position.unmakeMove(entry.move, entry.undo);
+      this.#claimedDraw = null;
+      return true;
+    }
+
+    undoToHumanTurn(humanSide) {
+      if (!this.historyHasMoveBy(humanSide)) return;
+      do {
+        this.undoLast();
+      } while (this.#history.length && this.#position.turn !== humanSide);
+    }
+
+    drawClaimReason() {
+      if (this.#position.halfmoveClock >= CONFIG.DRAW_HALF_MOVES_CLAIM) return "50手ルール";
+      if ((this.#repetitions.get(ChessRules.repetitionKey(this.#position)) || 0) >= CONFIG.DRAW_REPETITIONS_CLAIM) {
+        return "同一局面3回";
+      }
+      return null;
+    }
+
+    claimDraw() {
+      if (this.status().ended) return false;
+      const reason = this.drawClaimReason();
+      if (!reason) return false;
+      this.#claimedDraw = reason;
+      return true;
+    }
+
+    status() {
+      if (this.#claimedDraw) return { ended: true, type: "draw", reason: this.#claimedDraw };
+      const moves = this.legalMoves();
+      if (!moves.length) {
+        if (ChessRules.isKingInCheck(this.#position, this.#position.turn)) {
+          return { ended: true, type: "mate", winner: ChessPosition.opposite(this.#position.turn) };
+        }
+        return { ended: true, type: "draw", reason: "ステイルメイト" };
+      }
+      if (ChessRules.hasInsufficientMaterial(this.#position)) {
+        return { ended: true, type: "draw", reason: "メイト不能な駒構成" };
+      }
+      if (this.#position.halfmoveClock >= CONFIG.DRAW_HALF_MOVES_AUTO) {
+        return { ended: true, type: "draw", reason: "75手ルール" };
+      }
+      if ((this.#repetitions.get(ChessRules.repetitionKey(this.#position)) || 0) >= CONFIG.DRAW_REPETITIONS_AUTO) {
+        return { ended: true, type: "draw", reason: "同一局面5回" };
+      }
+      return { ended: false, type: ChessRules.isKingInCheck(this.#position, this.#position.turn) ? "check" : "playing" };
+    }
+  }
+
+  class SearchInterrupted extends Error {}
+
+  class ChessAI {
+    #rules;
+    #nodes;
+    #startedAt;
+    #budgetMs;
+
+    constructor(rules = ChessRules) { this.#rules = rules; }
+
+    chooseMove(position, difficulty) {
+      const setting = CONFIG.AI_SETTINGS[difficulty] || CONFIG.AI_SETTINGS.normal;
+      const legal = this.#rules.legalMoves(position);
+      if (!legal.length) return null;
+      this.#startedAt = performance.now();
+      this.#budgetMs = setting.budgetMs;
+      this.#nodes = 0;
+      let bestMove = this.#order(position, legal)[0];
+      for (let depth = 1; depth <= setting.depth; depth++) {
+        try {
+          const result = this.#searchRoot(position, depth, bestMove);
+          bestMove = result.move;
+          if (Math.abs(result.score) > CONFIG.MATE_SCORE / 2) break;
+        } catch (error) {
+          if (!(error instanceof SearchInterrupted)) throw error;
+          break;
+        }
+      }
+      return bestMove;
+    }
+
+    #checkClock() {
+      this.#nodes++;
+      if (this.#nodes % CONFIG.SEARCH_CLOCK_INTERVAL === 0 &&
+        performance.now() - this.#startedAt >= this.#budgetMs) throw new SearchInterrupted();
+    }
+
+    #searchRoot(position, depth, previousBest) {
+      let alpha = -Infinity;
+      const beta = Infinity;
+      let bestScore = -Infinity;
+      let bestMove = null;
+      const legal = this.#order(position, this.#rules.legalMoves(position), previousBest);
+      for (const move of legal) {
+        this.#checkClock();
+        const undo = position.makeMove(move);
+        const score = -this.#negamax(position, depth - 1, -beta, -alpha, 1);
+        position.unmakeMove(move, undo);
+        if (score > bestScore) { bestScore = score; bestMove = move; }
+        alpha = Math.max(alpha, score);
+      }
+      return { move: bestMove, score: bestScore };
+    }
+
+    #negamax(position, depth, alpha, beta, ply) {
+      this.#checkClock();
+      if (this.#rules.hasInsufficientMaterial(position) ||
+        position.halfmoveClock >= CONFIG.DRAW_HALF_MOVES_AUTO) return 0;
+      if (depth === 0) return this.#quiescence(position, alpha, beta, ply, CONFIG.QUIESCENCE_DEPTH);
+      const legal = this.#rules.legalMoves(position);
+      if (!legal.length) return this.#rules.isKingInCheck(position, position.turn) ? -CONFIG.MATE_SCORE + ply : 0;
+      let best = -Infinity;
+      for (const move of this.#order(position, legal)) {
+        const undo = position.makeMove(move);
+        const score = -this.#negamax(position, depth - 1, -beta, -alpha, ply + 1);
+        position.unmakeMove(move, undo);
+        best = Math.max(best, score);
+        alpha = Math.max(alpha, score);
+        if (alpha >= beta) break;
+      }
+      return best;
+    }
+
+    #quiescence(position, alpha, beta, ply, remaining) {
+      this.#checkClock();
+      const inCheck = this.#rules.isKingInCheck(position, position.turn);
+      const standPat = this.#evaluate(position);
+      if (!inCheck) {
+        if (standPat >= beta) return beta;
+        alpha = Math.max(alpha, standPat);
+      }
+      const legal = this.#rules.legalMoves(position);
+      if (!legal.length) return inCheck ? -CONFIG.MATE_SCORE + ply : 0;
+      if (remaining <= 0) return inCheck ? standPat : alpha;
+      const moves = inCheck ? legal : legal.filter(move => this.#isTactical(position, move));
+      for (const move of this.#order(position, moves)) {
+        const undo = position.makeMove(move);
+        const score = -this.#quiescence(position, -beta, -alpha, ply + 1, remaining - 1);
+        position.unmakeMove(move, undo);
+        if (score >= beta) return beta;
+        alpha = Math.max(alpha, score);
+      }
+      return alpha;
+    }
+
+    #isTactical(position, move) {
+      return !!position.board[move.to] || !!move.promotion ||
+        (position.board[move.from]?.toUpperCase() === CONFIG.PAWN && move.to === position.enPassant);
+    }
+
+    #order(position, moves, previousBest = null) {
+      const score = move => {
+        if (previousBest && move.from === previousBest.from && move.to === previousBest.to &&
+          move.promotion === previousBest.promotion) return CONFIG.MATE_SCORE;
+        const attacker = position.board[move.from]?.toUpperCase();
+        const victim = position.board[move.to]?.toUpperCase();
+        let value = victim ? CONFIG.PIECE_VALUES[victim] * 10 - CONFIG.PIECE_VALUES[attacker] : 0;
+        if (move.promotion) value += CONFIG.PIECE_VALUES[move.promotion];
+        if (attacker === CONFIG.PAWN && move.to === position.enPassant) value += CONFIG.PIECE_VALUES.P;
+        return value;
+      };
+      return moves.slice().sort((a, b) => score(b) - score(a));
+    }
+
+    #evaluate(position) {
+      let whiteScore = 0;
+      let whiteBishops = 0;
+      let blackBishops = 0;
+      for (let square = 0; square < CONFIG.BOARD_SQUARES; square++) {
+        const piece = position.board[square];
+        if (!piece) continue;
+        const side = ChessPosition.pieceSide(piece);
+        const type = piece.toUpperCase();
+        const row = Math.floor(square / CONFIG.BOARD_SIZE);
+        const col = square % CONFIG.BOARD_SIZE;
+        const centrality = (3.5 - Math.abs(col - 3.5)) + (3.5 - Math.abs(row - 3.5));
+        let value = CONFIG.PIECE_VALUES[type];
+        if (type === "P") {
+          const advance = side === CONFIG.WHITE ? CONFIG.BOARD_SIZE - 2 - row : row - 1;
+          const fileCentrality = 3.5 - Math.abs(col - 3.5);
+          value += advance * (CONFIG.PAWN_ADVANCE_WEIGHT + fileCentrality * CONFIG.PAWN_CENTER_ADVANCE_WEIGHT) + centrality * 2;
+        } else if (["N", "B"].includes(type)) {
+          value += centrality * CONFIG.CENTER_WEIGHT;
+        } else if (type === "K") {
+          const backRank = side === CONFIG.WHITE ? CONFIG.BOARD_SIZE - 1 : 0;
+          if (row === backRank && [2, 6].includes(col)) value += CONFIG.CASTLED_KING_BONUS;
+        }
+        if (type === "B") {
+          if (side === CONFIG.WHITE) whiteBishops++;
+          else blackBishops++;
+        }
+        whiteScore += side === CONFIG.WHITE ? value : -value;
+      }
+      if (whiteBishops >= 2) whiteScore += CONFIG.BISHOP_PAIR_BONUS;
+      if (blackBishops >= 2) whiteScore -= CONFIG.BISHOP_PAIR_BONUS;
+      return position.turn === CONFIG.WHITE ? whiteScore : -whiteScore;
+    }
+  }
+
+  class ChessView {
+    #elements;
+    #selected;
+
+    constructor(documentObject) {
+      this.#elements = {
+        board: documentObject.getElementById("chessboard"),
+        opponent: documentObject.getElementById("opponent-label"),
+        turn: documentObject.getElementById("turn-label"),
+        player: documentObject.getElementById("player-label"),
+        color: documentObject.getElementById("player-color"),
+        difficulty: documentObject.getElementById("difficulty"),
+        newGame: documentObject.getElementById("new-game"),
+        undo: documentObject.getElementById("undo"),
+        draw: documentObject.getElementById("claim-draw"),
+        statusTitle: documentObject.getElementById("status-title"),
+        statusDetail: documentObject.getElementById("status-detail"),
+        moves: documentObject.getElementById("move-list"),
+        promotionModal: documentObject.getElementById("promotion-modal"),
+        promotionChoices: documentObject.getElementById("promotion-choices")
+      };
+      this.#selected = null;
+    }
+
+    onSquareClick(callback) { this.#elements.board.addEventListener("click", event => {
+      const square = event.target.closest("button[data-square]");
+      if (square) callback(Number(square.dataset.square));
+    }); }
+    onNewGame(callback) { this.#elements.newGame.addEventListener("click", callback); }
+    onUndo(callback) { this.#elements.undo.addEventListener("click", callback); }
+    onDraw(callback) { this.#elements.draw.addEventListener("click", callback); }
+    onColorChanged(callback) { this.#elements.color.addEventListener("change", callback); }
+    onDifficultyChanged(callback) { this.#elements.difficulty.addEventListener("change", callback); }
+    humanSide() { return this.#elements.color.value; }
+    difficulty() { return this.#elements.difficulty.value; }
+    clearSelection() { this.#selected = null; }
+    setSelection(square) { this.#selected = square; }
+    selectedSquare() { return this.#selected; }
+
+    render(snapshot, humanSide, legalTargets, thinking) {
+      this.#renderBoard(snapshot, humanSide, legalTargets);
+      const humanName = humanSide === CONFIG.WHITE ? "白（先手）" : "黒（後手）";
+      const opponentName = humanSide === CONFIG.WHITE ? "黒" : "白";
+      this.#elements.opponent.textContent = `コンピューター（${opponentName}）`;
+      this.#elements.player.textContent = `あなた：${humanName}`;
+      this.#elements.turn.textContent = snapshot.status.ended ? "終局" : snapshot.turn === CONFIG.WHITE ? "白番" : "黒番";
+      this.#elements.undo.disabled = thinking || !snapshot.history.some(item => item.side === humanSide);
+      this.#elements.draw.disabled = thinking || snapshot.status.ended || snapshot.turn !== humanSide || !snapshot.canClaim;
+      this.#renderStatus(snapshot, humanSide, thinking);
+      this.#renderMoves(snapshot.history);
+    }
+
+    #renderBoard(snapshot, humanSide, legalTargets) {
+      const documentObject = this.#elements.board.ownerDocument;
+      const fragment = documentObject.createDocumentFragment();
+      const last = snapshot.history.at(-1)?.move;
+      const checkingKing = snapshot.status.type === "check"
+        ? snapshot.board.indexOf(snapshot.turn === CONFIG.WHITE ? "K" : "k") : -1;
+      for (let visualIndex = 0; visualIndex < CONFIG.BOARD_SQUARES; visualIndex++) {
+        const square = humanSide === CONFIG.WHITE ? visualIndex : CONFIG.BOARD_SQUARES - 1 - visualIndex;
+        const row = Math.floor(square / CONFIG.BOARD_SIZE);
+        const col = square % CONFIG.BOARD_SIZE;
+        const piece = snapshot.board[square];
+        const button = documentObject.createElement("button");
+        const css = ["square", (row + col) % 2 ? "dark" : "light"];
+        if (last && [last.from, last.to].includes(square)) css.push("last-move");
+        if (square === this.#selected) css.push("selected");
+        if (legalTargets.includes(square)) css.push("target");
+        if (piece) css.push("has-piece");
+        if (square === checkingKing) css.push("in-check");
+        button.className = css.join(" ");
+        button.dataset.square = String(square);
+        button.type = "button";
+        button.setAttribute("aria-label", `${ChessPosition.squareName(square)} ${ChessView.#pieceName(piece)}`);
+        if (piece) {
+          const span = documentObject.createElement("span");
+          span.className = `piece ${ChessPosition.pieceSide(piece) === CONFIG.WHITE ? "white" : "black"}`;
+          span.textContent = ChessView.#pieceSymbol(piece);
+          button.appendChild(span);
+        }
+        if (visualIndex % CONFIG.BOARD_SIZE === 0) ChessView.#appendCoord(documentObject, button, "rank", CONFIG.BOARD_SIZE - row);
+        if (visualIndex >= CONFIG.BOARD_SQUARES - CONFIG.BOARD_SIZE) {
+          ChessView.#appendCoord(documentObject, button, "file", CONFIG.FILES[col]);
+        }
+        fragment.appendChild(button);
+      }
+      this.#elements.board.replaceChildren(fragment);
+    }
+
+    static #appendCoord(doc, button, kind, label) {
+      const span = doc.createElement("span");
+      span.className = `coord ${kind}`;
+      span.textContent = String(label);
+      button.appendChild(span);
+    }
+
+    static #pieceSymbol(piece) {
+      const symbols = { K: "♔", Q: "♕", R: "♖", B: "♗", N: "♘", P: "♙",
+        k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" };
+      return symbols[piece] || "";
+    }
+
+    static #pieceName(piece) {
+      if (!piece) return "空きマス";
+      const names = { K: "キング", Q: "クイーン", R: "ルーク", B: "ビショップ", N: "ナイト", P: "ポーン" };
+      return `${ChessPosition.pieceSide(piece) === CONFIG.WHITE ? "白" : "黒"} ${names[piece.toUpperCase()]}`;
+    }
+
+    #renderStatus(snapshot, humanSide, thinking) {
+      const { status } = snapshot;
+      let title;
+      let detail;
+      if (status.type === "mate") {
+        title = status.winner === humanSide ? "あなたの勝ち！" : "コンピューターの勝ち";
+        detail = "チェックメイト。新しい対局で再挑戦できます。";
+      } else if (status.type === "draw") {
+        title = "引き分け";
+        detail = `理由：${status.reason}`;
+      } else if (thinking) {
+        title = "コンピューター思考中…";
+        detail = "次の一手を計算しています。";
+      } else if (snapshot.turn === humanSide) {
+        title = status.type === "check" ? "王手されています！" : "あなたの番です";
+        detail = snapshot.canClaim
+          ? `${snapshot.canClaim}：必要なら引き分けを申請できます。`
+          : "自分の駒をクリックし、移動先をクリックしてください。";
+      } else {
+        title = "コンピューターの番です";
+        detail = "コンピューターが指します。";
+      }
+      this.#elements.statusTitle.textContent = title;
+      this.#elements.statusDetail.textContent = detail;
+    }
+
+    #renderMoves(history) {
+      const list = this.#elements.moves;
+      const doc = list.ownerDocument;
+      const fragment = doc.createDocumentFragment();
+      if (!history.length) {
+        const empty = doc.createElement("div");
+        empty.className = "empty-history";
+        empty.textContent = "まだ指し手はありません";
+        fragment.appendChild(empty);
+      }
+      for (let index = 0; index < history.length; index += 2) {
+        const row = doc.createElement("div");
+        row.className = "move-row";
+        for (const label of [String(index / 2 + 1) + ".", history[index]?.san || "", history[index + 1]?.san || ""]) {
+          const item = doc.createElement("span");
+          item.textContent = label;
+          if (label && (index === history.length - 1 || index + 1 === history.length - 1) &&
+            label === history.at(-1).san) item.className = "recent";
+          row.appendChild(item);
+        }
+        fragment.appendChild(row);
+      }
+      list.replaceChildren(fragment);
+      list.scrollTop = list.scrollHeight;
+    }
+
+    askPromotion(side, callback) {
+      const doc = this.#elements.promotionChoices.ownerDocument;
+      const fragment = doc.createDocumentFragment();
+      for (const type of CONFIG.PROMOTIONS) {
+        const button = doc.createElement("button");
+        button.type = "button";
+        button.title = ChessView.#pieceName(side === CONFIG.WHITE ? type : type.toLowerCase());
+        button.setAttribute("aria-label", button.title);
+        const piece = doc.createElement("span");
+        piece.className = `piece ${side === CONFIG.WHITE ? "white" : "black"}`;
+        piece.textContent = ChessView.#pieceSymbol(side === CONFIG.WHITE ? type : type.toLowerCase());
+        button.appendChild(piece);
+        button.addEventListener("click", () => {
+          this.#elements.promotionModal.hidden = true;
+          callback(type);
+        }, { once: true });
+        fragment.appendChild(button);
+      }
+      this.#elements.promotionChoices.replaceChildren(fragment);
+      this.#elements.promotionModal.hidden = false;
+      this.#elements.promotionChoices.querySelector("button")?.focus();
+    }
+
+    hidePromotion() { this.#elements.promotionModal.hidden = true; }
+
+    showError(message) {
+      this.#elements.statusTitle.textContent = "対局エラー";
+      this.#elements.statusDetail.textContent = message;
+    }
+  }
+
+  class ChessController {
+    #game;
+    #view;
+    #ai;
+    #thinking;
+    #aiTimer;
+    #epoch;
+
+    constructor(game, view, ai) {
+      this.#game = game;
+      this.#view = view;
+      this.#ai = ai;
+      this.#thinking = false;
+      this.#aiTimer = null;
+      this.#epoch = 0;
+      view.onSquareClick(square => this.#handleSquare(square));
+      view.onNewGame(() => this.startNewGame());
+      view.onColorChanged(() => this.startNewGame());
+      view.onDifficultyChanged(() => this.#render());
+      view.onUndo(() => this.#undo());
+      view.onDraw(() => this.#claimDraw());
+      this.startNewGame();
+    }
+
+    startNewGame() {
+      this.#stopPendingAI();
+      this.#view.hidePromotion();
+      this.#game.reset();
+      this.#view.clearSelection();
+      this.#render();
+      this.#scheduleAI();
+    }
+
+    #stopPendingAI() {
+      this.#epoch++;
+      if (this.#aiTimer !== null) clearTimeout(this.#aiTimer);
+      this.#aiTimer = null;
+      this.#thinking = false;
+    }
+
+    #handleSquare(square) {
+      const state = this.#game.snapshot();
+      const human = this.#view.humanSide();
+      if (state.status.ended || this.#thinking || state.turn !== human) return;
+      const selected = this.#view.selectedSquare();
+      const moves = this.#game.legalMoves();
+      if (selected !== null) {
+        const matching = moves.filter(move => move.from === selected && move.to === square);
+        if (matching.length) {
+          if (matching.some(move => move.promotion)) {
+            this.#view.askPromotion(human, promotion => {
+              const choice = matching.find(move => move.promotion === promotion);
+              if (choice) this.#playHumanMove(choice);
+            });
+          } else {
+            this.#playHumanMove(matching[0]);
+          }
+          return;
+        }
+      }
+      const piece = state.board[square];
+      const owned = ChessPosition.pieceSide(piece) === human;
+      const hasMoves = moves.some(move => move.from === square);
+      this.#view.setSelection(owned && hasMoves && selected !== square ? square : null);
+      this.#render();
+    }
+
+    #playHumanMove(move) {
+      this.#game.play(move);
+      this.#view.clearSelection();
+      this.#render();
+      this.#scheduleAI();
+    }
+
+    #scheduleAI() {
+      const state = this.#game.snapshot();
+      if (state.status.ended || state.turn === this.#view.humanSide()) return;
+      this.#thinking = true;
+      this.#render();
+      const epoch = this.#epoch;
+      this.#aiTimer = setTimeout(() => {
+        this.#aiTimer = null;
+        if (epoch !== this.#epoch) return;
+        let failed = false;
+        try {
+          const move = this.#ai.chooseMove(this.#game.searchPosition(), this.#view.difficulty());
+          if (move) this.#game.play(move);
+        } catch (error) {
+          console.error("Computer move failed:", error);
+          failed = true;
+        } finally {
+          this.#thinking = false;
+          this.#render();
+          if (failed) this.#view.showError("計算に失敗しました。『新しい対局』で再開してください。");
+        }
+      }, CONFIG.AI_DELAY_MS);
+    }
+
+    #undo() {
+      if (this.#thinking && this.#aiTimer === null) return;
+      this.#stopPendingAI();
+      this.#game.undoToHumanTurn(this.#view.humanSide());
+      this.#view.hidePromotion();
+      this.#view.clearSelection();
+      this.#render();
+    }
+
+    #claimDraw() {
+      if (this.#game.claimDraw()) {
+        this.#stopPendingAI();
+        this.#view.clearSelection();
+        this.#render();
+      }
+    }
+
+    #render() {
+      const state = this.#game.snapshot();
+      const selected = this.#view.selectedSquare();
+      const targets = selected === null ? [] : this.#game.legalMoves()
+        .filter(move => move.from === selected).map(move => move.to);
+      this.#view.render(state, this.#view.humanSide(), targets, this.#thinking);
+    }
+  }
+
+  new ChessController(new ChessGame(), new ChessView(document), new ChessAI());
+})();
+</script>
+</body>
+</html>

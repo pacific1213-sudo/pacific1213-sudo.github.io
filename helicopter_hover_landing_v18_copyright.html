@@ -1,0 +1,1628 @@
+<!--
+===============================================================================
+Program          : Bell 206B-3 JetRanger III Hover & Landing Simulator
+Version          : V18 (Initial Completed Release)
+Release Date     : 2026-11-03
+Copyright        : Copyright (c) 2026 [Yasuhiro Kaizu]
+
+Development      : Designed and developed with assistance from OpenAI ChatGPT.
+Note             : This simulator is not certified for real-world flight training.
+===============================================================================
+-->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bell 206B-3 | Hover & Landing Simulator V18</title>
+<style>
+  :root {
+    color-scheme: dark;
+    font-family: Consolas, 'Courier New', monospace;
+    background: #07121b;
+    color: #00ff48;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; background: #07121b; }
+  button, select, input { font: inherit; }
+  button { cursor: pointer; }
+  button:focus-visible, select:focus-visible, input:focus-visible {
+    outline: 2px solid #ffe16a;
+    outline-offset: 3px;
+  }
+  /* Cockpit text is informational, not a clickable surface. */
+  .hud-panel {
+    position: fixed;
+    z-index: 5;
+    top: 16px;
+    color: #00ff48;
+    font: 13px/1.48 Consolas, 'Courier New', monospace;
+    text-shadow: 0 1px 3px #000;
+    pointer-events: none;
+    white-space: pre;
+  }
+  .hud-top-left { left: 17px; }
+  .hud-top-right { right: 17px; text-align: left; }
+  .hud-title { color: #6dff9b; }
+  .hud-mode { color: #ffe16a; }
+  #status { color: #ffe16a; }
+  #device { display: inline-block; max-width: 200px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+  .config-button {
+    position: fixed;
+    z-index: 8;
+    right: 20px;
+    bottom: 20px;
+    padding: 10px 14px;
+    color: #00ff48;
+    border: 1px solid #00ff48;
+    border-radius: 0;
+    background: rgba(0, 20, 0, 0.85);
+    box-shadow: 0 0 8px #00ff4840;
+    font-size: 16px;
+  }
+  .config-button:hover, .menu-button:hover, .settings-close:hover {
+    background: #00ff48;
+    color: #001100;
+  }
+  /* Two-button opening menu matches the shuttle simulator's monochrome style. */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(0, 11, 0, 0.70);
+  }
+  #welcome[hidden], #settings[hidden] { display: none; }
+  .menu-panel {
+    width: min(420px, calc(100vw - 36px));
+    padding: 24px;
+    border: 2px solid #00ff48;
+    background: rgba(0, 15, 0, 0.96);
+    box-shadow: 0 0 20px #00ff48a0;
+    text-align: center;
+  }
+  .menu-title {
+    font-size: clamp(16px, 2.1vw, 21px);
+    font-weight: bold;
+    margin: 0 0 9px;
+    white-space: nowrap;
+  }
+  .menu-aircraft { margin: 0 0 23px; font-size: 13px; color: #79b98a; }
+  .menu-button {
+    display: block;
+    width: 100%;
+    padding: 12px 10px;
+    margin: 9px 0;
+    border: 1px solid #00ff48;
+    border-radius: 0;
+    background: #000;
+    color: #00ff48;
+    font-size: 17px;
+  }
+  /* Joystick configuration is the only secondary modal. */
+  #settings { z-index: 30; background: rgba(0, 11, 0, 0.93); }
+  .settings-panel {
+    width: min(510px, calc(100vw - 28px));
+    max-height: calc(100vh - 28px);
+    overflow-y: auto;
+    background: #071a13;
+    border: 2px solid #00ff48;
+    padding: 19px;
+    box-shadow: 0 0 20px #00ff483a;
+  }
+  .settings-panel h2 { text-align: center; font-size: 19px; margin: 0 0 14px; }
+  .settings-panel p { font-size: 12px; line-height: 1.6; }
+  .settings-note { color: #91cbaa; }
+  .settings-warning { color: #ffd08a; }
+  .setting-row {
+    display: grid;
+    grid-template-columns: minmax(102px, 1.2fr) minmax(84px, 1fr) 65px;
+    gap: 9px;
+    align-items: center;
+    margin: 10px 0;
+    font-size: 12px;
+  }
+  .setting-row label { white-space: nowrap; }
+  .setting-row select { min-width: 0; padding: 6px; color: #00ff48; border: 1px solid #448d61; background: #001400; }
+  #axisReadout { white-space: pre-line; overflow-wrap: anywhere; font: 11px/1.7 Consolas, monospace; color: #a6e5c3; }
+  .settings-close { display: block; margin: 17px auto 0; padding: 9px 22px; background: #001500; border: 1px solid #00ff48; color: #00ff48; }
+  @media (max-width: 820px) {
+    .hud-panel { top: 9px; font-size: 11px; }
+    .hud-top-left { left: 9px; }
+    .hud-top-right { right: 9px; }
+    #device { max-width: 118px; }
+    .config-button { bottom: 10px; right: 10px; font-size: 13px; }
+  }
+  @media (max-height: 580px) {
+    .hud-panel { font-size: 11px; line-height: 1.25; }
+    .settings-panel { max-height: calc(100vh - 12px); }
+  }
+  /* Copyright notice: decorative and non-interactive. */
+  .copyright-footer {
+    position: fixed;
+    z-index: 4;
+    bottom: 3px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: calc(100vw - 16px);
+    color: #70b18e;
+    font: 10px/1.2 Consolas, 'Courier New', monospace;
+    text-align: center;
+    white-space: nowrap;
+    pointer-events: none;
+    text-shadow: 0 1px 2px #000;
+  }
+  @media (max-width: 520px) {
+    .copyright-footer { bottom: 0; font-size: 9px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="simulator" aria-label="ワイヤーフレームのヘリパッドを操縦席から見る飛行画面"></canvas>
+<footer class="copyright-footer" aria-label="著作権表示">© 2026 Yasuhiro Kaizu. All rights reserved.</footer>
+<section class="hud-panel hud-top-left" aria-label="キーボード操作一覧">
+<span class="hud-title">[ CONTROLS ]</span>
+↑ / ↓ : CYCLIC PITCH
+← / → : CYCLIC ROLL
+A / D : TAIL PEDAL
+W / S : COLLECTIVE
+P     : PAUSE / RESUME
+R     : RESET
+J     : JOYSTICK CONFIG
+</section>
+<section class="hud-panel hud-top-right" aria-label="機体および飛行状態">
+<span class="hud-mode">*** MANUAL MODE ***</span>
+GUIDANCE : HOVER / LANDING
+AIRCRAFT : BELL 206B-3
+WIND     : CALM
+STATUS   : <span id="status" role="status">STANDBY</span>
+INPUT    : <span id="device">KEYBOARD</span>
+</section>
+<button id="settingsBtn" class="config-button" type="button" aria-expanded="false" aria-controls="settings">⚙ CONFIG</button>
+<div id="settings" class="modal-backdrop" hidden>
+  <section class="settings-panel" role="dialog" aria-modal="true" aria-label="ジョイスティックの軸設定">
+    <h2>JOYSTICK CONFIGURATION</h2>
+    <p class="settings-note">軸番号と必要な場合だけ反転を変更してください。標準ジョイスティックでは、前後軸の反転なしで「引く＝機首上げ」です。設定はブラウザに保存されます。</p>
+    <div class="setting-row"><span>左右サイクリック</span><select data-axis="roll"></select><label><input data-invert="roll" type="checkbox"> 反転</label></div>
+    <div class="setting-row"><span>前後サイクリック</span><select data-axis="pitch"></select><label><input data-invert="pitch" type="checkbox"> 反転</label></div>
+    <div class="setting-row"><span>ペダル（捻り）</span><select data-axis="pedal"></select><label><input data-invert="pedal" type="checkbox"> 反転</label></div>
+    <div class="setting-row"><span>コレクティブ</span><select data-axis="collective"></select><label><input data-invert="collective" type="checkbox"> 反転</label></div>
+    <p id="axisReadout">未接続</p>
+    <p class="settings-warning">離陸前にコレクティブを最小へ。接続中はジョイスティック入力が優先されます。</p>
+    <button id="settingsCloseBtn" class="settings-close" type="button">SAVE &amp; CLOSE</button>
+  </section>
+</div>
+<div id="welcome" class="modal-backdrop">
+  <section class="menu-panel" role="dialog" aria-modal="true" aria-label="訓練開始メニュー">
+    <h1 class="menu-title">HELICOPTER HOVER &amp; LANDING</h1>
+    <p class="menu-aircraft">BELL 206B-3 JETRANGER III</p>
+    <button id="startBtn" class="menu-button" type="button">[ 1. CALM WEATHER ]</button>
+    <button id="menuConfigBtn" class="menu-button" type="button">[ 2. JOYSTICK CONFIG ]</button>
+  </section>
+</div>
+<script type="module">
+'use strict';
+
+// All numeric model parameters are collected here. "verified" values are
+// documented for the Bell 206B-3; "estimated" values require flight testing.
+const CONFIG = Object.freeze({
+  aircraft: Object.freeze({
+    massKg: 1250,                      // estimated operating mass; max certified is 1451 kg
+    maxCertifiedMassKg: 1451,         // verified: Vertipedia / EASA
+    inertiaKgM2: Object.freeze({ x: 1650, y: 2450, z: 1850 }), // estimated
+    gravityMps2: 9.80665,
+    airDensityKgM3: 1.225,
+    fuselageDragAreaM2: Object.freeze({ x: 2.3, y: 3.1, z: 1.8 }), // estimated Cd*A
+    angularDampingNmPerRadS: Object.freeze({ x: 5000, y: 3900, z: 5100 }), // estimated effective rotor/airframe rate damping
+    initialCgAltitudeM: 0.77,
+    rotorHubPositionBodyM: Object.freeze({ x: -0.110, y: 1.75, z: 0 }), // estimated lateral mast/CG offset; match shaft rigging
+    tailHubPositionBodyM: Object.freeze({ x: 0, y: 0.10, z: -4.40 }), // estimated
+    tailPedalThrustRangeN: 340,       // estimated: V13 reduces pedal yaw acceleration without delayed control
+    neutralPedalTailThrustFraction: 0.90, // estimated tail-pitch neutral bias; left pedal still required for trim
+  }),
+  power: Object.freeze({
+    engineType: 'Allison 250-C20B',   // documented type for this selected configuration
+    throttleSetting: 1.0,            // fixed; governor dynamics intentionally omitted in V7
+    nominalRotorRpm: 395,            // verified: Vertical Flight Society
+    ratedContinuousPowerW: 201000,   // reference only, not enforced in V7
+    ratedTakeoffPowerW: 236000,      // reference only, not enforced in V7
+  }),
+  rotor: Object.freeze({
+    radiusM: 5.08,                   // verified: 10.16 m diameter
+    bladeCount: 2,                   // verified
+    bladeChordM: 0.3302,            // approximately 13 in; secondary maintenance reference
+    rootCutoutFraction: 0.20,        // estimated
+    bladeTwistDeg: -10,             // estimated for this aerodynamic model
+    collectivePitchMinDeg: 2,        // estimated effective root pitch
+    collectivePitchRangeDeg: 19,     // estimated effective range
+    liftSlopePerRad: 5.7,            // assumed thin-airfoil approximation
+    profileDragCoefficient: 0.012,   // estimated
+    minLiftAngleRad: -0.12,          // simplified static stall bounds
+    maxLiftAngleRad: 0.24,
+    radialStations: 16,
+    // V11: bracketed descending-flight inflow solve (old fixed-point iteration
+    // diverged when descent rate approached induced velocity). Estimates only;
+    // the vortex-ring state and autorotation remain outside this V1-series model.
+    inflowSolveIterations: 30,
+    inflowBracketExpansions: 8,
+    inflowInitialUpperMarginMps: 20,
+    inflowBracketExpansionFactor: 2,
+    groundEffectMinHubHeightRadii: 0.5, // lower validity bound for near-ground momentum estimate
+    groundEffectRadiusDivisor: 4, // Cheeseman-Bennett form uses R/(4h)
+    groundEffectInflowCoupling: 0.20, // estimated partial coupling for fixed-RPM blade-element calculation
+    // V15: increased translational inflow effect in V13 still causes
+    // excessive climb during sustained low-speed circling; the rotor remains
+    // a hover/landing approximation, not a forward-flight model.
+    // V13: momentum-only inflow equation overpredicts thrust as translational
+    // speed grows because blade-element integration lacks azimuthal aerodynamics.
+    // A smooth bounded equivalent inflow is used in the hover/landing envelope;
+    // this is NOT a validated forward-flight / vortex-ring rotor model.
+    translationalInflowSaturationMps: 3.0, // estimated hover-pad envelope: reduced excessive translational lift
+    descentInflowSaturationMps: 2.7,       // estimated downward-flow correction validity envelope
+    lateralMastTiltDeg: -3.81,    // estimated fixed lateral rigging for tail-rotor translating tendency; not stability assist
+    maxDiscTiltRad: 0.160,          // estimated cyclic-to-disc authority; V7 flight-test tuning
+    discResponseTimeS: 0.065,       // estimated tip-path-plane response; V7 flight-test tuning
+    inertialFlappingFraction: 0.52,   // estimated passive rotor/fuselage tilt coupling, not an AFCS
+    // Estimated rotor in-plane force response, separate from hub moments.
+    // Calibrated for the hover trainer; not a measured Bell 206 value.
+    additionalHorizontalDiscResponse: 0.55,
+  }),
+  collective: Object.freeze({
+    // Estimated quasi-static lever-to-thrust calibration. Linear over the
+    // operational 20%-100% lever travel; below 20% a smooth ground range
+    // preserves low-pitch settling and smoothly meets the operational slope.
+    // Thrust still comes from blade elements and inflow during actual flight.
+    operationalLinearStartFraction: 0.20,
+    hoverLeverFraction: 0.48,
+    minimumThrustWeightRatio: 0.07,
+    hoverThrustWeightRatio: 1.0,
+    // V14: trainer-specific, reduced collective-to-thrust authority for
+    // deliberate hover height control. This is a tuning estimate, NOT a
+    // published Bell 206 thrust limit. Hover remains at the same lever position.
+    maximumThrustWeightRatio: 1.14,
+    lookupIntervals: 96,
+    inverseIterations: 22,
+  }),
+  skids: Object.freeze({
+    lateralOffsetM: 0.88,
+    foreAftOffsetM: 1.18,
+    verticalOffsetM: -0.84,
+    springConstantNPerM: 50000,
+    dampingNsPerM: 5200,
+    frictionDampingNsPerM: 7500,
+    frictionStiffnessNPerM: 18000,
+    frictionCoefficient: 0.82,
+  }),
+  simulation: Object.freeze({
+    fixedStepS: 1 / 120,
+    maxFrameDeltaS: 0.10,
+    maxStepsPerFrame: 10,
+    collectiveKeyboardRatePerS: 0.21,
+    hoverThresholdSpeedMps: 0.5,
+    collectiveArmingThreshold: 0.09,
+    controlDeadzone: 0.035,
+    axisSettingStorageKey: 'bell206b3_hover_v12_axes',
+    legacyAxisSettingStorageKeys: Object.freeze(['bell206b3_hover_v7_axes', 'bell206b3_hover_v6_axes']),
+    // Standard Gamepad axes: forward stick = -Y; aft stick = +Y.
+    // The flight dynamics uses positive pitch command for nose-down.
+    // Device-specific checkbox inversion is separate from this convention.
+    gamepadAxisPolarity: Object.freeze({ pitch: -1, roll: 1, pedal: 1, collective: 1 }),
+    maxAssignableAxisIndex: 15,
+  }),
+  scene: Object.freeze({
+    padRadiusM: 10,
+    padCircleSegments: 48,
+    nearGridRadiusM: 36,
+    nearGridSpacingM: 3,
+    farGridRadiusM: 180,
+    farGridSpacingM: 18,
+    projectionNearM: 0.6,
+    cameraPitchDownDeg: 12,
+    cameraFovDeg: 73,
+    cameraOffsetBodyM: Object.freeze({ x: -0.30, y: 1.10, z: 0.63 }),
+    maxDevicePixelRatio: 1.5,
+    feetPerM: 3.280839895,
+    knotsPerMps: 1.943844492,
+    feetPerMinutePerMps: 196.850394,
+  }),
+  hud: Object.freeze({
+    // W shape and pitch ladder follow the Space Shuttle V29 HUD reference.
+    displayColor: '#00ff48',
+    mainLineWidthPx: 1.5,
+    emphasizedLineWidthPx: 2,
+    wWingHalfWidthPx: 20,
+    wCenterGapPx: 5,
+    wCenterDropPx: 10,
+    pitchMinDeg: -20,
+    pitchMaxDeg: 20,
+    pitchStepDeg: 5,
+    pitchMinorHalfWidthPx: 40,
+    pitchZeroHalfWidthPx: 100,
+    pitchSideTickLengthPx: 10,
+    pitchLabelGapPx: 5,
+    pitchVisibilityMarginPx: 110,
+    pitchNegativeDashPx: Object.freeze([5, 5]),
+    readoutFontSizePx: 14,
+    readoutBottomPx: 27,
+    readoutHeadingGapPx: 23,
+    readoutHeadingText: '[ FLIGHT DATA ]',
+    readoutLineHeightPx: 21,
+    readoutMarginPx: 17,
+    readoutTextPadChars: 6,
+    percentScale: 100,
+    readoutFooterFontSizePx: 12,
+    readoutFooterBottomPx: 30,
+    readoutStatusBottomPx: 51,
+    tapeWidthPx: 70,
+    tapeHeightPx: 300,
+    tapeOffsetFromCenterPx: 220,
+    tapeBoxWidthPx: 54,
+    tapeBoxHeightPx: 24,
+    tapeTickLengthPx: 12,
+    tapeTickTextOffsetPx: 18,
+    tapeTickSpacingPx: 40,
+    tapeCenterClearancePx: 5,
+    tapeValueTextOffsetPx: 2,
+    speedTapeStepKt: 2,
+    altitudeTapeStepFt: 10,
+    tapeNumberFontPx: 14,
+    tapeValueFontPx: 16,
+    tapeBackground: '#07141f',
+    // Compass rose is driven only by aircraft heading, never by velocity.
+    headingTapeTopPx: 45,
+    headingTapeHeightPx: 44,
+    headingTapeMaxWidthPx: 450,
+    headingTapeWidthRatio: 0.46,
+    headingTapePixelsPerDegree: 4,
+    headingTapeTickIntervalDeg: 10,
+    headingTapeLabelIntervalDeg: 30,
+    headingTapeCardinalIntervalDeg: 90,
+    headingTapeTickBaseOffsetPx: 34,
+    headingTapeMinorTickLengthPx: 6,
+    headingTapeMajorTickLengthPx: 11,
+    headingTapeLabelBaselineOffsetPx: 15,
+    headingTapePointerHalfWidthPx: 5,
+    headingTapePointerHeightPx: 7,
+    headingTapePointerBottomInsetPx: 2,
+    headingTapeMinimumWidthPx: 60,
+    headingTapeNumberDigits: 3,
+    headingTapeFontPx: 13,
+    headingTapeCardinals: Object.freeze(['N', 'E', 'S', 'W']),
+    geometricEpsilon: 1e-9,
+  }),
+});
+
+const MATH = Object.freeze({ DEG_TO_RAD: Math.PI / 180, RAD_TO_DEG: 180 / Math.PI, RPM_TO_RAD_PER_SEC: Math.PI * 2 / 60, TWO_PI: Math.PI * 2, FULL_CIRCLE_DEG: 360 });
+const clamp = (value, lower, upper) => Math.max(lower, Math.min(upper, value));
+const KEY_BINDINGS = Object.freeze({
+  CYCLIC_FORWARD: 'ArrowUp', CYCLIC_BACK: 'ArrowDown',
+  CYCLIC_RIGHT: 'ArrowRight', CYCLIC_LEFT: 'ArrowLeft',
+  PEDAL_RIGHT: 'KeyD', PEDAL_LEFT: 'KeyA',
+  COLLECTIVE_UP: 'KeyW', COLLECTIVE_DOWN: 'KeyS',
+  PAUSE: 'KeyP', RESET: 'KeyR', SETTINGS: 'KeyJ',
+});
+
+// BEGIN PHYSICS
+class Vector3 {
+  constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; }
+  add(other) { return new Vector3(this.x + other.x, this.y + other.y, this.z + other.z); }
+  subtract(other) { return new Vector3(this.x - other.x, this.y - other.y, this.z - other.z); }
+  multiply(scalar) { return new Vector3(this.x * scalar, this.y * scalar, this.z * scalar); }
+  dot(other) { return this.x * other.x + this.y * other.y + this.z * other.z; }
+  cross(other) { return new Vector3(this.y * other.z - this.z * other.y, this.z * other.x - this.x * other.z, this.x * other.y - this.y * other.x); }
+  magnitude() { return Math.hypot(this.x, this.y, this.z); }
+  normalized() { const length = this.magnitude(); return length > 0 ? this.multiply(1 / length) : new Vector3(); }
+}
+
+class Quaternion {
+  constructor(w = 1, x = 0, y = 0, z = 0) { this.w = w; this.x = x; this.y = y; this.z = z; }
+  static fromAxisAngle(axis, angle) {
+    const half = angle / 2;
+    return new Quaternion(Math.cos(half), axis.x * Math.sin(half), axis.y * Math.sin(half), axis.z * Math.sin(half));
+  }
+  multiply(rhs) {
+    return new Quaternion(
+      this.w * rhs.w - this.x * rhs.x - this.y * rhs.y - this.z * rhs.z,
+      this.w * rhs.x + this.x * rhs.w + this.y * rhs.z - this.z * rhs.y,
+      this.w * rhs.y - this.x * rhs.z + this.y * rhs.w + this.z * rhs.x,
+      this.w * rhs.z + this.x * rhs.y - this.y * rhs.x + this.z * rhs.w
+    );
+  }
+  conjugate() { return new Quaternion(this.w, -this.x, -this.y, -this.z); }
+  normalized() {
+    const length = Math.hypot(this.w, this.x, this.y, this.z);
+    return length > 0 ? new Quaternion(this.w / length, this.x / length, this.y / length, this.z / length) : new Quaternion();
+  }
+  rotate(vector) {
+    const q = new Vector3(this.x, this.y, this.z);
+    const t = q.cross(vector).multiply(2);
+    return vector.add(t.multiply(this.w)).add(q.cross(t));
+  }
+  inverseRotate(vector) { return this.conjugate().rotate(vector); }
+  integrateBodyRate(bodyRateRadS, dt) {
+    const omega = new Quaternion(0, bodyRateRadS.x, bodyRateRadS.y, bodyRateRadS.z);
+    const derivative = this.multiply(omega);
+    return new Quaternion(this.w + derivative.w * dt / 2, this.x + derivative.x * dt / 2, this.y + derivative.y * dt / 2, this.z + derivative.z * dt / 2).normalized();
+  }
+}
+
+class FixedPowerSource {
+  #angularSpeed;
+  constructor(powerConfig) {
+    this.#angularSpeed = powerConfig.nominalRotorRpm * MATH.RPM_TO_RAD_PER_SEC;
+  }
+  getRotorAngularSpeedRadS() { return this.#angularSpeed; }
+}
+
+// A bounded near-ground estimate based on rotor-disc clearance rather than
+// an arbitrary exponential boost. For a rotor hovering near a plane surface,
+// a Cheeseman-Bennett-style induced-velocity factor is approximately
+// sqrt(1 - (R/(4h))^2). The constant-power derivation is NOT a complete
+// constant-RPM/collective model; only an estimated fraction of the ideal
+// correction is applied to the separate blade-element inflow calculation.
+// The formula is regularized below h/R=0.5, where it is not reliable.
+class GroundEffectInflowModel {
+  #rotorRadiusM;
+  #minHeightM;
+  #radiusDivisor;
+  #coupling;
+  constructor(config) {
+    this.#rotorRadiusM = config.radiusM;
+    this.#minHeightM = config.radiusM * config.groundEffectMinHubHeightRadii;
+    this.#radiusDivisor = config.groundEffectRadiusDivisor;
+    this.#coupling = config.groundEffectInflowCoupling;
+    if (!(this.#rotorRadiusM > 0 && this.#minHeightM > 0 && this.#radiusDivisor > 0 && this.#coupling >= 0 && this.#coupling <= 1)) {
+      throw new RangeError('Invalid ground-effect geometry');
+    }
+  }
+  inducedVelocityFactor(hubHeightM) {
+    const clearanceM = Math.max(this.#minHeightM, hubHeightM);
+    const ratio = this.#rotorRadiusM / (this.#radiusDivisor * clearanceM);
+    const idealFactor = Math.sqrt(Math.max(0, 1 - ratio * ratio));
+    return 1 - this.#coupling * (1 - idealFactor);
+  }
+}
+
+// Solves the coupled blade-element / momentum equation on its positive-throughflow
+// branch. Bracketing avoids oscillations and singularities of the previous
+// fixed-point iteration during descent. This is NOT a vortex-ring-state or
+// autorotation model; those regimes require separate rotor physics.
+class RotorInducedFlowSolver {
+  #configuration;
+  #momentumCoefficient;
+  constructor(config, airDensity) {
+    this.#configuration = config;
+    this.#momentumCoefficient = 2 * airDensity * Math.PI * config.radiusM ** 2;
+    if (!(config.inflowSolveIterations > 0 &&
+      Number.isInteger(config.inflowSolveIterations) &&
+      config.inflowBracketExpansions > 0 &&
+      Number.isInteger(config.inflowBracketExpansions) &&
+      config.inflowInitialUpperMarginMps > 0 &&
+      config.inflowBracketExpansionFactor > 1 &&
+      this.#momentumCoefficient > 0)) {
+      throw new RangeError('Invalid rotor inflow solver configuration');
+    }
+  }
+  solve(groundFactor, horizontalSpeedMps, climbRateMps, bladeThrustAtVelocity) {
+    // On the chosen downward-throughflow branch, vi + climbRate >= 0.
+    // Momentum theory is not valid within VRS; limiting the branch prevents
+    // spurious numerical thrust collapses/spikes in the basic landing trainer.
+    let lower = Math.max(0, -climbRateMps);
+    let upper = lower + this.#configuration.inflowInitialUpperMarginMps;
+    const residual = inducedVelocity => {
+      const throughFlow = inducedVelocity + climbRateMps;
+      const flowSpeed = Math.hypot(horizontalSpeedMps, throughFlow);
+      const momentumThrust = this.#momentumCoefficient * inducedVelocity * flowSpeed / groundFactor;
+      return bladeThrustAtVelocity(inducedVelocity) - momentumThrust;
+    };
+    if (residual(lower) <= 0) return lower;
+    let expansions = 0;
+    while (residual(upper) > 0 && expansions < this.#configuration.inflowBracketExpansions) {
+      upper = lower + (upper - lower) * this.#configuration.inflowBracketExpansionFactor;
+      expansions++;
+    }
+    if (residual(upper) > 0) {
+      throw new RangeError('Rotor inflow solution could not be bracketed');
+    }
+    for (let iteration = 0; iteration < this.#configuration.inflowSolveIterations; iteration++) {
+      const middle = (lower + upper) / 2;
+      if (residual(middle) > 0) lower = middle;
+      else upper = middle;
+    }
+    return (lower + upper) / 2;
+  }
+}
+
+// Limits the velocity argument of the simplified momentum/blade-element
+// coupling to its intended hover / landing envelope. The model has no
+// azimuthal blade aerodynamics and no validated vortex-ring-state branch.
+// Smooth saturation avoids inventing ever-increasing translational lift or
+// growing induced thrust at unrealistic descent rates.
+class RotorInflowEnvelope {
+  #translationalScale;
+  #descentScale;
+  constructor(config) {
+    this.#translationalScale = config.translationalInflowSaturationMps;
+    this.#descentScale = config.descentInflowSaturationMps;
+    if (!(this.#translationalScale > 0 && this.#descentScale > 0)) {
+      throw new RangeError('Invalid rotor inflow envelope');
+    }
+  }
+  effectiveVelocity(horizontalSpeedMps, climbRateMps) {
+    const transverse = this.#translationalScale *
+      Math.tanh(Math.max(0, horizontalSpeedMps) / this.#translationalScale);
+    const axial = climbRateMps < 0
+      ? this.#descentScale * Math.tanh(climbRateMps / this.#descentScale)
+      : climbRateMps;
+    return { horizontalSpeedMps: transverse, climbRateMps: axial };
+  }
+}
+
+class MainRotor {
+  #config;
+  #airDensity;
+  #powerSource;
+  #groundEffect;
+  #inflowSolver;
+  #inflowEnvelope;
+  constructor(rotorConfig, airDensity, powerSource) {
+    this.#config = rotorConfig;
+    this.#airDensity = airDensity;
+    this.#powerSource = powerSource;
+    this.#groundEffect = new GroundEffectInflowModel(rotorConfig);
+    this.#inflowSolver = new RotorInducedFlowSolver(rotorConfig, airDensity);
+    this.#inflowEnvelope = new RotorInflowEnvelope(rotorConfig);
+  }
+  compute(collective, altitudeAboveGroundM, horizontalAirSpeedMps, climbRateMps) {
+    const config = this.#config;
+    const omega = this.#powerSource.getRotorAngularSpeedRadS();
+    const groundFactor = this.#groundEffect.inducedVelocityFactor(altitudeAboveGroundM);
+    const flow = this.#inflowEnvelope.effectiveVelocity(horizontalAirSpeedMps, climbRateMps);
+    const inducedVelocity = this.#inflowSolver.solve(
+      groundFactor, flow.horizontalSpeedMps, flow.climbRateMps,
+      velocity => this.#integrateBladeForces(collective, omega, velocity, flow.climbRateMps).thrust
+    );
+    const finalBladeForces = this.#integrateBladeForces(collective, omega, inducedVelocity, flow.climbRateMps);
+    const inducedTorque = finalBladeForces.thrust * inducedVelocity / omega;
+    return Object.freeze({
+      thrustN: finalBladeForces.thrust,
+      rotorTorqueNm: inducedTorque + finalBladeForces.profileTorque,
+      inducedVelocityMps: inducedVelocity,
+    });
+  }
+  #integrateBladeForces(collective, omega, inducedVelocity, climbRate) {
+    const c = this.#config;
+    const dr = c.radiusM * (1 - c.rootCutoutFraction) / c.radialStations;
+    const rootPitch = (c.collectivePitchMinDeg + collective * c.collectivePitchRangeDeg) * MATH.DEG_TO_RAD;
+    const bladeTwist = c.bladeTwistDeg * MATH.DEG_TO_RAD;
+    let thrust = 0;
+    let profileTorque = 0;
+    for (let station = 0; station < c.radialStations; station++) {
+      const fraction = c.rootCutoutFraction + (1 - c.rootCutoutFraction) * (station + 0.5) / c.radialStations;
+      const radius = fraction * c.radiusM;
+      const tangentialSpeed = omega * radius;
+      const localPitch = rootPitch + bladeTwist * ((fraction - c.rootCutoutFraction) / (1 - c.rootCutoutFraction));
+      const angleOfAttack = clamp(localPitch - Math.atan2(inducedVelocity + climbRate, tangentialSpeed), c.minLiftAngleRad, c.maxLiftAngleRad);
+      const dynamicForce = 0.5 * this.#airDensity * tangentialSpeed ** 2 * c.bladeChordM * c.bladeCount * dr;
+      thrust += Math.max(0, dynamicForce * c.liftSlopePerRad * angleOfAttack);
+      profileTorque += dynamicForce * c.profileDragCoefficient * radius;
+    }
+    return { thrust, profileTorque };
+  }
+}
+
+class CollectivePitchSchedule {
+  #table;
+  #intervalCount;
+  #parameters;
+  #operationalSlope;
+  constructor(config, aircraft, rotor) {
+    this.#intervalCount = config.lookupIntervals;
+    this.#parameters = config;
+    const startPosition = config.operationalLinearStartFraction;
+    const hoverPosition = config.hoverLeverFraction;
+    const minimum = config.minimumThrustWeightRatio;
+    const hover = config.hoverThrustWeightRatio;
+    const maximum = config.maximumThrustWeightRatio;
+    // Derive the entire operational straight line from one hover anchor and
+    // one upper thrust limit. Avoid duplicate configuration values drifting.
+    this.#operationalSlope = (maximum - hover) / (1 - hoverPosition);
+    const startRatio = hover - (hoverPosition - startPosition) * this.#operationalSlope;
+    if (!(Number.isInteger(this.#intervalCount) && this.#intervalCount >= 2 &&
+      Number.isInteger(config.inverseIterations) && config.inverseIterations > 0 &&
+      0 < startPosition && startPosition < hoverPosition && hoverPosition < 1 &&
+      0 <= minimum && minimum < startRatio && startRatio < hover && hover < maximum &&
+      Number.isFinite(this.#operationalSlope) && this.#operationalSlope > 0)) {
+      throw new RangeError('Invalid collective calibration geometry');
+    }
+    const hubHeight = aircraft.initialCgAltitudeM + aircraft.rotorHubPositionBodyM.y;
+    const weight = aircraft.massKg * aircraft.gravityMps2;
+    const reachableMinimum = rotor.compute(0, hubHeight, 0, 0).thrustN;
+    const reachableMaximum = rotor.compute(1, hubHeight, 0, 0).thrustN;
+    if (reachableMinimum > minimum * weight || reachableMaximum < maximum * weight) {
+      throw new RangeError('Requested collective thrust range exceeds blade pitch limits');
+    }
+    this.#table = [];
+    for (let index = 0; index <= this.#intervalCount; index++) {
+      const lever = index / this.#intervalCount;
+      const targetThrust = weight * this.#targetStaticThrustWeightRatio(lever);
+      let lower = 0;
+      let upper = 1;
+      for (let iteration = 0; iteration < config.inverseIterations; iteration++) {
+        const middle = (lower + upper) / 2;
+        const thrust = rotor.compute(middle, hubHeight, 0, 0).thrustN;
+        if (thrust < targetThrust) lower = middle;
+        else upper = middle;
+      }
+      this.#table.push((lower + upper) / 2);
+    }
+  }
+  #targetStaticThrustWeightRatio(leverFraction) {
+    const c = this.#parameters;
+    const linearStart = c.operationalLinearStartFraction;
+    const startRatio = c.hoverThrustWeightRatio -
+      (c.hoverLeverFraction - linearStart) * this.#operationalSlope;
+    if (leverFraction >= linearStart) {
+      return startRatio + (leverFraction - linearStart) * this.#operationalSlope;
+    }
+    const normalizedPosition = leverFraction / linearStart;
+    // Cubic Hermite: zero slope at minimum, continuous positive slope when
+    // joining the linear operational segment. This part is only ground range.
+    const t = normalizedPosition;
+    const smoothTransition = t * t * (3 - 2 * t);
+    const terminalSlopeBasis = t * t * t - t * t;
+    return c.minimumThrustWeightRatio +
+      (startRatio - c.minimumThrustWeightRatio) * smoothTransition +
+      (linearStart * this.#operationalSlope) * terminalSlopeBasis;
+  }
+  bladePitchFraction(leverFraction) {
+    const position = clamp(leverFraction, 0, 1) * this.#intervalCount;
+    const index = Math.min(Math.floor(position), this.#intervalCount - 1);
+    const fraction = position - index;
+    return this.#table[index] + (this.#table[index + 1] - this.#table[index]) * fraction;
+  }
+}
+
+class RotorDiscDynamics {
+  #normalWorld;
+  #config;
+  constructor(rotorConfig) {
+    this.#config = rotorConfig;
+    // At start the aircraft is level: the mast rigging already balances
+    // the modeled tail-rotor translating tendency.
+    this.#normalWorld = new Vector3(
+      Math.tan(rotorConfig.lateralMastTiltDeg * MATH.DEG_TO_RAD), 1, 0
+    ).normalized();
+  }
+  update(rollCommand, pitchCommand, attitude, dt) {
+    const config = this.#config;
+    const inertialFraction = config.inertialFlappingFraction;
+    const bodyUpWorld = attitude.rotate(new Vector3(0, 1, 0));
+    const worldUp = new Vector3(0, 1, 0);
+    const riggingAndCyclicBody = new Vector3(
+      Math.tan(config.lateralMastTiltDeg * MATH.DEG_TO_RAD) + rollCommand * config.maxDiscTiltRad,
+      0,
+      pitchCommand * config.maxDiscTiltRad
+    );
+    // First-order tip-path-plane approximation. Unlike V4's rigidly
+    // body-attached rotor normal, the plane responds partly in an inertial
+    // reference: roll/pitch of the suspended fuselage creates a restoring
+    // thrust moment at the hub. This is an estimated passive aeroelastic
+    // coupling, not a prescribed body attitude or a flight-control servo.
+    const targetWorld = worldUp.multiply(inertialFraction)
+      .add(bodyUpWorld.multiply(1 - inertialFraction))
+      .add(attitude.rotate(riggingAndCyclicBody)).normalized();
+    const followFraction = 1 - Math.exp(-dt / config.discResponseTimeS);
+    this.#normalWorld = this.#normalWorld.multiply(1 - followFraction)
+      .add(targetWorld.multiply(followFraction)).normalized();
+    return attitude.inverseRotate(this.#normalWorld);
+  }
+}
+
+class SkidContactModel {
+  #points;
+  #configuration;
+  constructor(config) {
+    this.#configuration = config;
+    this.#points = [];
+    for (const xSign of [-1, 1]) for (const zSign of [-1, 1]) {
+      this.#points.push({
+        locationBody: new Vector3(xSign * config.lateralOffsetM, config.verticalOffsetM, zSign * config.foreAftOffsetM),
+        groundAnchor: null,
+      });
+    }
+  }
+  reset() { for (const point of this.#points) point.groundAnchor = null; }
+  calculate(state) {
+    const parameters = this.#configuration;
+    let groundForceWorld = new Vector3();
+    let groundMomentBody = new Vector3();
+    let contacts = 0;
+    for (const point of this.#points) {
+      const pointBody = point.locationBody;
+      const pointWorld = state.position.add(state.attitude.rotate(pointBody));
+      const penetration = -pointWorld.y;
+      if (penetration <= 0) { point.groundAnchor = null; continue; }
+      const pointVelocityWorld = state.velocity.add(state.attitude.rotate(state.angularRateBody.cross(pointBody)));
+      const normalForce = Math.max(0, parameters.springConstantNPerM * penetration - parameters.dampingNsPerM * pointVelocityWorld.y);
+      if (normalForce <= 0) { point.groundAnchor = null; continue; }
+      contacts++;
+      if (!point.groundAnchor) point.groundAnchor = new Vector3(pointWorld.x, 0, pointWorld.z);
+      // Elastic tangential displacement permits static friction at zero velocity.
+      const tangentDisplacement = new Vector3(pointWorld.x - point.groundAnchor.x, 0, pointWorld.z - point.groundAnchor.z);
+      const tangentVelocity = new Vector3(pointVelocityWorld.x, 0, pointVelocityWorld.z);
+      const requestedFriction = tangentDisplacement.multiply(-parameters.frictionStiffnessNPerM)
+        .add(tangentVelocity.multiply(-parameters.frictionDampingNsPerM));
+      const limit = normalForce * parameters.frictionCoefficient;
+      let friction = requestedFriction;
+      if (requestedFriction.magnitude() > limit) {
+        friction = requestedFriction.normalized().multiply(limit);
+        // Slip: move the contact anchor to retain a bounded friction force.
+        const newDisplacement = friction.add(tangentVelocity.multiply(parameters.frictionDampingNsPerM))
+          .multiply(-1 / parameters.frictionStiffnessNPerM);
+        point.groundAnchor = new Vector3(pointWorld.x - newDisplacement.x, 0, pointWorld.z - newDisplacement.z);
+      }
+      const contactForceWorld = friction.add(new Vector3(0, normalForce, 0));
+      groundForceWorld = groundForceWorld.add(contactForceWorld);
+      groundMomentBody = groundMomentBody.add(pointBody.cross(state.attitude.inverseRotate(contactForceWorld)));
+    }
+    return { forceWorld: groundForceWorld, momentBody: groundMomentBody, contacts };
+  }
+}
+
+// Adds the missing in-plane rotor-force response for low-speed translation.
+// The disc normal still drives the original hub moments; this supplemental
+// aerodynamic force acts at the aircraft CG and therefore does not change
+// pitch/roll response. It is an estimated hover-trainer approximation, not
+// a measured Bell 206 cyclic force derivative or a velocity command.
+// The neutral rotor-mast rigging is excluded so hover trim is unchanged.
+class RotorHorizontalResponse {
+  #additionalFraction;
+  #referenceLateralInclination;
+  #referenceUp = new Vector3(0, 1, 0);
+  #referenceNose = new Vector3(0, 0, 1);
+  constructor(rotorConfiguration) {
+    this.#additionalFraction = rotorConfiguration.additionalHorizontalDiscResponse;
+    this.#referenceLateralInclination = Math.sin(rotorConfiguration.lateralMastTiltDeg * MATH.DEG_TO_RAD);
+    if (!(this.#additionalFraction >= 0 && Number.isFinite(this.#referenceLateralInclination))) {
+      throw new RangeError('Invalid rotor horizontal response parameters');
+    }
+  }
+  compute(thrustN, discNormalWorld, attitude) {
+    const nose = attitude.rotate(this.#referenceNose);
+    const horizontalNose = new Vector3(nose.x, 0, nose.z).normalized();
+    if (horizontalNose.magnitude() === 0) return new Vector3();
+    const lateralRight = this.#referenceUp.cross(horizontalNose);
+    const neutralHorizontal = lateralRight.multiply(this.#referenceLateralInclination);
+    const discHorizontal = new Vector3(discNormalWorld.x, 0, discNormalWorld.z);
+    return discHorizontal.subtract(neutralHorizontal)
+      .multiply(thrustN * this.#additionalFraction);
+  }
+}
+
+class HelicopterDynamics {
+  #configuration;
+  #rotor;
+  #rotorDisc;
+  #horizontalResponse;
+  #collectiveSchedule;
+  #skids;
+  #state;
+  #neutralTailThrust;
+  #lastRotorData;
+  #contacts = 0;
+  constructor(configuration, powerSource) {
+    this.#configuration = configuration;
+    this.#rotor = new MainRotor(configuration.rotor, configuration.aircraft.airDensityKgM3, powerSource);
+    this.#collectiveSchedule = new CollectivePitchSchedule(configuration.collective, configuration.aircraft, this.#rotor);
+    this.#rotorDisc = new RotorDiscDynamics(configuration.rotor);
+    this.#horizontalResponse = new RotorHorizontalResponse(configuration.rotor);
+    this.#skids = new SkidContactModel(configuration.skids);
+    const hoverRotor = this.#rotor.compute(this.#collectiveSchedule.bladePitchFraction(configuration.collective.hoverLeverFraction), configuration.aircraft.rotorHubPositionBodyM.y + configuration.aircraft.initialCgAltitudeM, 0, 0);
+    this.#neutralTailThrust = (hoverRotor.rotorTorqueNm / -configuration.aircraft.tailHubPositionBodyM.z)
+      * configuration.aircraft.neutralPedalTailThrustFraction;
+    this.#lastRotorData = hoverRotor;
+    this.reset();
+  }
+  reset() {
+    this.#state = {
+      position: new Vector3(0, this.#configuration.aircraft.initialCgAltitudeM, 0),
+      velocity: new Vector3(),
+      attitude: new Quaternion(),
+      angularRateBody: new Vector3(),
+    };
+    this.#rotorDisc = new RotorDiscDynamics(this.#configuration.rotor);
+    this.#skids.reset();
+    this.#contacts = 4;
+  }
+  getSnapshot() {
+    const state = this.#state;
+    return Object.freeze({
+      position: Object.freeze(new Vector3(state.position.x, state.position.y, state.position.z)),
+      velocity: Object.freeze(new Vector3(state.velocity.x, state.velocity.y, state.velocity.z)),
+      attitude: Object.freeze(new Quaternion(state.attitude.w, state.attitude.x, state.attitude.y, state.attitude.z)),
+      angularRateBody: Object.freeze(new Vector3(state.angularRateBody.x, state.angularRateBody.y, state.angularRateBody.z)),
+      contactCount: this.#contacts,
+      rotorThrustN: this.#lastRotorData.thrustN,
+    });
+  }
+  step(controls, dt) {
+    const a = this.#configuration.aircraft;
+    const state = this.#state;
+    const rotorNormalBody = this.#rotorDisc.update(controls.roll, controls.pitch, state.attitude, dt);
+    const rotorHubBody = new Vector3(a.rotorHubPositionBodyM.x, a.rotorHubPositionBodyM.y, a.rotorHubPositionBodyM.z);
+    const tailHubBody = new Vector3(a.tailHubPositionBodyM.x, a.tailHubPositionBodyM.y, a.tailHubPositionBodyM.z);
+    const localVelocity = state.attitude.inverseRotate(state.velocity);
+    const rotorNormalWorld = state.attitude.rotate(rotorNormalBody);
+    const axialVelocity = state.velocity.dot(rotorNormalWorld);
+    const horizontalVelocity = Math.sqrt(Math.max(0, state.velocity.dot(state.velocity) - axialVelocity ** 2));
+    const hubHeight = state.position.add(state.attitude.rotate(rotorHubBody)).y;
+    const bladePitchFraction = this.#collectiveSchedule.bladePitchFraction(controls.collective);
+    const rotorData = this.#rotor.compute(bladePitchFraction, hubHeight, horizontalVelocity, axialVelocity);
+    this.#lastRotorData = rotorData;
+    const rotorForceBody = rotorNormalBody.multiply(rotorData.thrustN);
+    // Positive body yaw is nose-right; a CCW main rotor gives positive reaction yaw.
+    const rotorReactionBody = new Vector3(0, rotorData.rotorTorqueNm, 0);
+    const tailThrust = this.#neutralTailThrust - controls.pedal * a.tailPedalThrustRangeN;
+    const tailForceBody = new Vector3(tailThrust, 0, 0);
+    const airDragBody = this.#calculateAirDrag(localVelocity);
+    const bodyForce = rotorForceBody.add(tailForceBody).add(airDragBody);
+    const bodyMoment = rotorHubBody.cross(rotorForceBody)
+      .add(tailHubBody.cross(tailForceBody))
+      .add(rotorReactionBody)
+      .add(this.#calculateRateDamping(state.angularRateBody));
+    const contact = this.#skids.calculate(state);
+    this.#contacts = contact.contacts;
+    const gravityForceWorld = new Vector3(0, -a.massKg * a.gravityMps2, 0);
+    const horizontalRotorForceWorld = this.#horizontalResponse.compute(
+      rotorData.thrustN, rotorNormalWorld, state.attitude
+    );
+    const worldForce = state.attitude.rotate(bodyForce).add(horizontalRotorForceWorld)
+      .add(contact.forceWorld).add(gravityForceWorld);
+    const acceleration = worldForce.multiply(1 / a.massKg);
+    const moment = bodyMoment.add(contact.momentBody);
+    const angularAcceleration = this.#calculateAngularAcceleration(moment, state.angularRateBody);
+    // Semi-implicit Euler for translation and rotation; fixed time step.
+    state.velocity = state.velocity.add(acceleration.multiply(dt));
+    state.position = state.position.add(state.velocity.multiply(dt));
+    state.angularRateBody = state.angularRateBody.add(angularAcceleration.multiply(dt));
+    state.attitude = state.attitude.integrateBodyRate(state.angularRateBody, dt);
+    this.#verifyFiniteState();
+  }
+  #calculateAirDrag(bodyVelocity) {
+    const a = this.#configuration.aircraft;
+    const factor = -0.5 * a.airDensityKgM3;
+    return new Vector3(
+      factor * a.fuselageDragAreaM2.x * bodyVelocity.x * Math.abs(bodyVelocity.x),
+      factor * a.fuselageDragAreaM2.y * bodyVelocity.y * Math.abs(bodyVelocity.y),
+      factor * a.fuselageDragAreaM2.z * bodyVelocity.z * Math.abs(bodyVelocity.z)
+    );
+  }
+  #calculateRateDamping(rate) {
+    const damping = this.#configuration.aircraft.angularDampingNmPerRadS;
+    return new Vector3(-damping.x * rate.x, -damping.y * rate.y, -damping.z * rate.z);
+  }
+  #calculateAngularAcceleration(moment, rate) {
+    const inertia = this.#configuration.aircraft.inertiaKgM2;
+    const angularMomentum = new Vector3(inertia.x * rate.x, inertia.y * rate.y, inertia.z * rate.z);
+    const resultant = moment.subtract(rate.cross(angularMomentum));
+    return new Vector3(resultant.x / inertia.x, resultant.y / inertia.y, resultant.z / inertia.z);
+  }
+  #verifyFiniteState() {
+    const { position, velocity, attitude, angularRateBody } = this.#state;
+    const numbers = [position.x, position.y, position.z, velocity.x, velocity.y, velocity.z,
+      attitude.w, attitude.x, attitude.y, attitude.z, angularRateBody.x, angularRateBody.y, angularRateBody.z];
+    if (!numbers.every(Number.isFinite)) throw new Error('Non-finite helicopter physics state');
+  }
+}
+// END PHYSICS
+
+class InputController {
+  #settings;
+  #pressed = new Set();
+  #collective = 0;
+  #armed = false;
+  #lastGamepadIdentity = null;
+  constructor(configuration) {
+    this.config = configuration;
+    this.#settings = this.#loadSettings();
+    window.addEventListener('keydown', event => this.#onKey(event, true));
+    window.addEventListener('keyup', event => this.#onKey(event, false));
+    window.addEventListener('blur', () => this.#pressed.clear());
+  }
+  get axisSettings() { return structuredClone(this.#settings); }
+  get gamepad() {
+    if (!navigator.getGamepads) return null;
+    return Array.from(navigator.getGamepads()).find(gamepad => gamepad && gamepad.connected) || null;
+  }
+  reset() {
+    this.#collective = 0;
+    this.#armed = false;
+    this.#lastGamepadIdentity = null;
+    this.#pressed.clear();
+  }
+  setMapping(control, axisIndex, inverted) {
+    if (!Object.prototype.hasOwnProperty.call(this.#settings, control)) throw new Error(`Unknown control: ${control}`);
+    const index = Number(axisIndex);
+    if (!Number.isInteger(index) || index < 0 || index > this.config.simulation.maxAssignableAxisIndex) throw new RangeError('Invalid gamepad axis index');
+    this.#settings[control] = { index, inverted: Boolean(inverted) };
+    try { localStorage.setItem(this.config.simulation.axisSettingStorageKey, JSON.stringify(this.#settings)); }
+    catch (error) { console.warn('Axis settings could not be stored:', error); }
+    this.#armed = false;
+  }
+  sample(dt) {
+    const gamepad = this.gamepad;
+    if (gamepad) {
+      if (this.#lastGamepadIdentity !== gamepad.id) {
+        this.#lastGamepadIdentity = gamepad.id;
+        this.#armed = false;
+      }
+      const pitch = this.#readAxis(gamepad, 'pitch');
+      const roll = this.#readAxis(gamepad, 'roll');
+      const pedal = this.#readAxis(gamepad, 'pedal');
+      const throttleAxis = this.#readAxis(gamepad, 'collective', false);
+      const requestedCollective = clamp((throttleAxis + 1) / 2, 0, 1);
+      if (requestedCollective <= this.config.simulation.collectiveArmingThreshold) this.#armed = true;
+      return Object.freeze({
+        pitch, roll, pedal,
+        collective: this.#armed ? requestedCollective : 0,
+        requiresCollectiveArming: !this.#armed,
+        source: gamepad.id,
+      });
+    }
+    this.#lastGamepadIdentity = null;
+    const axis = (positive, negative) => (Number(this.#pressed.has(positive)) - Number(this.#pressed.has(negative)));
+    this.#collective = clamp(this.#collective + axis(KEY_BINDINGS.COLLECTIVE_UP, KEY_BINDINGS.COLLECTIVE_DOWN) * dt * this.config.simulation.collectiveKeyboardRatePerS, 0, 1);
+    return Object.freeze({
+      pitch: axis(KEY_BINDINGS.CYCLIC_FORWARD, KEY_BINDINGS.CYCLIC_BACK), roll: axis(KEY_BINDINGS.CYCLIC_RIGHT, KEY_BINDINGS.CYCLIC_LEFT),
+      pedal: axis(KEY_BINDINGS.PEDAL_RIGHT, KEY_BINDINGS.PEDAL_LEFT), collective: this.#collective,
+      requiresCollectiveArming: false, source: 'KEYBOARD',
+    });
+  }
+  previewAxes(gamepad) {
+    if (!gamepad) return null;
+    return Object.freeze({
+      pitch: this.#readAxis(gamepad, 'pitch'),
+      roll: this.#readAxis(gamepad, 'roll'),
+      pedal: this.#readAxis(gamepad, 'pedal'),
+    });
+  }
+  #readAxis(gamepad, control, clampDeadzone = true) {
+    const setting = this.#settings[control];
+    const raw = gamepad.axes[setting.index];
+    if (!Number.isFinite(raw)) return control === 'collective' ? -1 : 0;
+    // Convert the Gamepad API's standard axis convention to simulator commands.
+    // The user-facing invert flag corrects nonstandard controller wiring only.
+    const intrinsicPolarity = this.config.simulation.gamepadAxisPolarity[control];
+    const userPolarity = setting.inverted ? -1 : 1;
+    const value = clamp(raw * intrinsicPolarity * userPolarity, -1, 1);
+    return clampDeadzone ? this.#deadzone(value) : value;
+  }
+  #deadzone(value) {
+    const deadzone = this.config.simulation.controlDeadzone;
+    return Math.abs(value) < deadzone ? 0 : Math.sign(value) * (Math.abs(value) - deadzone) / (1 - deadzone);
+  }
+  #onKey(event, isDown) {
+    if (event.target.closest('button,select,input')) return;
+    const handled = [KEY_BINDINGS.CYCLIC_FORWARD, KEY_BINDINGS.CYCLIC_BACK, KEY_BINDINGS.CYCLIC_LEFT, KEY_BINDINGS.CYCLIC_RIGHT, KEY_BINDINGS.COLLECTIVE_UP, KEY_BINDINGS.COLLECTIVE_DOWN, KEY_BINDINGS.PEDAL_LEFT, KEY_BINDINGS.PEDAL_RIGHT];
+    if (!handled.includes(event.code)) return;
+    event.preventDefault();
+    if (isDown) this.#pressed.add(event.code);
+    else this.#pressed.delete(event.code);
+  }
+  #loadSettings() {
+    // In V12, the Gamepad API's positive-aft Y axis is normalized inside
+    // #readAxis; hence a standard device no longer needs 'invert' checked.
+    const defaults = { roll: { index: 0, inverted: false }, pitch: { index: 1, inverted: false },
+      pedal: { index: 2, inverted: false }, collective: { index: 3, inverted: true } };
+    try {
+      let rawSettings = localStorage.getItem(this.config.simulation.axisSettingStorageKey);
+      let migratingLegacySettings = false;
+      if (rawSettings === null) {
+        for (const legacyKey of this.config.simulation.legacyAxisSettingStorageKeys) {
+          rawSettings = localStorage.getItem(legacyKey);
+          if (rawSettings !== null) { migratingLegacySettings = true; break; }
+        }
+      }
+      if (rawSettings === null) return defaults;
+      const stored = JSON.parse(rawSettings);
+      if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return defaults;
+      for (const [name, initial] of Object.entries(defaults)) {
+        const selected = stored[name];
+        if (selected && Number.isInteger(selected.index) && selected.index >= 0 && selected.index <= this.config.simulation.maxAssignableAxisIndex && typeof selected.inverted === 'boolean') {
+          // Older versions used 'invert' for the normal pitch polarity.
+          // Toggle this one flag once when migrating, preserving each user's
+          // actual cyclic direction regardless of their prior choice.
+          const inverted = migratingLegacySettings && name === 'pitch' ? !selected.inverted : selected.inverted;
+          defaults[name] = { index: selected.index, inverted };
+        } else defaults[name] = initial;
+      }
+      if (migratingLegacySettings) {
+        localStorage.setItem(this.config.simulation.axisSettingStorageKey, JSON.stringify(defaults));
+      }
+    } catch (error) { console.warn('Axis settings could not be loaded:', error); }
+    return defaults;
+  }
+
+}
+
+class WireframeRenderer {
+  #canvas;
+  #ctx;
+  #config;
+  #cameraOrientation;
+  #cameraPosition;
+  #focal;
+  #width;
+  #height;
+  #hud;
+  constructor(canvas, config) {
+    this.#canvas = canvas;
+    this.#ctx = canvas.getContext('2d', { alpha: false });
+    if (!this.#ctx) throw new Error('Canvas 2D is unavailable');
+    this.#config = config;
+    this.#hud = new ShuttleStyleHud(config);
+  }
+  render(snapshot, controls) {
+    this.#resize();
+    const ctx = this.#ctx;
+    ctx.fillStyle = '#07141f';
+    ctx.fillRect(0, 0, this.#width, this.#height);
+    const scene = this.#config.scene;
+    const cameraOffset = new Vector3(scene.cameraOffsetBodyM.x, scene.cameraOffsetBodyM.y, scene.cameraOffsetBodyM.z);
+    this.#cameraPosition = snapshot.position.add(snapshot.attitude.rotate(cameraOffset));
+    const cameraTilt = Quaternion.fromAxisAngle(new Vector3(1, 0, 0), scene.cameraPitchDownDeg * MATH.DEG_TO_RAD);
+    this.#cameraOrientation = snapshot.attitude.multiply(cameraTilt);
+    this.#focal = Math.min(this.#width, this.#height) / (2 * Math.tan(scene.cameraFovDeg * MATH.DEG_TO_RAD / 2));
+    this.#drawGrid(scene.farGridRadiusM, scene.farGridSpacingM, '#1a3b48', 1);
+    this.#drawGrid(scene.nearGridRadiusM, scene.nearGridSpacingM, '#316677', 1);
+    this.#drawPad();
+    this.#hud.render(this.#ctx, this.#width, this.#height, this.#cameraOrientation, this.#focal, snapshot, controls);
+  }
+  #resize() {
+    const ratio = Math.min(window.devicePixelRatio || 1, this.#config.scene.maxDevicePixelRatio);
+    const width = Math.max(1, Math.floor(this.#canvas.clientWidth));
+    const height = Math.max(1, Math.floor(this.#canvas.clientHeight));
+    if (this.#canvas.width !== Math.floor(width * ratio) || this.#canvas.height !== Math.floor(height * ratio)) {
+      this.#canvas.width = Math.floor(width * ratio);
+      this.#canvas.height = Math.floor(height * ratio);
+    }
+    this.#ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    this.#width = width;
+    this.#height = height;
+  }
+  #project(worldPoint) {
+    const relative = this.#cameraOrientation.inverseRotate(worldPoint.subtract(this.#cameraPosition));
+    return relative;
+  }
+  #drawSegment(start, end, color, width = 1) {
+    let a = this.#project(start);
+    let b = this.#project(end);
+    const near = this.#config.scene.projectionNearM;
+    if (a.z <= near && b.z <= near) return;
+    if (a.z <= near || b.z <= near) {
+      const amount = (near - a.z) / (b.z - a.z);
+      const crossing = a.add(b.subtract(a).multiply(amount));
+      if (a.z <= near) a = crossing;
+      else b = crossing;
+    }
+    const cx = this.#width / 2, cy = this.#height / 2;
+    const ctx = this.#ctx;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(cx + a.x * this.#focal / a.z, cy - a.y * this.#focal / a.z);
+    ctx.lineTo(cx + b.x * this.#focal / b.z, cy - b.y * this.#focal / b.z);
+    ctx.stroke();
+  }
+  #drawGrid(extent, spacing, color, width) {
+    for (let value = -extent; value <= extent; value += spacing) {
+      this.#drawSegment(new Vector3(-extent, 0, value), new Vector3(extent, 0, value), color, width);
+      this.#drawSegment(new Vector3(value, 0, -extent), new Vector3(value, 0, extent), color, width);
+    }
+  }
+  #drawPad() {
+    const radius = this.#config.scene.padRadiusM;
+    const segments = this.#config.scene.padCircleSegments;
+    for (let i = 0; i < segments; i++) {
+      const a = MATH.TWO_PI * i / segments;
+      const b = MATH.TWO_PI * (i + 1) / segments;
+      this.#drawSegment(new Vector3(radius * Math.cos(a), 0.035, radius * Math.sin(a)),
+        new Vector3(radius * Math.cos(b), 0.035, radius * Math.sin(b)), '#f0c579', 2);
+    }
+    const letterWidth = 2.5, letterLength = 3.4, y = 0.05;
+    for (const x of [-letterWidth / 2, letterWidth / 2]) {
+      this.#drawSegment(new Vector3(x, y, -letterLength / 2), new Vector3(x, y, letterLength / 2), '#f4d996', 3);
+    }
+    this.#drawSegment(new Vector3(-letterWidth / 2, y, 0), new Vector3(letterWidth / 2, y, 0), '#f4d996', 3);
+    // Reference marks beyond the H remain visible when directly above the pad.
+    for (const side of [-1, 1]) {
+      this.#drawSegment(new Vector3(side * radius * 0.72, 0.04, -0.6), new Vector3(side * radius * 0.72, 0.04, 0.6), '#bc9864', 1.5);
+    }
+  }
+}
+
+// Geometry is kept separate from canvas painting and from helicopter physics.
+// The down-tilted cockpit camera is retained so the helipad stays visible.
+// The W marker is projected from the true body-forward axis, NOT screen center.
+class AttitudeReferenceGeometry {
+  #epsilon;
+  constructor(hudConfig) { this.#epsilon = hudConfig.geometricEpsilon; }
+  nosePoint(cameraAttitude, aircraftAttitude, focalPx, widthPx, heightPx) {
+    const noseWorld = aircraftAttitude.rotate(new Vector3(0, 0, 1));
+    const direction = cameraAttitude.inverseRotate(noseWorld);
+    if (direction.z <= this.#epsilon) return null;
+    return {
+      x: widthPx / 2 + focalPx * direction.x / direction.z,
+      y: heightPx / 2 - focalPx * direction.y / direction.z,
+    };
+  }
+  horizonLine(cameraAttitude, focalPx, widthPx, heightPx) {
+    const upCamera = cameraAttitude.inverseRotate(new Vector3(0, 1, 0));
+    // A*x + B*y + C = 0, with x,y measured from screen center.
+    const a = upCamera.x;
+    const b = -upCamera.y;
+    const c = focalPx * upCamera.z;
+    const halfWidth = widthPx / 2;
+    const halfHeight = heightPx / 2;
+    const crossings = [];
+    const append = (x, y) => {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      if (x < -halfWidth - this.#epsilon || x > halfWidth + this.#epsilon ||
+          y < -halfHeight - this.#epsilon || y > halfHeight + this.#epsilon) return;
+      if (crossings.some(point => Math.hypot(point.x - x, point.y - y) < this.#epsilon)) return;
+      crossings.push({ x: x + halfWidth, y: y + halfHeight });
+    };
+    if (Math.abs(b) > this.#epsilon) {
+      append(-halfWidth, -(c - a * halfWidth) / b);
+      append(halfWidth, -(c + a * halfWidth) / b);
+    }
+    if (Math.abs(a) > this.#epsilon) {
+      append(-(c - b * halfHeight) / a, -halfHeight);
+      append(-(c + b * halfHeight) / a, halfHeight);
+    }
+    if (crossings.length < 2) return null;
+    return [crossings[0], crossings[1]];
+  }
+  // Project a fixed-elevation world pitch reference at aircraft heading. Its
+  // line is a great-circle plane projected into the cockpit view; this avoids
+  // inventing a screen-space angle that disagrees with the 3D scene on bank.
+  pitchReference(cameraAttitude, aircraftAttitude, pitchDeg, focalPx, widthPx, heightPx) {
+    const noseWorld = aircraftAttitude.rotate(new Vector3(0, 0, 1));
+    const horizontalLength = Math.hypot(noseWorld.x, noseWorld.z);
+    if (horizontalLength <= this.#epsilon) return null;
+    const heading = new Vector3(noseWorld.x / horizontalLength, 0, noseWorld.z / horizontalLength);
+    const worldUp = new Vector3(0, 1, 0);
+    const pitchRad = pitchDeg * MATH.DEG_TO_RAD;
+    const cosPitch = Math.cos(pitchRad), sinPitch = Math.sin(pitchRad);
+    const rayWorld = heading.multiply(cosPitch).add(worldUp.multiply(sinPitch));
+    const rayCamera = cameraAttitude.inverseRotate(rayWorld);
+    if (rayCamera.z <= this.#epsilon) return null;
+    const normalWorld = worldUp.multiply(cosPitch).subtract(heading.multiply(sinPitch));
+    const normalCamera = cameraAttitude.inverseRotate(normalWorld);
+    const directionLength = Math.hypot(normalCamera.y, normalCamera.x);
+    if (directionLength <= this.#epsilon) return null;
+    return {
+      x: widthPx / 2 + focalPx * rayCamera.x / rayCamera.z,
+      y: heightPx / 2 - focalPx * rayCamera.y / rayCamera.z,
+      dx: normalCamera.y / directionLength,
+      dy: normalCamera.x / directionLength,
+    };
+  }
+}
+
+class ShuttlePitchLadder {
+  #layout;
+  #geometry;
+  constructor(layout, geometry) { this.#layout = layout; this.#geometry = geometry; }
+  render(ctx, cameraAttitude, aircraftAttitude, focalPx, widthPx, heightPx) {
+    const cfg = this.#layout;
+    ctx.strokeStyle = cfg.displayColor;
+    ctx.fillStyle = cfg.displayColor;
+    ctx.font = `${cfg.tapeNumberFontPx}px ui-monospace, Consolas, monospace`;
+    ctx.textBaseline = 'middle';
+    for (let degree = cfg.pitchMinDeg; degree <= cfg.pitchMaxDeg; degree += cfg.pitchStepDeg) {
+      const line = this.#geometry.pitchReference(cameraAttitude, aircraftAttitude,
+        degree, focalPx, widthPx, heightPx);
+      if (!line || line.y < -cfg.pitchVisibilityMarginPx || line.y > heightPx + cfg.pitchVisibilityMarginPx) continue;
+      this.#drawGraduation(ctx, line, degree);
+    }
+    ctx.setLineDash([]);
+  }
+  #drawGraduation(ctx, line, degree) {
+    const cfg = this.#layout;
+    const isHorizon = degree === 0;
+    const halfWidth = isHorizon ? cfg.pitchZeroHalfWidthPx : cfg.pitchMinorHalfWidthPx;
+    const left = { x: line.x - line.dx * halfWidth, y: line.y - line.dy * halfWidth };
+    const right = { x: line.x + line.dx * halfWidth, y: line.y + line.dy * halfWidth };
+    ctx.lineWidth = isHorizon ? cfg.emphasizedLineWidthPx : cfg.mainLineWidthPx;
+    ctx.setLineDash(degree < 0 ? cfg.pitchNegativeDashPx : []);
+    ctx.beginPath();
+    ctx.moveTo(left.x, left.y);
+    ctx.lineTo(right.x, right.y);
+    if (!isHorizon) {
+      const tickSign = degree > 0 ? 1 : -1;
+      const tx = -line.dy * cfg.pitchSideTickLengthPx * tickSign;
+      const ty = line.dx * cfg.pitchSideTickLengthPx * tickSign;
+      ctx.moveTo(left.x, left.y);
+      ctx.lineTo(left.x + tx, left.y + ty);
+      ctx.moveTo(right.x, right.y);
+      ctx.lineTo(right.x + tx, right.y + ty);
+    }
+    ctx.stroke();
+    if (isHorizon) return;
+    ctx.setLineDash([]);
+    ctx.textAlign = 'right';
+    ctx.fillText(String(degree), left.x - cfg.pitchLabelGapPx, left.y);
+    ctx.textAlign = 'left';
+    ctx.fillText(String(degree), right.x + cfg.pitchLabelGapPx, right.y);
+  }
+}
+
+class ShuttleFlightTape {
+  #layout;
+  constructor(layout) { this.#layout = layout; }
+  render(ctx, centerX, centerY, value, step, prohibitNegative, isLeft) {
+    const cfg = this.#layout;
+    const halfWidth = cfg.tapeWidthPx / 2, halfHeight = cfg.tapeHeightPx / 2;
+    const boxHalfHeight = cfg.tapeBoxHeightPx / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(centerX - halfWidth, centerY - halfHeight, cfg.tapeWidthPx, cfg.tapeHeightPx);
+    ctx.clip();
+    ctx.strokeStyle = cfg.displayColor;
+    ctx.lineWidth = cfg.mainLineWidthPx;
+    ctx.fillStyle = cfg.tapeBackground;
+    ctx.fillRect(centerX - cfg.tapeBoxWidthPx / 2, centerY - boxHalfHeight,
+      cfg.tapeBoxWidthPx, cfg.tapeBoxHeightPx);
+    ctx.strokeRect(centerX - cfg.tapeBoxWidthPx / 2, centerY - boxHalfHeight,
+      cfg.tapeBoxWidthPx, cfg.tapeBoxHeightPx);
+    ctx.fillStyle = cfg.displayColor;
+    ctx.font = `${cfg.tapeValueFontPx}px ui-monospace, Consolas, monospace`;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(Math.floor(value)), centerX, centerY + cfg.tapeValueTextOffsetPx);
+    ctx.font = `${cfg.tapeNumberFontPx}px ui-monospace, Consolas, monospace`;
+    const lowerTick = Math.floor(value / step) - Math.ceil(halfHeight / cfg.tapeTickSpacingPx) - 1;
+    const upperTick = Math.floor(value / step) + Math.ceil(halfHeight / cfg.tapeTickSpacingPx) + 1;
+    for (let index = lowerTick; index <= upperTick; index++) {
+      const tick = index * step;
+      if (prohibitNegative && tick < 0) continue;
+      const y = centerY - (tick - value) * cfg.tapeTickSpacingPx / step;
+      if (Math.abs(y - centerY) < boxHalfHeight + cfg.tapeCenterClearancePx) continue;
+      ctx.beginPath();
+      const side = isLeft ? 1 : -1;
+      ctx.moveTo(centerX + side * halfWidth, y);
+      ctx.lineTo(centerX + side * (halfWidth - cfg.tapeTickLengthPx), y);
+      ctx.stroke();
+      ctx.textAlign = isLeft ? 'right' : 'left';
+      ctx.fillText(String(tick), centerX + side * (halfWidth - cfg.tapeTickTextOffsetPx), y);
+    }
+    ctx.restore();
+  }
+}
+
+// A fixed-heading index and moving compass rose. The tick positions are
+// intentionally independent of camera pitch, bank, or aircraft velocity.
+class HeadingTape {
+  #config;
+  constructor(hudConfig) {
+    this.#config = hudConfig;
+  }
+  #normalize(degrees) {
+    if (!Number.isFinite(degrees)) throw new RangeError('Non-finite aircraft heading');
+    return ((degrees % MATH.FULL_CIRCLE_DEG) + MATH.FULL_CIRCLE_DEG) % MATH.FULL_CIRCLE_DEG;
+  }
+  #labelFor(degrees) {
+    const cfg = this.#config;
+    if (degrees % cfg.headingTapeCardinalIntervalDeg === 0) {
+      return cfg.headingTapeCardinals[degrees / cfg.headingTapeCardinalIntervalDeg];
+    }
+    if (degrees % cfg.headingTapeLabelIntervalDeg !== 0) return null;
+    return String(degrees).padStart(cfg.headingTapeNumberDigits, '0');
+  }
+  visibleTicks(headingDeg, canvasWidthPx) {
+    const cfg = this.#config;
+    const normalizedHeading = this.#normalize(headingDeg);
+    const tapeWidth = Math.min(cfg.headingTapeMaxWidthPx,
+      Math.max(cfg.headingTapeMinimumWidthPx, canvasWidthPx * cfg.headingTapeWidthRatio));
+    const halfWidth = tapeWidth / 2;
+    const halfRangeDegrees = halfWidth / cfg.headingTapePixelsPerDegree;
+    const first = Math.floor((normalizedHeading - halfRangeDegrees) / cfg.headingTapeTickIntervalDeg);
+    const last = Math.ceil((normalizedHeading + halfRangeDegrees) / cfg.headingTapeTickIntervalDeg);
+    const ticks = [];
+    for (let index = first; index <= last; index++) {
+      const rawDegree = index * cfg.headingTapeTickIntervalDeg;
+      const offsetPx = (rawDegree - normalizedHeading) * cfg.headingTapePixelsPerDegree;
+      if (Math.abs(offsetPx) > halfWidth) continue;
+      const degrees = this.#normalize(rawDegree);
+      ticks.push({
+        degrees,
+        offsetPx,
+        label: this.#labelFor(degrees),
+      });
+    }
+    return { headingDeg: normalizedHeading, widthPx: tapeWidth, ticks };
+  }
+  render(ctx, canvasWidthPx, headingDeg) {
+    const cfg = this.#config;
+    const layout = this.visibleTicks(headingDeg, canvasWidthPx);
+    const x = canvasWidthPx / 2;
+    const left = x - layout.widthPx / 2;
+    const top = cfg.headingTapeTopPx;
+    const bottom = top + cfg.headingTapeHeightPx;
+    const tickBase = top + cfg.headingTapeTickBaseOffsetPx;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(left, top, layout.widthPx, cfg.headingTapeHeightPx);
+    ctx.clip();
+    ctx.fillStyle = cfg.tapeBackground;
+    ctx.fillRect(left, top, layout.widthPx, cfg.headingTapeHeightPx);
+    ctx.strokeStyle = cfg.displayColor;
+    ctx.fillStyle = cfg.displayColor;
+    ctx.lineWidth = cfg.mainLineWidthPx;
+    ctx.font = `${cfg.headingTapeFontPx}px ui-monospace, Consolas, monospace`;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    for (const tick of layout.ticks) {
+      const tickX = x + tick.offsetPx;
+      const tickLength = tick.label === null ? cfg.headingTapeMinorTickLengthPx : cfg.headingTapeMajorTickLengthPx;
+      ctx.beginPath();
+      ctx.moveTo(tickX, tickBase - tickLength);
+      ctx.lineTo(tickX, tickBase);
+      ctx.stroke();
+      if (tick.label !== null) {
+        ctx.fillText(tick.label, tickX, top + cfg.headingTapeLabelBaselineOffsetPx);
+      }
+    }
+    ctx.restore();
+    // The centered index stays fixed while the scale scrolls beneath it.
+    ctx.save();
+    ctx.strokeStyle = cfg.displayColor;
+    ctx.lineWidth = cfg.emphasizedLineWidthPx;
+    ctx.beginPath();
+    ctx.moveTo(x - cfg.headingTapePointerHalfWidthPx, bottom - cfg.headingTapePointerBottomInsetPx);
+    ctx.lineTo(x, bottom - cfg.headingTapePointerBottomInsetPx - cfg.headingTapePointerHeightPx);
+    ctx.lineTo(x + cfg.headingTapePointerHalfWidthPx, bottom - cfg.headingTapePointerBottomInsetPx);
+    ctx.stroke();
+    ctx.restore();
+    return layout;
+  }
+}
+
+class HelicopterDigitalReadouts {
+  #configuration;
+  constructor(configuration) { this.#configuration = configuration; }
+  render(ctx, width, height, snapshot, controls) {
+    const config = this.#configuration;
+    const hud = config.hud;
+    const readouts = this.readouts(snapshot, controls);
+    const lines = [...readouts.left, ...readouts.right];
+    const firstLineTop = height - hud.readoutBottomPx - lines.length * hud.readoutLineHeightPx;
+    ctx.save();
+    ctx.fillStyle = hud.displayColor;
+    ctx.font = `${hud.readoutFontSizePx}px ui-monospace, Consolas, monospace`;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.fillText(hud.readoutHeadingText, hud.readoutMarginPx,
+      firstLineTop - hud.readoutHeadingGapPx);
+    lines.forEach((line, index) => ctx.fillText(line,
+      hud.readoutMarginPx, firstLineTop + index * hud.readoutLineHeightPx));
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#a2d8d7';
+    ctx.font = `${hud.readoutFooterFontSizePx}px ui-monospace, Consolas, monospace`;
+    ctx.fillText('B206B-3  |  HOVER / LANDING  |  WIND 0', width / 2,
+      height - hud.readoutFooterBottomPx);
+    ctx.fillStyle = '#ffcf8f';
+    ctx.fillText(controls.requiresCollectiveArming ? 'COLLECTIVE を最小にしてください' :
+      (snapshot.contactCount > 0 ? 'ON SKIDS' : 'AIRBORNE'), width / 2,
+      height - hud.readoutStatusBottomPx);
+    ctx.restore();
+    return readouts;
+  }
+  readouts(snapshot, controls) {
+    const c = this.#configuration;
+    const forward = snapshot.attitude.rotate(new Vector3(0, 0, 1));
+    const right = snapshot.attitude.rotate(new Vector3(1, 0, 0));
+    const pitch = Math.asin(clamp(forward.y, -1, 1)) * MATH.RAD_TO_DEG;
+    const roll = -Math.asin(clamp(right.y, -1, 1)) * MATH.RAD_TO_DEG;
+    const unroundedHeading = ((Math.atan2(forward.x, forward.z) * MATH.RAD_TO_DEG) + MATH.FULL_CIRCLE_DEG) % MATH.FULL_CIRCLE_DEG;
+    const heading = Math.round(unroundedHeading) % MATH.FULL_CIRCLE_DEG;
+    const altitude = Math.max(0, snapshot.position.y - Math.abs(c.skids.verticalOffsetM)) * c.scene.feetPerM;
+    const groundSpeed = Math.hypot(snapshot.velocity.x, snapshot.velocity.z) * c.scene.knotsPerMps;
+    const padDistanceM = Math.hypot(snapshot.position.x, snapshot.position.z);
+    const pad = (n, digits) => n.toFixed(digits).padStart(c.hud.readoutTextPadChars);
+    return {
+      left: [
+        `ALT   ${pad(altitude, 1)} ft`,
+        `VS    ${pad(snapshot.velocity.y * c.scene.feetPerMinutePerMps, 0)} fpm`,
+        `GS    ${pad(groundSpeed, 1)} kt`,
+        `HDG   ${pad(heading, 0)}°`,
+      ],
+      right: [
+        `PITCH ${pad(pitch, 1)}°`,
+        `ROLL  ${pad(roll, 1)}°`,
+        `COL   ${pad(controls.collective * c.hud.percentScale, 1)}%`,
+        `PAD   ${pad(padDistanceM, 1)} m`,
+      ],
+      altitudeFt: altitude,
+      groundSpeedKt: groundSpeed,
+      headingDeg: unroundedHeading,
+    };
+  }
+}
+
+class ShuttleStyleHud {
+  #configuration;
+  #geometry;
+  #pitchLadder;
+  #tape;
+  #headingTape;
+  #readouts;
+  constructor(configuration) {
+    this.#configuration = configuration;
+    this.#geometry = new AttitudeReferenceGeometry(configuration.hud);
+    this.#pitchLadder = new ShuttlePitchLadder(configuration.hud, this.#geometry);
+    this.#tape = new ShuttleFlightTape(configuration.hud);
+    this.#headingTape = new HeadingTape(configuration.hud);
+    this.#readouts = new HelicopterDigitalReadouts(configuration);
+  }
+  render(ctx, width, height, cameraAttitude, focalPx, snapshot, controls) {
+    const cfg = this.#configuration.hud;
+    ctx.save();
+    this.#pitchLadder.render(ctx, cameraAttitude, snapshot.attitude, focalPx, width, height);
+    const nose = this.#geometry.nosePoint(cameraAttitude, snapshot.attitude, focalPx, width, height);
+    if (nose) this.#drawWReference(ctx, nose, cfg);
+    const readings = this.#readouts.readouts(snapshot, controls);
+    this.#headingTape.render(ctx, width, readings.headingDeg);
+    this.#tape.render(ctx, width / 2 - cfg.tapeOffsetFromCenterPx, height / 2,
+      readings.groundSpeedKt, cfg.speedTapeStepKt, true, true);
+    this.#tape.render(ctx, width / 2 + cfg.tapeOffsetFromCenterPx, height / 2,
+      readings.altitudeFt, cfg.altitudeTapeStepFt, false, false);
+    this.#readouts.render(ctx, width, height, snapshot, controls);
+    ctx.restore();
+  }
+  #drawWReference(ctx, nose, cfg) {
+    ctx.beginPath();
+    ctx.strokeStyle = cfg.displayColor;
+    ctx.lineWidth = cfg.emphasizedLineWidthPx;
+    ctx.setLineDash([]);
+    ctx.moveTo(nose.x - cfg.wWingHalfWidthPx, nose.y);
+    ctx.lineTo(nose.x - cfg.wCenterGapPx, nose.y);
+    ctx.lineTo(nose.x, nose.y + cfg.wCenterDropPx);
+    ctx.lineTo(nose.x + cfg.wCenterGapPx, nose.y);
+    ctx.lineTo(nose.x + cfg.wWingHalfWidthPx, nose.y);
+    ctx.stroke();
+  }
+}
+
+class SimulatorApplication {
+  #model;
+  #input;
+  #renderer;
+  #running = false;
+  #started = false;
+  #lastTimestamp = null;
+  #accumulator = 0;
+  #lastControls = { pitch: 0, roll: 0, pedal: 0, collective: 0, requiresCollectiveArming: false, source: 'KEYBOARD' };
+  constructor(configuration) {
+    this.configuration = configuration;
+    this.#model = new HelicopterDynamics(configuration, new FixedPowerSource(configuration.power));
+    this.#input = new InputController(configuration);
+    this.#renderer = new WireframeRenderer(document.getElementById('simulator'), configuration);
+    this.#connectUi();
+    requestAnimationFrame(timestamp => this.#frame(timestamp));
+  }
+  #connectUi() {
+    document.getElementById('startBtn').addEventListener('click', () => {
+      document.getElementById('welcome').hidden = true;
+      document.getElementById('startBtn').blur();
+      this.#started = true;
+      this.#running = true;
+      this.reset();
+    });
+    document.getElementById('menuConfigBtn').addEventListener('click', () => this.#toggleSettings(true));
+    document.getElementById('settingsBtn').addEventListener('click', () => this.#toggleSettings());
+    document.getElementById('settingsCloseBtn').addEventListener('click', () => this.#toggleSettings(false));
+    document.addEventListener('keydown', event => {
+      if (event.repeat || event.target.closest('input,select,button')) return;
+      if (event.code === KEY_BINDINGS.PAUSE) this.togglePause();
+      if (event.code === KEY_BINDINGS.RESET) this.reset();
+      if (event.code === KEY_BINDINGS.SETTINGS) this.#toggleSettings();
+    });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.#lastTimestamp = null; });
+    this.#populateAxisSettings();
+  }
+  #populateAxisSettings() {
+    for (const [control, setting] of Object.entries(this.#input.axisSettings)) {
+      const select = document.querySelector(`[data-axis="${control}"]`);
+      const invert = document.querySelector(`[data-invert="${control}"]`);
+      for (let index = 0; index <= this.configuration.simulation.maxAssignableAxisIndex; index++) {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = `Axis ${index}`;
+        select.appendChild(option);
+      }
+      select.value = String(setting.index);
+      invert.checked = setting.inverted;
+      const persist = () => this.#input.setMapping(control, select.value, invert.checked);
+      select.addEventListener('change', persist);
+      invert.addEventListener('change', persist);
+    }
+  }
+  #toggleSettings(show) {
+    const panel = document.getElementById('settings');
+    const expanded = typeof show === 'boolean' ? show : panel.hidden;
+    panel.hidden = !expanded;
+    document.getElementById('settingsBtn').setAttribute('aria-expanded', String(expanded));
+  }
+  reset() {
+    this.#model.reset();
+    this.#input.reset();
+    this.#accumulator = 0;
+    this.#lastTimestamp = null;
+  }
+  togglePause() {
+    if (!this.#started) return;
+    this.#running = !this.#running;
+    this.#accumulator = 0;
+    this.#lastTimestamp = null;
+  }
+  #frame(timestamp) {
+    try {
+      const previous = this.#lastTimestamp;
+      this.#lastTimestamp = timestamp;
+      const dt = previous === null ? 0 : clamp((timestamp - previous) / 1000, 0, this.configuration.simulation.maxFrameDeltaS);
+      const stepDuration = this.configuration.simulation.fixedStepS;
+      const active = this.#started && this.#running && !document.hidden;
+      if (active) {
+        this.#accumulator += dt;
+        let steps = 0;
+        while (this.#accumulator >= stepDuration && steps < this.configuration.simulation.maxStepsPerFrame) {
+          this.#lastControls = this.#input.sample(stepDuration);
+          this.#model.step(this.#lastControls, stepDuration);
+          this.#accumulator -= stepDuration;
+          steps++;
+        }
+        if (steps === this.configuration.simulation.maxStepsPerFrame) this.#accumulator = 0;
+      }
+      this.#renderer.render(this.#model.getSnapshot(), this.#lastControls);
+      this.#updateDisplay();
+    } catch (error) {
+      console.error('Simulator stopped:', error);
+      this.#running = false;
+      document.getElementById('status').textContent = `ERROR: ${error.message}`;
+    }
+    requestAnimationFrame(nextTimestamp => this.#frame(nextTimestamp));
+  }
+  #updateDisplay() {
+    const source = this.#lastControls.source;
+    const status = !this.#started ? 'STANDBY' : !this.#running ? 'PAUSED' :
+      this.#lastControls.requiresCollectiveArming ? 'COLLECTIVE SAFE' : 'RUNNING';
+    document.getElementById('status').textContent = status;
+    document.getElementById('device').textContent = source.length > 30 ? `${source.slice(0, 27)}...` : source;
+    const axisReadout = document.getElementById('axisReadout');
+    if (!document.getElementById('settings').hidden) {
+      const gamepad = this.#input.gamepad;
+      const effective = this.#input.previewAxes(gamepad);
+      const rollDescription = effective ?
+        (effective.roll < -this.configuration.simulation.controlDeadzone ? '左バンク指令' :
+          effective.roll > this.configuration.simulation.controlDeadzone ? '右バンク指令' : '中立') : '';
+      const pitchDescription = effective ?
+        (effective.pitch < -this.configuration.simulation.controlDeadzone ? '機首上げ指令' :
+          effective.pitch > this.configuration.simulation.controlDeadzone ? '機首下げ指令' : '中立') : '';
+      axisReadout.textContent = gamepad ?
+        `接続: ${gamepad.id}\n前後サイクリック: ${effective.pitch.toFixed(3)}（${pitchDescription}）\n左右サイクリック: ${effective.roll.toFixed(3)}（${rollDescription}）\n${gamepad.axes.map((value, index) => `Axis ${index}: ${value.toFixed(3)}`).join('  /  ')}` :
+        'ジョイスティックは未接続です。';
+    }
+  }
+}
+
+new SimulatorApplication(CONFIG);
+</script>
+</body>
+</html>
