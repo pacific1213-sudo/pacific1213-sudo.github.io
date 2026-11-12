@@ -41,6 +41,31 @@
             margin: 0;
             display: inline-block;
         }
+        .site-notice {
+            box-sizing: border-box;
+            width: 100%;
+            max-width: 650px;
+            margin: 24px auto 0;
+            padding: 20px 24px;
+            background-color: #ffffff;
+            border-left: 6px solid #3498db;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+            text-align: left;
+        }
+        .site-notice h2 {
+            margin: 0 0 12px;
+            color: #2c3e50;
+            font-size: 1.05rem;
+        }
+        .site-notice p {
+            margin: 0 0 10px;
+            line-height: 1.7;
+            font-size: 0.9rem;
+        }
+        .site-notice p:last-child {
+            margin-bottom: 0;
+        }
         .game-list {
             display: flex;
             flex-direction: column;
@@ -88,9 +113,14 @@
 	      <p class="subtitle">JavaScript＋HTMLで作成</p>
             <p class="subtitle">単体で動作するオフラインWebゲーム</p>
             <p class="subtitle">低スペックPCでもサクサク動く</p>
-		<p class="subtitle">課金は一切なし　<b>完全無料</b>　無制限で遊びたい放題</p>
-		<p class="subtitle">金銭による<b>賭博行為一切なし</b>　子供さんも安心して遊べる</p>
         </div>
+        <section class="site-notice" aria-labelledby="site-policy-heading">
+            <h2 id="site-policy-heading">当サイトの運営方針</h2>
+            <p><strong>当サイトは、完全無料の娯楽・学習用ゲームサイトです。</strong></p>
+            <p>麻雀・ポーカー等は、ゲーム内の仮想ポイントや点数を使用して遊ぶものであり、現金その他の財産を賭ける行為は一切ありません。</p>
+            <p>ゲーム内のポイントや点数を、現金・商品・景品等に交換することもできません。</p>
+            <p><strong>課金なし・金銭賭博なし・完全無料。</strong></p>
+        </section>
     </header>
 
     <div class="game-list">
