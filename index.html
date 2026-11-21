@@ -1,206 +1,580 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+    <!--
+        Program      : The Autonomous Arcade - Website Index
+        Version      : 2.0
+        Release Date : 2026-11-21
+        Copyright    : (c) 2026 Yasuhiro Kaizu. All rights reserved.
+        Development  : Yasuhiro Kaizu / ChatGPT (OpenAI)
+        Note         : Standalone HTML and CSS. No external assets or network calls.
+    -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Autonomous Arcade</title>
+    <meta name="theme-color" content="#081113">
+    <meta name="description" content="ゲーム＆学校教材アプリ館。完全無料のスタンドアロンWebアプリを公開しています。">
+    <title>ゲーム＆学校教材アプリ館 | The Autonomous Arcade</title>
     <style>
+        :root {
+            color-scheme: dark;
+            --page-bg: #081113;
+            --text-main: #f0f6f4;
+            --text-muted: #a3b8b6;
+            --line: rgba(129, 222, 184, 0.20);
+            --panel: #101d20;
+            --accent-main: #75f3bc;
+            --content-max-width: 1120px;
+            --card-radius: 16px;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; }
+
         body {
-            background-color: #f4f7f6;
-            color: #333333;
-            font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+            min-height: 100vh;
             margin: 0;
-            padding: 50px 20px;
-            display: flex;
-            flex-direction: column;
+            color: var(--text-main);
+            background:
+                radial-gradient(ellipse at 84% 8%, rgba(31, 126, 104, 0.23), transparent 36%),
+                radial-gradient(ellipse at 10% 70%, rgba(18, 65, 70, 0.22), transparent 44%),
+                var(--page-bg);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: -1;
+            opacity: 0.44;
+            background-image:
+                linear-gradient(rgba(114, 219, 180, 0.055) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(114, 219, 180, 0.055) 1px, transparent 1px);
+            background-size: 48px 48px;
+        }
+
+        a { color: inherit; }
+
+        .page-shell {
+            width: min(var(--content-max-width), calc(100% - 48px));
+            margin-inline: auto;
+        }
+
+        .hero {
+            position: relative;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 270px;
             align-items: center;
+            gap: 24px;
+            min-height: 280px;
+            padding: 46px 0 32px;
+            border-bottom: 1px solid var(--line);
         }
-        header {
-            text-align: center;
-            margin-bottom: 40px;
+
+        .eyebrow {
+            margin: 0 0 15px;
+            color: var(--accent-main);
+            font: 700 0.76rem/1.5 "Courier New", monospace;
+            letter-spacing: 0.18em;
         }
-        h1 {
-            color: #2c3e50;
-            font-size: 2.0rem;
-            letter-spacing: 1px;
-            margin-bottom: 15px;
-        }
-        .subtitle-container {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            align-items: center;
-        }
-        p.subtitle {
-            color: #666666;
-            font-size: 0.9rem;
-            font-family: 'Courier New', Courier, monospace;
-            background-color: #e9ecef;
-            padding: 4px 12px;
-            border-radius: 15px;
-            margin: 0;
+
+        .eyebrow::before {
+            content: "";
             display: inline-block;
+            width: 9px;
+            height: 9px;
+            margin-right: 10px;
+            border: 1.5px solid currentColor;
+            transform: rotate(45deg);
         }
-        .site-notice {
-            box-sizing: border-box;
-            width: 100%;
-            max-width: 650px;
-            margin: 24px auto 0;
-            padding: 20px 24px;
-            background-color: #ffffff;
-            border-left: 6px solid #3498db;
-            border-radius: 12px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
-            text-align: left;
-        }
-        .site-notice h2 {
-            margin: 0 0 12px;
-            color: #2c3e50;
-            font-size: 1.05rem;
-        }
-        .site-notice p {
-            margin: 0 0 10px;
-            line-height: 1.7;
-            font-size: 0.9rem;
-        }
-        .site-notice p:last-child {
-            margin-bottom: 0;
-        }
-        .game-list {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            width: 100%;
-            max-width: 650px;
-        }
-        .game-card {
-            background-color: #ffffff;
-            border-radius: 12px;
-            padding: 20px 25px;
-            text-decoration: none;
-            color: inherit;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
-            border-left: 6px solid #3498db;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-        .game-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-            border-left-color: #2980b9;
-        }
-        .game-title {
-            font-size: 1.2rem;
-            color: #2c3e50;
-            margin: 0 0 6px 0;
-        }
-        .game-desc {
+
+        .hero h1 {
             margin: 0;
-            color: #555555;
-            font-size: 0.9rem;
+            font-size: clamp(2.1rem, 4.1vw, 3.6rem);
+            font-weight: 800;
+            letter-spacing: 0.045em;
+            line-height: 1.32;
+            text-wrap: balance;
+        }
+
+        .hero h1 span { color: var(--accent-main); }
+
+        .hero-caption {
+            margin: 14px 0 0;
+            color: var(--text-muted);
+            font-size: 0.99rem;
+            line-height: 1.75;
+        }
+
+        .feature-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 9px;
+            padding: 0;
+            margin: 21px 0 0;
+            list-style: none;
+        }
+
+        .feature-list li {
+            padding: 6px 11px;
+            border: 1px solid rgba(129, 222, 184, 0.26);
+            border-radius: 999px;
+            background: rgba(83, 166, 137, 0.09);
+            color: #c3ddd3;
+            font-size: 0.78rem;
+            letter-spacing: 0.01em;
+        }
+
+        .hero-visual {
+            position: relative;
+            display: grid;
+            place-items: center;
+            width: 260px;
+            height: 260px;
+            justify-self: end;
+            color: #6eebad;
+        }
+
+        .hero-visual::before {
+            content: "";
+            position: absolute;
+            inset: 19px;
+            border: 1px solid rgba(110, 235, 173, 0.12);
+            border-radius: 50%;
+            box-shadow: 0 0 52px rgba(53, 214, 143, 0.07);
+        }
+
+        .hero-visual svg {
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+            filter: drop-shadow(0 0 11px rgba(111, 245, 173, 0.17));
+        }
+
+        .site-notice {
+            display: grid;
+            grid-template-columns: 194px minmax(0, 1fr);
+            gap: 23px;
+            margin-top: 28px;
+            padding: 23px 26px;
+            border: 1px solid var(--line);
+            border-left: 3px solid var(--accent-main);
+            border-radius: 12px;
+            background: rgba(15, 31, 31, 0.87);
+        }
+
+        .site-notice h2 {
+            margin: 0;
+            color: var(--accent-main);
+            font-size: 0.96rem;
             line-height: 1.5;
         }
+
+        .site-notice .notice-label {
+            display: block;
+            margin-top: 5px;
+            color: #708e88;
+            font: 0.67rem/1.5 "Courier New", monospace;
+            letter-spacing: 0.11em;
+        }
+
+        .notice-body p {
+            margin: 0 0 6px;
+            color: #bfd1cb;
+            font-size: 0.87rem;
+            line-height: 1.7;
+        }
+
+        .notice-body p:last-child { margin-bottom: 0; }
+        .notice-body strong { color: #eef8f3; }
+
+        .library-section { padding-top: 50px; }
+
+        .section-head {
+            display: flex;
+            align-items: end;
+            justify-content: space-between;
+            gap: 18px;
+            margin-bottom: 20px;
+        }
+
+        .section-kicker {
+            margin: 0 0 4px;
+            color: #70b7a0;
+            font: 0.73rem/1.4 "Courier New", monospace;
+            letter-spacing: 0.18em;
+        }
+
+        .section-head h2 {
+            margin: 0;
+            font-size: 1.63rem;
+            line-height: 1.4;
+            letter-spacing: 0.04em;
+        }
+
+        .app-count {
+            margin: 0 0 3px;
+            color: #a7beb9;
+            font: 0.75rem/1.5 "Courier New", monospace;
+            white-space: nowrap;
+            letter-spacing: 0.06em;
+        }
+
+        .app-count strong {
+            color: var(--accent-main);
+            font-size: 1.15rem;
+        }
+
+        .app-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+        }
+
+        .app-card {
+            --card-accent: #78e9bc;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            min-height: 197px;
+            padding: 22px 25px 19px;
+            overflow: hidden;
+            border: 1px solid rgba(131, 199, 181, 0.19);
+            border-radius: var(--card-radius);
+            background:
+                linear-gradient(132deg, color-mix(in srgb, var(--card-accent) 5%, transparent), transparent 40%),
+                rgba(17, 31, 34, 0.95);
+            text-decoration: none;
+            box-shadow: 0 9px 25px rgba(0, 0, 0, 0.12);
+            transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+        }
+
+        .app-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 3px;
+            background: var(--card-accent);
+            opacity: 0.84;
+        }
+
+        .app-card::after {
+            content: "";
+            position: absolute;
+            top: -30px;
+            right: -30px;
+            width: 130px;
+            height: 130px;
+            border: 1px solid color-mix(in srgb, var(--card-accent) 14%, transparent);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        .app-card--science { --card-accent: #78d9ee; }
+        .app-card--flight { --card-accent: #7de9b0; }
+        .app-card--table { --card-accent: #eac488; }
+        .app-card--board { --card-accent: #c9b1f4; }
+
+        .app-card:hover, .app-card:focus-visible {
+            transform: translateY(-3px);
+            border-color: color-mix(in srgb, var(--card-accent) 68%, transparent);
+            box-shadow: 0 15px 32px rgba(0, 0, 0, 0.27);
+        }
+
+        .app-card:focus-visible {
+            outline: 2px solid var(--card-accent);
+            outline-offset: 3px;
+        }
+
+        .card-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+            font: 700 0.69rem/1.5 "Courier New", monospace;
+            letter-spacing: 0.09em;
+        }
+
+        .card-type { color: var(--card-accent); }
+        .card-number { color: #78928c; white-space: nowrap; }
+
+        .app-title {
+            position: relative;
+            z-index: 1;
+            margin: 0 0 8px;
+            font-size: clamp(1.01rem, 1.65vw, 1.22rem);
+            line-height: 1.55;
+            letter-spacing: 0.018em;
+            overflow-wrap: anywhere;
+        }
+
+        .app-description {
+            position: relative;
+            z-index: 1;
+            margin: 0 0 22px;
+            color: #a8bfba;
+            font-size: 0.86rem;
+            line-height: 1.75;
+        }
+
+        .card-action {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-top: auto;
+            color: var(--card-accent);
+            font: 700 0.68rem/1.4 "Courier New", monospace;
+            letter-spacing: 0.14em;
+        }
+
+        .action-arrow {
+            display: grid;
+            place-items: center;
+            width: 28px;
+            height: 28px;
+            border: 1px solid color-mix(in srgb, var(--card-accent) 35%, transparent);
+            border-radius: 50%;
+            font: 1.1rem/1 sans-serif;
+            transition: background-color 180ms ease;
+        }
+
+        .app-card:hover .action-arrow,
+        .app-card:focus-visible .action-arrow {
+            background: color-mix(in srgb, var(--card-accent) 14%, transparent);
+        }
+
         footer {
-            margin-top: 50px;
-            font-size: 0.85rem;
-            color: #999999;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-top: 58px;
+            padding: 23px 0 32px;
+            border-top: 1px solid var(--line);
+            color: #809a94;
+            font-size: 0.78rem;
+        }
+
+        .footer-mark {
+            color: #78bb9d;
+            font: 700 0.69rem/1.4 "Courier New", monospace;
+            letter-spacing: 0.13em;
+        }
+
+        @media (max-width: 760px) {
+            .hero { grid-template-columns: minmax(0, 1fr) 170px; min-height: 0; }
+            .hero-visual { width: 170px; height: 170px; }
+            .site-notice { grid-template-columns: 1fr; gap: 10px; }
+            .site-notice .notice-label { display: inline; margin-left: 12px; }
+        }
+
+        @media (max-width: 680px) {
+            .page-shell { width: min(100% - 32px, var(--content-max-width)); }
+            .hero { grid-template-columns: 1fr; padding: 37px 0 29px; }
+            .hero-visual { display: none; }
+            .app-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+            .library-section { padding-top: 38px; }
+            .app-card { min-height: 174px; padding: 20px 21px 17px; }
+            .app-title { font-size: 1.13rem; }
+            .site-notice { margin-top: 22px; padding: 20px 19px; }
+            .section-head h2 { font-size: 1.43rem; }
+            footer { margin-top: 41px; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            html { scroll-behavior: auto; }
+            .app-card, .action-arrow { transition: none; }
         }
     </style>
 </head>
 <body>
-    <header>
-        <h1>ゲーム＆学校教材アプリ館</h1>
-        <div class="subtitle-container">
-	      <p class="subtitle">JavaScript＋HTMLで作成</p>
-            <p class="subtitle">単体で動作するオフラインWebアプリ集</p>
-            <p class="subtitle">低スペックPCでもサクサク動く</p>
-        </div>
+    <div class="page-shell">
+        <header class="hero">
+            <div class="hero-content">
+                <p class="eyebrow">THE AUTONOMOUS ARCADE</p>
+                <h1>ゲーム＆<span>学校教材</span><br>アプリ館</h1>
+                <p class="hero-caption">遊ぶ。学ぶ。自分のブラウザで動かす。</p>
+                <ul class="feature-list" aria-label="サイトの特徴">
+                    <li>JavaScript ＋ HTML</li>
+                    <li>単体で動作するオフラインWebアプリ集</li>
+                    <li>低スペックPCでもサクサク動く</li>
+                </ul>
+            </div>
+            <div class="hero-visual" aria-hidden="true">
+                <svg viewBox="0 0 260 260" xmlns="http://www.w3.org/2000/svg" fill="none">
+                    <circle cx="130" cy="130" r="104" stroke="currentColor" stroke-opacity=".21" stroke-dasharray="3 8"/>
+                    <circle cx="130" cy="130" r="83" stroke="currentColor" stroke-opacity=".76" stroke-width="1.2"/>
+                    <ellipse cx="130" cy="130" rx="38" ry="83" stroke="currentColor" stroke-opacity=".59"/>
+                    <ellipse cx="130" cy="130" rx="71" ry="83" stroke="currentColor" stroke-opacity=".34"/>
+                    <ellipse cx="130" cy="130" rx="83" ry="29" stroke="currentColor" stroke-opacity=".65"/>
+                    <ellipse cx="130" cy="130" rx="83" ry="58" stroke="currentColor" stroke-opacity=".35"/>
+                    <path d="M47 130H213 M130 47V213 M71 71L189 189 M189 71L71 189" stroke="currentColor" stroke-opacity=".28"/>
+                    <path d="M130 18V34 M130 226V242 M18 130H34 M226 130H242" stroke="currentColor" stroke-width="1.5"/>
+                    <circle cx="130" cy="130" r="4" fill="currentColor"/>
+                    <path d="M47 30H67 M47 30V50 M193 230H213 M213 210V230" stroke="currentColor" stroke-opacity=".65"/>
+                    <text x="130" y="255" text-anchor="middle" fill="currentColor" fill-opacity=".65" font-size="8" font-family="monospace" letter-spacing="3">OFFLINE / STANDALONE</text>
+                </svg>
+            </div>
+        </header>
+
         <section class="site-notice" aria-labelledby="site-policy-heading">
-            <h2 id="site-policy-heading">当サイトの運営方針</h2>
-            <p><strong>当サイトは、完全無料の娯楽・学習用ゲームサイトです。</strong></p>
-            <p>麻雀・ポーカー等は、ゲーム内の仮想ポイントや点数を使用して遊ぶものであり、現金その他の財産を賭ける行為は一切ありません。</p>
-            <p>ゲーム内のポイントや点数を、現金・商品・景品等に交換することもできません。</p>
-            <p><strong>課金なし・金銭賭博なし・完全無料。</strong></p>
+            <div>
+                <h2 id="site-policy-heading">当サイトの運営方針</h2>
+                <span class="notice-label">SITE POLICY</span>
+            </div>
+            <div class="notice-body">
+                <p><strong>当サイトは、完全無料の娯楽・学習用ゲームサイトです。</strong></p>
+                <p>麻雀・ポーカー等は、ゲーム内の仮想ポイントや点数を使用して遊ぶものであり、現金その他の財産を賭ける行為は一切ありません。</p>
+                <p>ゲーム内のポイントや点数を、現金・商品・景品等に交換することもできません。</p>
+                <p><strong>課金なし・金銭賭博なし・完全無料。</strong></p>
+            </div>
         </section>
-    </header>
 
-    <div class="game-list">
-        <!-- Game Links -->
+        <main class="library-section" id="apps">
+            <div class="section-head">
+                <div>
+                    <p class="section-kicker">APPLICATION LIBRARY</p>
+                    <h2>アプリ一覧</h2>
+                </div>
+                <p class="app-count"><strong>12</strong> TITLES</p>
+            </div>
+            <div class="app-grid">
+            <a class="app-card app-card--science" href="constellation_planisphere_v1_1_copyright.html" target="_blank" rel="noopener noreferrer">
+                <div class="card-meta">
+                    <span class="card-type" aria-label="理科学習">ASTRONOMY</span>
+                    <span class="card-number">01 / 12</span>
+                </div>
+                <h3 class="app-title">星座早見シミュレーター</h3>
+                <p class="app-description">小学校高学年以降の理科の学習シミュレーター。北極点、南極点を含む全世界対応グローバル版星座早見シミュレータ。</p>
+                <span class="card-action" aria-hidden="true">OPEN APP <span class="action-arrow">↗</span></span>
+            </a>
 
-<a href="constellation_planisphere_v1_1_copyright.html" class="game-card" target="_blank" rel="noopener noreferrer">
-            <h2 class="game-title">星座早見シミュレーター</h2>
-            <p class="game-desc">小学校高学年以降の理科の学習シミュレーター。北極点、南極点を含む全世界対応グローバル版星座早見シミュレータ。</p>
-        </a>
+            <a class="app-card app-card--science" href="moon_phase_learning_simulator_v1_2_copyright.html" target="_blank" rel="noopener noreferrer">
+                <div class="card-meta">
+                    <span class="card-type" aria-label="理科学習">ASTRONOMY</span>
+                    <span class="card-number">02 / 12</span>
+                </div>
+                <h3 class="app-title">月の満ち欠けシミュレーター</h3>
+                <p class="app-description">小学校高学年以降の理科の学習シミュレーター。月の満ち欠けメカニズムを直感的に理解できる。</p>
+                <span class="card-action" aria-hidden="true">OPEN APP <span class="action-arrow">↗</span></span>
+            </a>
 
- <a href="moon_phase_learning_simulator_v1_2_copyright.html" class="game-card" target="_blank" rel="noopener noreferrer">
-            <h2 class="game-title">月の満ち欠けシミュレーター</h2>
-            <p class="game-desc">小学校高学年以降の理科の学習シミュレーター。月の満ち欠けメカニズムを直感的に理解できる。</p>
-        </a>
+            <a class="app-card app-card--flight" href="space_shuttle_landing_gen2_v1_completed.html" target="_blank" rel="noopener noreferrer">
+                <div class="card-meta">
+                    <span class="card-type" aria-label="フライト">FLIGHT SIM</span>
+                    <span class="card-number">03 / 12</span>
+                </div>
+                <h3 class="app-title">スペースシャトル・ランディング・シミュレーター２</h3>
+                <p class="app-description">第２世代。着陸の練習に特化したシミュレーター。</p>
+                <span class="card-action" aria-hidden="true">OPEN APP <span class="action-arrow">↗</span></span>
+            </a>
 
-        <a href="space_shuttle_landing_gen2_v1_completed.html" class="game-card" target="_blank" rel="noopener noreferrer">
-            <h2 class="game-title">スペースシャトル・ランディング・シミュレーター２</h2>
-            <p class="game-desc">第２世代。着陸の練習に特化したシミュレーター。</p>
-        </a>
+            <a class="app-card app-card--flight" href="agusta_a109e_gen2_v1_9_ground_leveling.html" target="_blank" rel="noopener noreferrer">
+                <div class="card-meta">
+                    <span class="card-type" aria-label="フライト">FLIGHT SIM</span>
+                    <span class="card-number">04 / 12</span>
+                </div>
+                <h3 class="app-title">ヘリコプター・ホバー・ランディング・シミュレーター２</h3>
+                <p class="app-description">第２世代。ホバリングと着陸に特化したシミュレーター。</p>
+                <span class="card-action" aria-hidden="true">OPEN APP <span class="action-arrow">↗</span></span>
+            </a>
 
-        <a href="agusta_a109e_gen2_v1_9_ground_leveling.html" class="game-card" target="_blank" rel="noopener noreferrer">
-            <h2 class="game-title">ヘリコプター・ホバー・ランディング・シミュレーター２</h2>
-            <p class="game-desc">第２世代。ホバリングと着陸に特化したシミュレーター。</p>
-        </a>
-        
-	  <a href="aircraft_landing_simulator_gen2_v1_3_copyright.html" class="game-card" target="_blank" rel="noopener noreferrer">
-            <h2 class="game-title">エアクラフト・ランディング・シミュレーター２</h2>
-            <p class="game-desc">第２世代。F15戦闘機とエンブラエルE170の着陸練習に特化。</p>
-        </a>
-	  <a href="japanese_riichi_mahjong_v1_1.html" class="game-card" target="_blank" rel="noopener noreferrer">
-            <h2 class="game-title">四人麻雀</h2>
-            <p class="game-desc">本格的日本式リーチ麻雀。</p>
-        </a>
+            <a class="app-card app-card--flight" href="aircraft_landing_simulator_gen2_v1_3_copyright.html" target="_blank" rel="noopener noreferrer">
+                <div class="card-meta">
+                    <span class="card-type" aria-label="フライト">FLIGHT SIM</span>
+                    <span class="card-number">05 / 12</span>
+                </div>
+                <h3 class="app-title">エアクラフト・ランディング・シミュレーター２</h3>
+                <p class="app-description">第２世代。F15戦闘機とエンブラエルE170の着陸練習に特化。</p>
+                <span class="card-action" aria-hidden="true">OPEN APP <span class="action-arrow">↗</span></span>
+            </a>
 
-	  <a href="texas_holdem_v1_1.html" class="game-card" target="_blank" rel="noopener noreferrer">
-            <h2 class="game-title">ポーカー［テキサス・ホ‐ルデム］</h2>
-            <p class="game-desc">四人対戦型テキサス・ホールデム。</p>
-        </a>
+            <a class="app-card app-card--table" href="japanese_riichi_mahjong_v1_1.html" target="_blank" rel="noopener noreferrer">
+                <div class="card-meta">
+                    <span class="card-type" aria-label="テーブルゲーム">TABLE GAME</span>
+                    <span class="card-number">06 / 12</span>
+                </div>
+                <h3 class="app-title">四人麻雀</h3>
+                <p class="app-description">本格的日本式リーチ麻雀。</p>
+                <span class="card-action" aria-hidden="true">OPEN APP <span class="action-arrow">↗</span></span>
+            </a>
 
-        <a href="poker_five_card_showdown_v6_points.html" class="game-card" target="_blank" rel="noopener noreferrer">
-            <h2 class="game-title">ポーカー［5カード・ショーダウン］</h2>
-            <p class="game-desc">PC対戦型5カード・ショーダウン。</p>
-        </a>
+            <a class="app-card app-card--table" href="texas_holdem_v1_1.html" target="_blank" rel="noopener noreferrer">
+                <div class="card-meta">
+                    <span class="card-type" aria-label="テーブルゲーム">TABLE GAME</span>
+                    <span class="card-number">07 / 12</span>
+                </div>
+                <h3 class="app-title">ポーカー［テキサス・ホ‐ルデム］</h3>
+                <p class="app-description">四人対戦型テキサス・ホールデム。</p>
+                <span class="card-action" aria-hidden="true">OPEN APP <span class="action-arrow">↗</span></span>
+            </a>
 
-        <a href="poker_five_card_draw_v2_points.html" class="game-card" target="_blank" rel="noopener noreferrer">
-            <h2 class="game-title">ポーカー［5カード・ドロー］</h2>
-            <p class="game-desc">PC対戦型5カード・ドロー。</p>
-        </a>
+            <a class="app-card app-card--table" href="poker_five_card_showdown_v6_points.html" target="_blank" rel="noopener noreferrer">
+                <div class="card-meta">
+                    <span class="card-type" aria-label="テーブルゲーム">TABLE GAME</span>
+                    <span class="card-number">08 / 12</span>
+                </div>
+                <h3 class="app-title">ポーカー［5カード・ショーダウン］</h3>
+                <p class="app-description">PC対戦型5カード・ショーダウン。</p>
+                <span class="card-action" aria-hidden="true">OPEN APP <span class="action-arrow">↗</span></span>
+            </a>
 
-	  <a href="gin_rummy_v1_completed.html" class="game-card" target="_blank" rel="noopener noreferrer">
-            <h2 class="game-title">ジン・ラミー</h2>
-            <p class="game-desc">PC対戦型ジン・ラミー。</p>
-        </a>
+            <a class="app-card app-card--table" href="poker_five_card_draw_v2_points.html" target="_blank" rel="noopener noreferrer">
+                <div class="card-meta">
+                    <span class="card-type" aria-label="テーブルゲーム">TABLE GAME</span>
+                    <span class="card-number">09 / 12</span>
+                </div>
+                <h3 class="app-title">ポーカー［5カード・ドロー］</h3>
+                <p class="app-description">PC対戦型5カード・ドロー。</p>
+                <span class="card-action" aria-hidden="true">OPEN APP <span class="action-arrow">↗</span></span>
+            </a>
 
-	  <a href="reversi_v2_copyright.html" class="game-card" target="_blank" rel="noopener noreferrer">
-            <h2 class="game-title">リバーシ</h2>
-            <p class="game-desc">昔ながらの普通のPC対戦型リバーシ。</p>
-        </a>
+            <a class="app-card app-card--table" href="gin_rummy_v1_completed.html" target="_blank" rel="noopener noreferrer">
+                <div class="card-meta">
+                    <span class="card-type" aria-label="テーブルゲーム">TABLE GAME</span>
+                    <span class="card-number">10 / 12</span>
+                </div>
+                <h3 class="app-title">ジン・ラミー</h3>
+                <p class="app-description">PC対戦型ジン・ラミー。</p>
+                <span class="card-action" aria-hidden="true">OPEN APP <span class="action-arrow">↗</span></span>
+            </a>
 
-	  <a href="chess_vs_computer_v1_1_1_balanced.html" class="game-card" target="_blank" rel="noopener noreferrer">
-            <h2 class="game-title">チェス</h2>
-            <p class="game-desc">オーソドックスなPC対戦型チェス。</p>
-        </a>
+            <a class="app-card app-card--board" href="reversi_v2_copyright.html" target="_blank" rel="noopener noreferrer">
+                <div class="card-meta">
+                    <span class="card-type" aria-label="ボードゲーム">BOARD GAME</span>
+                    <span class="card-number">11 / 12</span>
+                </div>
+                <h3 class="app-title">リバーシ</h3>
+                <p class="app-description">昔ながらの普通のPC対戦型リバーシ。</p>
+                <span class="card-action" aria-hidden="true">OPEN APP <span class="action-arrow">↗</span></span>
+            </a>
 
-<!-- Template for adding new games
-	  <a href="chess_tactics_academy_v1_2_completed.html" class="game-card" target="_blank" rel="noopener noreferrer">
-            <h2 class="game-title">チェス戦術アカデミー</h2>
-            <p class="game-desc">入門から中級向けの詰めチェス。</p>
-        </a>
+            <a class="app-card app-card--board" href="chess_vs_computer_v1_1_1_balanced.html" target="_blank" rel="noopener noreferrer">
+                <div class="card-meta">
+                    <span class="card-type" aria-label="ボードゲーム">BOARD GAME</span>
+                    <span class="card-number">12 / 12</span>
+                </div>
+                <h3 class="app-title">チェス</h3>
+                <p class="app-description">オーソドックスなPC対戦型チェス。</p>
+                <span class="card-action" aria-hidden="true">OPEN APP <span class="action-arrow">↗</span></span>
+            </a>
+            </div>
+            <!-- To add an app, copy one complete app-card anchor above and update its href, title, and description. -->
+        </main>
 
-        
-        <a href="gin_rummy_v1_completed.html" class="game-card" target="_blank" rel="noopener noreferrer">
-            <h2 class="game-title">ジン・ラミー</h2>
-            <p class="game-desc">PC対戦型ジン・ラミー。</p>
-        </a>
--->
+        <footer>
+            <span>&copy; 2026 Yasuhiro Kaizu. All rights reserved.</span>
+            <span class="footer-mark">THE AUTONOMOUS ARCADE</span>
+        </footer>
     </div>
-
-    <footer>
-        &copy; 2026 Yasuhiro Kaizu. All rights reserved.
-    </footer>
 </body>
 </html>
