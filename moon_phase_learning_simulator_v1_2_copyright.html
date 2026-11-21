@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>月の満ち欠けシミュレーター | 地球と月の理科教室</title>
+  <!--
+    Program      : Moon Phase Learning Simulator
+    Version      : 1.2
+    Release Date : 2026-11-21
+    Copyright    : Copyright (c) 2026. All rights reserved.
+                   Copyright holder name may be inserted locally.
+    Development  : Designed and developed with assistance from ChatGPT.
+    Note         : Single-file, offline HTML and JavaScript educational simulator.
+                   Uses an idealized circular lunar orbit and a fixed Sun direction.
+                   Distances, sizes, inclination, and Earth's axial tilt are schematic.
+                   The ground view assumes zero declination of Sun and Moon,
+                   and uses local apparent solar time (not civil clock time).
+  -->
+  <style>
+    :root {
+      color-scheme: dark;
+      --background: #050b13;
+      --panel: #101b29;
+      --panel-deep: #0a1420;
+      --panel-raised: #172738;
+      --border: #294057;
+      --text: #f2f8ff;
+      --muted: #b0c1d1;
+      --accent: #68e3df;
+      --accent-dark: #193d49;
+      --gold: #ffd274;
+      --orange: #ffac68;
+      --red: #ff8b92;
+      --success: #8df4c7;
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    html { background: var(--background); }
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Yu Gothic", Meiryo, sans-serif;
+      line-height: 1.65;
+      min-width: 320px;
+      background:
+        radial-gradient(ellipse at 51% -8%, #123045 0, transparent 49%),
+        var(--background);
+    }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, canvas:focus-visible {
+      outline: 3px solid var(--gold);
+      outline-offset: 4px;
+    }
+    .app-shell { max-width: 1600px; margin: 0 auto; padding: 22px 23px 24px; }
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      gap: 12px 22px;
+      margin-bottom: 20px;
+      padding: 0 4px;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      color: var(--accent);
+      gap: 8px;
+      font-size: .83rem;
+      font-weight: 750;
+      letter-spacing: .08em;
+      margin-bottom: 3px;
+    }
+    .eyebrow::before { content: ""; width: 7px; height: 7px; background: var(--accent); border-radius: 100%; box-shadow: 0 0 13px var(--accent); }
+    h1 { margin: 0; font-size: clamp(1.38rem, 2.3vw, 2rem); font-weight: 800; letter-spacing: .025em; }
+    .subtitle { margin: 5px 0 0; color: var(--muted); font-size: .94rem; }
+    .grade-tag {
+      background: var(--accent-dark);
+      border: 1px solid #3c9296;
+      color: #a5fffa;
+      border-radius: 99px;
+      padding: 5px 14px;
+      font-size: .82rem;
+      white-space: nowrap;
+      font-weight: 700;
+    }
+    .workspace { display: grid; grid-template-columns: 276px minmax(0, 1fr) 286px; gap: 16px; align-items: start; }
+    .panel, .stage {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(155deg, rgba(21, 38, 54, .98), rgba(10, 20, 32, .98));
+      box-shadow: 0 12px 38px rgba(0, 0, 0, .19);
+      overflow: hidden;
+    }
+    .panel { padding: 19px; }
+    .panel h2 { margin: 0 0 5px; font-size: 1.11rem; font-weight: 800; }
+    .panel h3 { margin: 0 0 8px; font-size: .99rem; font-weight: 750; }
+    .muted { color: var(--muted); }
+    .small { font-size: .82rem; }
+    .controls-intro { margin: 0 0 16px; font-size: .84rem; color: var(--muted); }
+    .control-section { padding: 15px 0; border-top: 1px solid var(--border); }
+    .control-section:last-child { padding-bottom: 0; }
+    .control-row { display: flex; justify-content: space-between; align-items: baseline; gap: 9px; margin-bottom: 11px; }
+    .control-row label { font-weight: 750; font-size: .93rem; }
+    output { color: var(--accent); font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    input[type="range"] { display: block; width: 100%; height: 20px; padding: 0; margin: 0; accent-color: var(--accent); cursor: ew-resize; }
+    .scale { display: flex; justify-content: space-between; gap: 6px; margin-top: 5px; color: var(--muted); font-size: .69rem; }
+    .preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .phase-button {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid #385069;
+      background: #101e2c;
+      color: var(--text);
+      padding: 6px 5px;
+      min-height: 55px;
+      border-radius: 11px;
+      font-size: .8rem;
+      font-weight: 750;
+      text-align: left;
+      transition: background .14s, border-color .14s;
+    }
+    .phase-button:hover { background: #20374a; border-color: #6dbec1; }
+    .phase-button[aria-pressed="true"] { background: #163b46; border-color: var(--accent); box-shadow: inset 0 0 0 1px #69e3df44; }
+    .preset-disc { width: 39px; height: 39px; flex: 0 0 39px; }
+    .primary-button, .secondary-button {
+      border-radius: 12px;
+      padding: 11px 14px;
+      border: 1px solid #73d9d4;
+      font-weight: 800;
+      width: 100%;
+    }
+    .primary-button { background: #a0fbef; color: #07292f; }
+    .primary-button:hover { background: #c5fff7; }
+    .secondary-button { border-color: #4b687b; background: #172939; color: var(--text); margin-top: 8px; }
+    .secondary-button:hover { background: #25435a; }
+    .hint { padding: 12px 13px; border: 1px solid #325464; background: #0a2330; border-radius: 12px; font-size: .81rem; color: #c5e5ec; margin-top: 14px; }
+    .stage { background: #050e19; }
+    .stage-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; padding: 14px 17px 10px; gap: 8px; }
+    .stage-heading h2 { margin: 0; font-size: .95rem; }
+    .stage-heading span { color: #a9bfd2; font-size: .75rem; }
+    .diagram-canvas { display: block; width: 100%; height: auto; touch-action: none; cursor: crosshair; }
+    .legend {
+      border-top: 1px solid #263b4c;
+      padding: 12px 15px 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px 18px;
+      font-size: .77rem;
+      color: #c8d9e8;
+      background: #0b1724;
+    }
+    .legend-item { display: inline-flex; align-items: center; gap: 7px; }
+    .legend-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+    .legend-swatch.observer { background: var(--orange); }
+    .legend-swatch.sun { background: var(--gold); }
+    .observation-panel { text-align: center; }
+    .observation-panel h2 { text-align: left; }
+    .large-disc-wrap { display: flex; justify-content: center; align-items: center; margin: 6px 0 2px; min-height: 205px; }
+    .large-disc { display: block; width: min(100%, 208px); height: auto; }
+    .phase-title { margin: 0; font-size: 1.44rem; font-weight: 800; }
+    .age-line { margin: 0; color: var(--muted); font-size: .86rem; }
+    .illumination-value { margin: 10px 0 0; font-size: 1.02rem; color: #f9dfad; font-weight: 800; }
+    .info-divider { border: 0; border-top: 1px solid var(--border); margin: 16px 0 12px; }
+    .status-card { background: #102c30; border: 1px solid #315e64; border-radius: 12px; padding: 10px 11px; text-align: left; }
+    .status-card.is-below { border-color: #6c4b5a; background: #281e2a; }
+    .status-card strong { display: block; font-size: .93rem; margin-bottom: 2px; }
+    .status-card p { margin: 0; font-size: .8rem; color: #d0dce5; }
+    .facts { display: grid; grid-template-columns: 1fr auto; text-align: left; gap: 7px 8px; margin: 12px 0 0; font-size: .81rem; }
+    .facts dt { color: var(--muted); }
+    .facts dd { margin: 0; font-weight: 750; font-variant-numeric: tabular-nums; }
+    .explanation { margin: 14px 0 0; font-size: .85rem; color: #d7e7f6; text-align: left; }
+    .learning-note { margin-top: 16px; border: 1px solid #6c614b; border-radius: 13px; padding: 15px 17px; background: #201d1a; }
+    .learning-note h2 { font-size: .99rem; margin: 0 0 5px; color: #ffda99; }
+    .learning-note p { font-size: .85rem; margin: 0; color: #ede0cc; }
+    .footer { margin-top: 17px; color: #91a5b8; font-size: .76rem; text-align: center; }
+
+    /* A self-contained secondary observation window below the orbital view. */
+    .sky-window { margin: 13px 13px 15px; border: 1px solid #4b7189; border-radius: 13px; overflow: hidden; background: #07121e; box-shadow: 0 8px 20px rgba(0,0,0,.22); }
+    .sky-titlebar { display: flex; align-items: center; gap: 10px; justify-content: space-between; background: #153247; padding: 10px 13px; border-bottom: 1px solid #365c72; }
+    .sky-titlebar h3 { font-size: .94rem; margin: 0; color: #e4f9ff; }
+    .sky-window-label { color: var(--accent); font-size: .7rem; font-weight: 800; letter-spacing: .08em; }
+    .sky-toggle { color: #f2f8ff; background: #25485f; border: 1px solid #54768d; padding: 4px 12px; border-radius: 7px; white-space: nowrap; font-size: .78rem; font-weight: 700; }
+    .sky-toggle:hover { background: #3b6882; }
+    .sky-body[hidden] { display: none; }
+    .sky-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 13px; padding: 11px 17px; color: #d0e6f0; border-bottom: 1px solid #284457; font-size: .8rem; }
+    .sky-controls label { font-weight: 750; white-space: nowrap; }
+    .sky-controls input[type=range] { width: min(220px, 50%); flex: 1 1 130px; }
+    .sky-controls p { margin: 0; color: #acc2d3; }
+    .sky-canvas { display: block; width: 100%; height: auto; }
+    .sky-readouts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 10px 12px; border-top: 1px solid #345268; gap: 9px; background: #0c1a27; }
+    .sky-value { min-width: 0; }
+    .sky-value dt { color: #a9bdcb; font-size: .74rem; }
+    .sky-value dd { margin: 2px 0 0; font-size: .92rem; font-weight: 800; color: #e8f5ff; font-variant-numeric: tabular-nums; }
+    .sky-value:nth-child(1) dd { color: #a1f3e6; }
+    .sky-note { margin: 0; color: #b6cad8; font-size: .75rem; padding: 8px 13px 12px; line-height: 1.55; background: #0c1a27; }
+    .rotation-note { margin: 8px 0 0; color: #b3d4df; font-size: .78rem; }
+    @media (max-width: 600px) {
+      .sky-window { margin: 8px 8px 13px; }
+      .sky-titlebar h3 { font-size: .83rem; }
+      .sky-readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .sky-controls { padding: 9px 12px; }
+    }
+    @media (max-width: 1270px) {
+      .workspace { grid-template-columns: 260px minmax(0, 1fr); }
+      .side-info { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; grid-column: 1 / -1; align-items: start; }
+      .side-info .learning-note { margin-top: 0; }
+    }
+    @media (max-width: 780px) {
+      .app-shell { padding: 14px 11px 20px; }
+      .workspace { display: flex; flex-direction: column; gap: 12px; }
+      .workspace > * { width: 100%; }
+      .controls { order: 2; }
+      .stage { order: 1; }
+      .side-info { order: 3; display: flex; flex-direction: column; }
+      .preset-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .phase-button { justify-content: center; flex-wrap: wrap; text-align: center; }
+      .stage-heading { padding: 12px 13px 6px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .phase-button { transition: none; } }
+  </style>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div>
+        <div class="eyebrow">地球と月の理科教室</div>
+        <h1>月の満ち欠けシミュレーター</h1>
+        <p class="subtitle">地球・月・太陽の位置を動かして、「なぜ形が変わるのか」を発見しよう。</p>
+      </div>
+      <div class="grade-tag">小学校高学年から</div>
+    </header>
+
+    <div class="workspace">
+      <section class="panel controls" aria-labelledby="controls-title">
+        <h2 id="controls-title">月と地球を動かす</h2>
+        <p class="controls-intro">スライダーのほか、中央の図も直接ドラッグできます。</p>
+
+        <div class="control-section">
+          <div class="control-row"><label for="phase-slider">月の位置（月齢）</label><output id="age-output" for="phase-slider">7.4日</output></div>
+          <input id="phase-slider" type="range" min="0" max="29.53" step="0.01" value="7.38" aria-label="新月から何日たったかを選ぶ">
+          <div class="scale"><span>0日 新月</span><span>約15日 満月</span><span>約30日</span></div>
+        </div>
+
+        <div class="control-section">
+          <h3>見たい月の形から選ぶ</h3>
+          <div class="preset-grid" id="preset-grid" aria-label="月の形を選ぶ"></div>
+        </div>
+
+        <div class="control-section">
+          <div class="control-row"><label for="time-slider">地球上の観測時刻</label><output id="time-output" for="time-slider">18:00</output></div>
+          <input id="time-slider" type="range" min="0" max="24" step="0.25" value="18" aria-label="観測者の現地の太陽時を選ぶ">
+          <div class="scale"><span>0時 真夜中</span><span>12時 正午</span><span>24時</span></div>
+          <p class="muted small" style="margin:9px 0 0">時刻を変えると、オレンジ色の観測者が地球の周りを移動します。</p>
+        </div>
+
+        <div class="control-section">
+          <button type="button" class="primary-button" id="rotate-button" aria-pressed="false">▶ 地球を自転させる（1日）</button>
+          <p class="rotation-note">月齢はそのままに、地上から見た月の動きを確かめます。</p>
+          <button type="button" class="secondary-button" id="play-button" aria-pressed="false">▶ 月を一周させる</button>
+          <button type="button" class="secondary-button" id="reset-button">↺ はじめの位置に戻す</button>
+          <div class="hint">ヒント：月の<strong>光っている側</strong>は、いつも太陽の方向。地球からは、その光る部分がどれだけ見えるかで月の形が変わります。</div>
+        </div>
+      </section>
+
+      <section class="stage" aria-labelledby="diagram-title">
+        <div class="stage-heading"><h2 id="diagram-title">宇宙から見た地球と月</h2><span>北極の上から見た模式図</span></div>
+        <canvas id="space-canvas" class="diagram-canvas" width="900" height="700" aria-label="中央に地球、周囲に月の公転軌道、右側に太陽光を表示した操作可能な図。月は公転軌道に沿って、オレンジの観測者は地球の周囲でドラッグできる。" role="img"></canvas>
+        <section class="sky-window" aria-labelledby="sky-title">
+          <div class="sky-titlebar">
+            <div>
+              <div class="sky-window-label">GROUND OBSERVATION / 地上観測サブウインドウ</div>
+              <h3 id="sky-title">地上から見た空 ― 東・南・西</h3>
+            </div>
+            <button type="button" class="sky-toggle" id="sky-toggle" aria-controls="sky-body" aria-expanded="true">− 閉じる</button>
+          </div>
+          <div id="sky-body" class="sky-body">
+            <div class="sky-controls">
+              <label for="latitude-slider">観測地の緯度</label>
+              <input type="range" id="latitude-slider" min="20" max="50" step="1" value="35" aria-label="観測地の北緯を変更する">
+              <output id="latitude-output" for="latitude-slider">北緯35°</output>
+              <p>日本付近を想定した空です。</p>
+            </div>
+            <canvas id="sky-canvas" class="sky-canvas" width="900" height="355" role="img" aria-label="地上から見た東・南・西の空。月の位置と高度を時刻に連動して表示します。"></canvas>
+            <dl class="sky-readouts">
+              <div class="sky-value"><dt>月の方角</dt><dd id="sky-azimuth">南</dd></div>
+              <div class="sky-value"><dt>月の高さ（高度）</dt><dd id="sky-altitude">55°</dd></div>
+              <div class="sky-value"><dt>月の出（目安）</dt><dd id="moonrise-time">12:00</dd></div>
+              <div class="sky-value"><dt>月の入り（目安）</dt><dd id="moonset-time">00:00</dd></div>
+            </dl>
+            <p class="sky-note">点線は月が東から南を通って西へ動く道すじ。時刻は<strong>地方太陽時</strong>の概算です。地球の自転だけを学ぶため月の公転は固定し、季節や月の赤緯も省略しています。実際の月の出・月の入り時刻とは異なります。</p>
+          </div>
+        </section>
+        <div class="legend" aria-label="色の説明">
+          <span class="legend-item"><i class="legend-swatch" aria-hidden="true"></i>月の軌道</span>
+          <span class="legend-item"><i class="legend-swatch observer" aria-hidden="true"></i>観測者</span>
+          <span class="legend-item"><i class="legend-swatch sun" aria-hidden="true"></i>右から太陽光</span>
+        </div>
+      </section>
+
+      <aside class="side-info" aria-label="月の見え方と学習ポイント">
+        <section class="panel observation-panel" aria-labelledby="view-title">
+          <h2 id="view-title">地球から見た月</h2>
+          <div class="large-disc-wrap">
+            <canvas id="moon-disc" class="large-disc" width="260" height="260" role="img" aria-label="地球から見た月の光っている部分"></canvas>
+          </div>
+          <h3 class="phase-title" id="phase-name">上弦の月</h3>
+          <p class="age-line" id="phase-age">月齢 約7.4日</p>
+          <p class="illumination-value" id="illumination">光って見える部分 約50%</p>
+          <hr class="info-divider">
+          <div class="status-card" id="visibility-card">
+            <strong id="visibility-title">月は地平線より上</strong>
+            <p id="visibility-description">今の位置から月を見られる方向にあります。</p>
+          </div>
+          <dl class="facts">
+            <dt>太陽の位置</dt><dd id="sun-status">地平線の近く</dd>
+            <dt>月の位置</dt><dd id="moon-status">地平線より上</dd>
+            <dt>月が高くのぼる頃</dt><dd id="transit-time">18時ごろ</dd>
+          </dl>
+          <p class="explanation" id="phase-explanation">月の右半分が光ります。</p>
+        </section>
+        <section class="learning-note" aria-labelledby="learning-title">
+          <h2 id="learning-title">覚えておこう</h2>
+          <p>ふつうの月の満ち欠けでは、暗い部分は<strong>地球の影ではありません</strong>。太陽の光が当たっていない月の半分です。地球の影が月にかかるのは「月食」という別の現象です。</p>
+          <p style="margin-top:11px">この教材では軌道を円形として、距離・大きさ・地軸の傾き・月の軌道の傾きを簡略化しています。宇宙図の観測者は赤道上に代表表示し、地上のサブウインドウは選択した北緯で計算します。太陽と月の赤緯は0°と仮定するため、実際の観測時刻・方角・高度とは差があります。</p>
+        </section>
+      </aside>
+    </div>
+    <footer class="footer" role="contentinfo">© 2026. All rights reserved.</footer>
+  </main>
+
+  <script>
+    "use strict";
+
+    /** Central configuration for physical approximations, drawing, and animation. */
+    class SimulatorConfig {
+      static LUNAR_CYCLE_DAYS = 29.53058885;
+      static HOURS_PER_DAY = 24;
+      static NOON_HOURS = 12;
+      static MINUTES_PER_HOUR = 60;
+      static FULL_CIRCLE = 2 * Math.PI;
+      static HALF_CIRCLE = Math.PI;
+      static PHASE_COUNT = 8;
+      static PHASES = Object.freeze([
+        Object.freeze({ name: "新月", detail: "月は太陽とほぼ同じ方向。明るい側が地球と反対を向くため、ほとんど見えません。" }),
+        Object.freeze({ name: "三日月（満ちていく月）", detail: "右側に細い光が見えます。新月から少しずつ、光って見える部分が増えていきます。" }),
+        Object.freeze({ name: "上弦の月（半月）", detail: "右半分が光って見えます。夕方ごろ、空の高いところに見えやすい月です。" }),
+        Object.freeze({ name: "満ちていく月", detail: "右から光る部分が広がり、満月に近づいていきます。" }),
+        Object.freeze({ name: "満月", detail: "太陽と反対の方向に月があり、地球側のほぼ全面が光って見えます。" }),
+        Object.freeze({ name: "欠けていく月", detail: "満月を過ぎると、右側から暗い部分が増えていきます。" }),
+        Object.freeze({ name: "下弦の月（半月）", detail: "左半分が光って見えます。夜明けごろ、空の高いところに見えやすい月です。" }),
+        Object.freeze({ name: "有明の月（細い月）", detail: "左側に細い光が見えます。やがて新月となり、次の一周が始まります。" })
+      ]);
+      static PRESETS = Object.freeze([
+        Object.freeze({ id: "new", label: "新月", fraction: 0 }),
+        Object.freeze({ id: "crescent", label: "三日月", fraction: 0.10 }),
+        Object.freeze({ id: "first", label: "上弦・半月", fraction: 0.25 }),
+        Object.freeze({ id: "full", label: "満月", fraction: 0.50 }),
+        Object.freeze({ id: "last", label: "下弦・半月", fraction: 0.75 }),
+        Object.freeze({ id: "waning", label: "細い月", fraction: 0.90 })
+      ]);
+      static DEFAULT_PHASE_FRACTION = 0.25;
+      static DEFAULT_LOCAL_HOURS = 18;
+      static ANIMATION_LUNAR_DAYS_PER_SECOND = 0.95;
+      static ANIMATION_EARTH_HOURS_PER_SECOND = 1.25;
+      static MILLISECONDS_PER_SECOND = 1000;
+      static DEFAULT_LATITUDE_DEGREES = 35;
+      static MIN_LATITUDE_DEGREES = 20;
+      static MAX_LATITUDE_DEGREES = 50;
+      static DEGREES_PER_CIRCLE = 360;
+      static DEGREES_PER_RIGHT_ANGLE = 90;
+      static HORIZON_HOURS_HALF_SPAN = 6;
+      static SKY = Object.freeze({ width: 900, height: 355, left: 66, right: 834, top: 48, horizonY: 278, groundBottom: 355, moonSize: 58 });
+      static COMPASS = Object.freeze(["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東", "南", "南南西", "南西", "西南西", "西", "西北西", "北西", "北北西"]);
+      static PLAYBACK_MODE = Object.freeze({ MOON: "moon", EARTH: "earth" });
+      static MAX_ANIMATION_DELTA_SECONDS = 0.10;
+      static VISIBILITY_TOLERANCE = 0.035;
+      static PRESET_SELECTION_TOLERANCE_DAYS = 0.12;
+      static SPACE = Object.freeze({ width: 900, height: 700, centerX: 382, centerY: 350, orbitRadius: 242, earthRadius: 62, moonRadius: 24, sunX: 811, sunY: 350 });
+      static MOON_TEXTURE = Object.freeze({ width: 260, height: 260, radius: 111 });
+      static POINTER = Object.freeze({ observerRadius: 42, earthMargin: 12, moonRadius: 45, orbitMargin: 48 });
+    }
+
+    /** Pure geometric and lunar-phase calculations. */
+    class Astronomy {
+      static normalize(value, period) {
+        return ((value % period) + period) % period;
+      }
+      static clamp(value, minimum, maximum) {
+        return Math.max(minimum, Math.min(maximum, value));
+      }
+      static phaseAngle(days) {
+        return Astronomy.normalize(days, SimulatorConfig.LUNAR_CYCLE_DAYS) /
+          SimulatorConfig.LUNAR_CYCLE_DAYS * SimulatorConfig.FULL_CIRCLE;
+      }
+      static phaseFraction(days) {
+        return Astronomy.normalize(days, SimulatorConfig.LUNAR_CYCLE_DAYS) / SimulatorConfig.LUNAR_CYCLE_DAYS;
+      }
+      static illuminatedFraction(days) {
+        return (1 - Math.cos(Astronomy.phaseAngle(days))) / 2;
+      }
+      static phaseIndex(days) {
+        return Math.round(Astronomy.phaseFraction(days) * SimulatorConfig.PHASE_COUNT) % SimulatorConfig.PHASE_COUNT;
+      }
+      static observerAngle(hours) {
+        return (hours - SimulatorConfig.NOON_HOURS) /
+          SimulatorConfig.HOURS_PER_DAY * SimulatorConfig.FULL_CIRCLE;
+      }
+      static observerHours(angle) {
+        return Astronomy.normalize(
+          SimulatorConfig.NOON_HOURS + angle / SimulatorConfig.FULL_CIRCLE * SimulatorConfig.HOURS_PER_DAY,
+          SimulatorConfig.HOURS_PER_DAY
+        );
+      }
+      /** Horizontal coordinates in the idealized zero-declination sky. */
+      static horizontalCoordinates(days, hours, latitudeDegrees) {
+        const hourAngle = Astronomy.observerAngle(hours) - Astronomy.phaseAngle(days);
+        const latitude = latitudeDegrees * Math.PI / 180;
+        const east = -Math.sin(hourAngle);
+        const north = -Math.sin(latitude) * Math.cos(hourAngle);
+        const up = Math.cos(latitude) * Math.cos(hourAngle);
+        const altitudeDegrees = Math.asin(Astronomy.clamp(up, -1, 1)) * 180 / Math.PI;
+        const azimuthDegrees = Astronomy.normalize(Math.atan2(east, north) * 180 / Math.PI, SimulatorConfig.DEGREES_PER_CIRCLE);
+        return { altitudeDegrees, azimuthDegrees };
+      }
+      static moonIsAboveHorizon(days, hours, latitudeDegrees = SimulatorConfig.DEFAULT_LATITUDE_DEGREES) {
+        return Astronomy.horizontalCoordinates(days, hours, latitudeDegrees).altitudeDegrees > 0;
+      }
+      static solarAltitudeFactor(hours, latitudeDegrees = SimulatorConfig.DEFAULT_LATITUDE_DEGREES) {
+        const altitude = Astronomy.horizontalCoordinates(0, hours, latitudeDegrees).altitudeDegrees;
+        return Math.sin(altitude * Math.PI / 180);
+      }
+      static moonriseHours(days) {
+        return Astronomy.normalize(Astronomy.transitHours(days) - SimulatorConfig.HORIZON_HOURS_HALF_SPAN, SimulatorConfig.HOURS_PER_DAY);
+      }
+      static moonsetHours(days) {
+        return Astronomy.normalize(Astronomy.transitHours(days) + SimulatorConfig.HORIZON_HOURS_HALF_SPAN, SimulatorConfig.HOURS_PER_DAY);
+      }
+      static compassLabel(azimuthDegrees) {
+        const count = SimulatorConfig.COMPASS.length;
+        const index = Math.round(azimuthDegrees / SimulatorConfig.DEGREES_PER_CIRCLE * count) % count;
+        return SimulatorConfig.COMPASS[index];
+      }
+      static transitHours(days) {
+        return Astronomy.normalize(
+          SimulatorConfig.NOON_HOURS + Astronomy.phaseFraction(days) * SimulatorConfig.HOURS_PER_DAY,
+          SimulatorConfig.HOURS_PER_DAY
+        );
+      }
+      static pointOnCircle(centerX, centerY, radius, angle) {
+        return { x: centerX + radius * Math.cos(angle), y: centerY - radius * Math.sin(angle) };
+      }
+      static formatHours(hours) {
+        const totalMinutes = Math.round(Astronomy.normalize(hours, SimulatorConfig.HOURS_PER_DAY) * SimulatorConfig.MINUTES_PER_HOUR);
+        const normalizedMinutes = totalMinutes % (SimulatorConfig.HOURS_PER_DAY * SimulatorConfig.MINUTES_PER_HOUR);
+        const hh = Math.floor(normalizedMinutes / SimulatorConfig.MINUTES_PER_HOUR);
+        const mm = normalizedMinutes % SimulatorConfig.MINUTES_PER_HOUR;
+        return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+      }
+    }
+
+    /** Encapsulates lunar age, solar time and ground-view latitude. */
+    class MoonSimulatorModel {
+      #phaseDays;
+      #localHours;
+      #latitudeDegrees;
+      constructor() { this.reset(); }
+      get phaseDays() { return this.#phaseDays; }
+      get localHours() { return this.#localHours; }
+      get latitudeDegrees() { return this.#latitudeDegrees; }
+      setLatitudeDegrees(value) {
+        if (!Number.isFinite(value) || value < SimulatorConfig.MIN_LATITUDE_DEGREES || value > SimulatorConfig.MAX_LATITUDE_DEGREES) return false;
+        this.#latitudeDegrees = value;
+        return true;
+      }
+      setPhaseDays(value) {
+        if (!Number.isFinite(value)) return false;
+        this.#phaseDays = Astronomy.normalize(value, SimulatorConfig.LUNAR_CYCLE_DAYS);
+        return true;
+      }
+      setLocalHours(value) {
+        if (!Number.isFinite(value)) return false;
+        this.#localHours = Astronomy.normalize(value, SimulatorConfig.HOURS_PER_DAY);
+        return true;
+      }
+      reset() {
+        this.#phaseDays = SimulatorConfig.DEFAULT_PHASE_FRACTION * SimulatorConfig.LUNAR_CYCLE_DAYS;
+        this.#localHours = SimulatorConfig.DEFAULT_LOCAL_HOURS;
+        this.#latitudeDegrees = SimulatorConfig.DEFAULT_LATITUDE_DEGREES;
+      }
+    }
+
+    /** Renders a phase as a lit sphere in an orthographic view from Earth. */
+    class MoonDiskRenderer {
+      #canvas;
+      #context;
+      #pixelCache;
+      #lastFraction = NaN;
+      constructor(canvas) {
+        this.#canvas = canvas;
+        this.#context = canvas.getContext("2d", { alpha: true });
+        if (!this.#context) throw new Error("Canvas 2D is not available.");
+        this.#pixelCache = this.#buildPixelCache();
+      }
+      #buildPixelCache() {
+        const { width, height, radius } = SimulatorConfig.MOON_TEXTURE;
+        const pixels = new Array(width * height);
+        const centerX = width / 2;
+        const centerY = height / 2;
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const nx = (x - centerX + 0.5) / radius;
+            const ny = (y - centerY + 0.5) / radius;
+            const square = nx * nx + ny * ny;
+            const index = y * width + x;
+            if (square > 1.02) { pixels[index] = null; continue; }
+            const nz = Math.sqrt(Math.max(0, 1 - square));
+            const mottling = 0.95 +
+              0.055 * Math.sin(nx * 21 + ny * 12) * Math.sin(ny * 18 - nx * 8) +
+              0.035 * Math.cos(nx * 46 + ny * 17);
+            pixels[index] = { nx, nz, square, mottling };
+          }
+        }
+        return pixels;
+      }
+      render(phaseDays, force = false) {
+        const fraction = Astronomy.phaseFraction(phaseDays);
+        if (!force && Math.abs(fraction - this.#lastFraction) < 0.0002) return;
+        this.#lastFraction = fraction;
+        const { width, height, radius } = SimulatorConfig.MOON_TEXTURE;
+        const image = this.#context.createImageData(width, height);
+        const source = image.data;
+        const angle = Astronomy.phaseAngle(phaseDays);
+        const sunX = Math.sin(angle);
+        const sunZ = -Math.cos(angle);
+        for (let i = 0; i < this.#pixelCache.length; i++) {
+          const pixel = this.#pixelCache[i];
+          if (!pixel) continue;
+          const light = pixel.nx * sunX + pixel.nz * sunZ;
+          const lit = light > 0;
+          const shade = lit
+            ? (0.69 + 0.31 * Math.sqrt(light)) * pixel.mottling
+            : (0.065 + 0.018 * pixel.nz) * pixel.mottling;
+          const luminance = Math.round(240 * shade);
+          const alpha = Math.round(255 * Astronomy.clamp((1 - Math.sqrt(pixel.square)) * radius, 0, 1));
+          const offset = i * 4;
+          source[offset] = Math.min(255, luminance);
+          source[offset + 1] = Math.min(255, luminance + (lit ? 2 : 9));
+          source[offset + 2] = Math.min(255, luminance + (lit ? 9 : 20));
+          source[offset + 3] = alpha;
+        }
+        this.#context.clearRect(0, 0, width, height);
+        this.#context.putImageData(image, 0, 0);
+      }
+    }
+
+    /** Draws the space view without changing model state. */
+    class SpaceSceneRenderer {
+      #context;
+      #stars;
+      constructor(canvas) {
+        this.#context = canvas.getContext("2d");
+        if (!this.#context) throw new Error("Canvas 2D is not available.");
+        this.#stars = this.#createStars();
+      }
+      #createStars() {
+        const stars = [];
+        let seed = 20261121;
+        const random = () => { seed = (1664525 * seed + 1013904223) >>> 0; return seed / 4294967296; };
+        for (let i = 0; i < 102; i++) {
+          stars.push({ x: random() * SimulatorConfig.SPACE.width, y: random() * SimulatorConfig.SPACE.height, radius: 0.6 + random() * 1.15, alpha: 0.14 + random() * 0.38 });
+        }
+        return stars;
+      }
+      draw(model) {
+        const scene = SimulatorConfig.SPACE;
+        const context = this.#context;
+        context.clearRect(0, 0, scene.width, scene.height);
+        this.#drawBackground();
+        this.#drawOrbit();
+        this.#drawSunlight();
+        const moon = Astronomy.pointOnCircle(scene.centerX, scene.centerY, scene.orbitRadius, Astronomy.phaseAngle(model.phaseDays));
+        const observer = Astronomy.pointOnCircle(scene.centerX, scene.centerY, scene.earthRadius, Astronomy.observerAngle(model.localHours));
+        this.#drawSightLine(observer, moon, Astronomy.moonIsAboveHorizon(model.phaseDays, model.localHours, model.latitudeDegrees));
+        this.#drawEarth(model.localHours);
+        this.#drawMoon(moon);
+        this.#drawObserver(observer, model.localHours);
+        this.#drawAnnotations();
+      }
+      #drawBackground() {
+        const c = this.#context;
+        const s = SimulatorConfig.SPACE;
+        const background = c.createRadialGradient(s.centerX, s.centerY, 30, s.centerX, s.centerY, 500);
+        background.addColorStop(0, "#0b1d2a");
+        background.addColorStop(1, "#050d17");
+        c.fillStyle = background;
+        c.fillRect(0, 0, s.width, s.height);
+        for (const star of this.#stars) {
+          c.beginPath(); c.arc(star.x, star.y, star.radius, 0, SimulatorConfig.FULL_CIRCLE);
+          c.fillStyle = `rgba(194,222,248,${star.alpha})`;
+          c.fill();
+        }
+      }
+      #drawOrbit() {
+        const c = this.#context;
+        const s = SimulatorConfig.SPACE;
+        c.save();
+        c.beginPath(); c.arc(s.centerX, s.centerY, s.orbitRadius, 0, SimulatorConfig.FULL_CIRCLE);
+        c.setLineDash([7, 7]); c.lineWidth = 2; c.strokeStyle = "#47788d"; c.stroke();
+        c.setLineDash([]);
+        for (const angle of [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]) {
+          const p = Astronomy.pointOnCircle(s.centerX, s.centerY, s.orbitRadius, angle);
+          c.beginPath(); c.arc(p.x, p.y, 5.3, 0, SimulatorConfig.FULL_CIRCLE);
+          c.fillStyle = "#31556a"; c.fill();
+        }
+        this.#drawOrbitArrow(5 * Math.PI / 4);
+        c.restore();
+      }
+      #drawOrbitArrow(angle) {
+        const c = this.#context;
+        const s = SimulatorConfig.SPACE;
+        const p = Astronomy.pointOnCircle(s.centerX, s.centerY, s.orbitRadius, angle);
+        const tangent = { x: -Math.sin(angle), y: -Math.cos(angle) };
+        const head = { x: p.x + tangent.x * 10, y: p.y + tangent.y * 10 };
+        c.save();
+        c.strokeStyle = "#6ae1d5"; c.fillStyle = "#6ae1d5"; c.lineWidth = 2;
+        c.beginPath();
+        c.arc(s.centerX, s.centerY, s.orbitRadius, -(angle - 0.15), -(angle + 0.04), true);
+        c.stroke();
+        const back = { x: head.x - tangent.x * 14, y: head.y - tangent.y * 14 };
+        const side = { x: -tangent.y, y: tangent.x };
+        c.beginPath(); c.moveTo(head.x, head.y);
+        c.lineTo(back.x + side.x * 6, back.y + side.y * 6);
+        c.lineTo(back.x - side.x * 6, back.y - side.y * 6);
+        c.closePath(); c.fill();
+        c.restore();
+      }
+      #drawSunlight() {
+        const c = this.#context;
+        const s = SimulatorConfig.SPACE;
+        c.save();
+        for (const y of [206, 278, 421, 493]) {
+          c.strokeStyle = "rgba(255,210,114,.68)";
+          c.fillStyle = "rgba(255,210,114,.90)";
+          c.lineWidth = 3;
+          c.beginPath(); c.moveTo(792, y); c.lineTo(659, y); c.stroke();
+          c.beginPath(); c.moveTo(654, y); c.lineTo(670, y - 7); c.lineTo(670, y + 7); c.closePath(); c.fill();
+        }
+        const glow = c.createRadialGradient(s.sunX, s.sunY, 10, s.sunX, s.sunY, 64);
+        glow.addColorStop(0, "rgba(255,197,93,.7)");
+        glow.addColorStop(0.36, "rgba(255,179,80,.21)");
+        glow.addColorStop(1, "rgba(255,179,80,0)");
+        c.fillStyle = glow; c.beginPath(); c.arc(s.sunX, s.sunY, 64, 0, SimulatorConfig.FULL_CIRCLE); c.fill();
+        for (let i = 0; i < 12; i++) {
+          const angle = i / 12 * SimulatorConfig.FULL_CIRCLE;
+          c.beginPath();
+          c.moveTo(s.sunX + Math.cos(angle) * 29, s.sunY + Math.sin(angle) * 29);
+          c.lineTo(s.sunX + Math.cos(angle) * 40, s.sunY + Math.sin(angle) * 40);
+          c.strokeStyle = "#ffc96d"; c.lineWidth = 2.4; c.stroke();
+        }
+        const fill = c.createRadialGradient(s.sunX - 7, s.sunY - 8, 3, s.sunX, s.sunY, 28);
+        fill.addColorStop(0, "#fff2bd"); fill.addColorStop(1, "#ffb74e");
+        c.fillStyle = fill; c.beginPath(); c.arc(s.sunX, s.sunY, 25, 0, SimulatorConfig.FULL_CIRCLE); c.fill();
+        c.fillStyle = "#ffdb92"; c.font = "700 17px system-ui"; c.textAlign = "center";
+        c.fillText("太陽", s.sunX, s.sunY + 66);
+        c.font = "600 14px system-ui";
+        c.fillText("太陽光（右から左へ）", 737, 166);
+        c.restore();
+      }
+      #drawSightLine(observer, moon, visible) {
+        const c = this.#context;
+        c.save();
+        c.beginPath(); c.moveTo(observer.x, observer.y); c.lineTo(moon.x, moon.y);
+        c.setLineDash([7, 6]); c.strokeStyle = visible ? "rgba(130,243,194,.72)" : "rgba(255,148,151,.58)";
+        c.lineWidth = 2; c.stroke(); c.restore();
+      }
+      #drawEarth(hours) {
+        const c = this.#context;
+        const s = SimulatorConfig.SPACE;
+        c.save(); c.translate(s.centerX, s.centerY);
+        c.shadowColor = "#2d92b0"; c.shadowBlur = 23;
+        c.beginPath(); c.arc(0, 0, s.earthRadius, 0, SimulatorConfig.FULL_CIRCLE);
+        const water = c.createRadialGradient(24, -20, 10, 0, 0, s.earthRadius);
+        water.addColorStop(0, "#3289ba"); water.addColorStop(1, "#154363");
+        c.fillStyle = water; c.fill(); c.shadowBlur = 0;
+        c.clip();
+        c.save();
+        c.rotate(-Astronomy.observerAngle(hours));
+        this.#drawLandmasses();
+        c.restore();
+        const nightside = c.createLinearGradient(-s.earthRadius, 0, 8, 0);
+        nightside.addColorStop(0, "rgba(1,8,19,.91)");
+        nightside.addColorStop(0.91, "rgba(2,9,23,.74)");
+        nightside.addColorStop(1, "rgba(2,9,23,.08)");
+        c.fillStyle = nightside; c.fillRect(-s.earthRadius, -s.earthRadius, s.earthRadius + 8, s.earthRadius * 2);
+        c.strokeStyle = "rgba(210,239,255,.22)"; c.lineWidth = 1.0;
+        c.beginPath(); c.moveTo(0, -s.earthRadius); c.lineTo(0, s.earthRadius); c.stroke();
+        c.restore();
+        c.save(); c.strokeStyle = "#9dc6dc"; c.lineWidth = 1.7;
+        c.beginPath(); c.arc(s.centerX, s.centerY, s.earthRadius, 0, SimulatorConfig.FULL_CIRCLE); c.stroke();
+        c.fillStyle = "#a5deff"; c.font = "700 17px system-ui"; c.textAlign = "center";
+        c.fillText("地球", s.centerX, s.centerY + s.earthRadius + 29);
+        c.font = "700 12px system-ui";
+        c.fillStyle = "#d2f4ff"; c.fillText("昼", s.centerX + 36, s.centerY + 4);
+        c.fillStyle = "#9eb3c8"; c.fillText("夜", s.centerX - 36, s.centerY + 4);
+        c.restore();
+      }
+      #drawLandmasses() {
+        const c = this.#context;
+        const shapes = [
+          [[-52,-30],[-28,-42],[-9,-31],[2,-10],[-17,-2],[-26,14],[-48,9]],
+          [[3,-48],[27,-49],[43,-32],[34,-14],[15,-6],[7,-22]],
+          [[15,15],[48,10],[56,26],[37,42],[24,31]],
+          [[-44,31],[-23,21],[-13,35],[-25,54],[-39,47]]
+        ];
+        c.save(); c.fillStyle = "#66bd91";
+        for (const shape of shapes) {
+          c.beginPath(); c.moveTo(shape[0][0], shape[0][1]);
+          for (let i = 1; i < shape.length; i++) c.lineTo(shape[i][0], shape[i][1]);
+          c.closePath(); c.fill();
+        }
+        c.restore();
+      }
+      #drawMoon(position) {
+        const c = this.#context;
+        const s = SimulatorConfig.SPACE;
+        const r = s.moonRadius;
+        c.save();
+        c.shadowColor = "#b9d0e7"; c.shadowBlur = 13;
+        c.fillStyle = "#192737";
+        c.beginPath(); c.arc(position.x, position.y, r, 0, SimulatorConfig.FULL_CIRCLE); c.fill();
+        c.shadowBlur = 0;
+        c.beginPath(); c.arc(position.x, position.y, r, 0, SimulatorConfig.FULL_CIRCLE); c.clip();
+        const lit = c.createLinearGradient(position.x, 0, position.x + r, 0);
+        lit.addColorStop(0, "#bac9d6"); lit.addColorStop(1, "#f7f8fa");
+        c.fillStyle = lit; c.fillRect(position.x, position.y - r, r, r * 2);
+        c.fillStyle = "rgba(92,116,135,.24)";
+        for (const crater of [[.42,-.45,.20],[.55,.32,.16],[.85,-.08,.11]]) {
+          c.beginPath(); c.arc(position.x + r * crater[0], position.y + r * crater[1], r * crater[2], 0, SimulatorConfig.FULL_CIRCLE); c.fill();
+        }
+        c.restore();
+        c.save(); c.beginPath(); c.arc(position.x, position.y, r, 0, SimulatorConfig.FULL_CIRCLE);
+        c.lineWidth = 1.8; c.strokeStyle = "#e0edf6"; c.stroke();
+        c.font = "700 16px system-ui"; c.fillStyle = "#f0f7ff"; c.textAlign = "left";
+        c.fillText("月", position.x + 30, position.y - 17);
+        c.restore();
+      }
+      #drawObserver(position, hours) {
+        const c = this.#context;
+        const s = SimulatorConfig.SPACE;
+        const angle = Astronomy.observerAngle(hours);
+        const tangentX = Math.sin(angle);
+        const tangentY = Math.cos(angle);
+        c.save();
+        c.beginPath();
+        c.moveTo(position.x - tangentX * 32, position.y - tangentY * 32);
+        c.lineTo(position.x + tangentX * 32, position.y + tangentY * 32);
+        c.strokeStyle = "rgba(255,172,104,.85)"; c.lineWidth = 1.5; c.stroke();
+        c.fillStyle = "rgba(255,172,104,.22)";
+        c.beginPath(); c.arc(position.x, position.y, 15, 0, SimulatorConfig.FULL_CIRCLE); c.fill();
+        c.fillStyle = "#ffb26f"; c.strokeStyle = "#fff1d8"; c.lineWidth = 2;
+        c.beginPath(); c.arc(position.x, position.y, 7.4, 0, SimulatorConfig.FULL_CIRCLE); c.fill(); c.stroke();
+        const dx = Math.cos(angle) >= 0 ? 19 : -19;
+        c.font = "700 13px system-ui"; c.fillStyle = "#ffd0a4";
+        c.textAlign = dx >= 0 ? "left" : "right";
+        c.fillText("観測者", position.x + dx, position.y - 12);
+        c.restore();
+      }
+      #drawAnnotations() {
+        const c = this.#context;
+        const s = SimulatorConfig.SPACE;
+        c.save();
+        c.textAlign = "center"; c.fillStyle = "#9dc2d3"; c.font = "700 16px system-ui";
+        c.fillText("新月", s.centerX + s.orbitRadius + 56, s.centerY + 6);
+        c.fillText("上弦", s.centerX, s.centerY - s.orbitRadius - 33);
+        c.fillText("満月", s.centerX - s.orbitRadius - 55, s.centerY + 6);
+        c.fillText("下弦", s.centerX, s.centerY + s.orbitRadius + 44);
+        c.textAlign = "left"; c.fillStyle = "#d2e3f0"; c.font = "600 14px system-ui";
+        c.fillText("月の公転方向 ↺", 47, 41);
+        c.fillStyle = "#7f9baf"; c.font = "13px system-ui";
+        c.fillText("図をドラッグして位置を変えよう", 47, 65);
+        c.fillText("※ 天体の大きさ・距離は実際の比率と異なります。", 32, 675);
+        c.restore();
+      }
+    }
+
+
+    /** Shows a south-facing local horizon with the Moon's daily east-to-west path. */
+    class GroundSkyRenderer {
+      #canvas;
+      #context;
+      #moonDisc;
+      #stars;
+      constructor(canvas, moonDisc) {
+        this.#canvas = canvas;
+        this.#context = canvas.getContext("2d");
+        if (!this.#context) throw new Error("Ground-view Canvas 2D is not available.");
+        this.#moonDisc = moonDisc;
+        this.#stars = this.#makeStars();
+      }
+      #makeStars() {
+        const stars = [];
+        let seed = 1729;
+        for (let i = 0; i < 78; i++) {
+          seed = (seed * 1664525 + 1013904223) >>> 0;
+          const x = seed / 4294967296;
+          seed = (seed * 1664525 + 1013904223) >>> 0;
+          const y = seed / 4294967296;
+          stars.push({ x, y, radius: i % 5 === 0 ? 1.65 : 0.8 });
+        }
+        return stars;
+      }
+      #project(coordinates) {
+        const s = SimulatorConfig.SKY;
+        const ratio = (coordinates.azimuthDegrees - SimulatorConfig.DEGREES_PER_RIGHT_ANGLE) /
+          (SimulatorConfig.DEGREES_PER_RIGHT_ANGLE * 2);
+        return {
+          x: s.left + ratio * (s.right - s.left),
+          y: s.horizonY - coordinates.altitudeDegrees / SimulatorConfig.DEGREES_PER_RIGHT_ANGLE * (s.horizonY - s.top)
+        };
+      }
+      #background(sunAltitudeDegrees) {
+        const c = this.#context;
+        const s = SimulatorConfig.SKY;
+        const day = Astronomy.clamp((sunAltitudeDegrees + 9) / 18, 0, 1);
+        const sky = c.createLinearGradient(0, 0, 0, s.horizonY);
+        if (day > 0.5) {
+          sky.addColorStop(0, "#1e496c");
+          sky.addColorStop(1, "#4b91b9");
+        } else if (day > 0) {
+          sky.addColorStop(0, "#101f3a");
+          sky.addColorStop(1, "#9b6658");
+        } else {
+          sky.addColorStop(0, "#060e1e");
+          sky.addColorStop(1, "#18324b");
+        }
+        c.fillStyle = sky;
+        c.fillRect(0, 0, s.width, s.horizonY);
+        if (sunAltitudeDegrees < -5) {
+          c.fillStyle = "rgba(238,247,255,.8)";
+          for (const star of this.#stars) {
+            c.beginPath();
+            c.arc(s.left + star.x * (s.right - s.left), s.top + star.y * (s.horizonY - s.top - 15), star.radius, 0, SimulatorConfig.FULL_CIRCLE);
+            c.fill();
+          }
+        }
+        c.fillStyle = "#102c2a";
+        c.fillRect(0, s.horizonY, s.width, s.height - s.horizonY);
+      }
+      #grid() {
+        const c = this.#context;
+        const s = SimulatorConfig.SKY;
+        c.save();
+        c.strokeStyle = "rgba(202,237,244,.19)";
+        c.lineWidth = 1;
+        c.setLineDash([4, 8]);
+        for (const degrees of [30, 60]) {
+          const y = s.horizonY - degrees / SimulatorConfig.DEGREES_PER_RIGHT_ANGLE * (s.horizonY - s.top);
+          c.beginPath(); c.moveTo(s.left, y); c.lineTo(s.right, y); c.stroke();
+          c.font = "13px system-ui";
+          c.textAlign = "right";
+          c.fillStyle = "#c8e3ed";
+          c.fillText(`${degrees}°`, s.left - 9, y + 4);
+        }
+        for (const azimuth of [90, 135, 180, 225, 270]) {
+          const x = this.#project({ azimuthDegrees: azimuth, altitudeDegrees: 0 }).x;
+          c.beginPath(); c.moveTo(x, s.top); c.lineTo(x, s.horizonY); c.stroke();
+        }
+        c.setLineDash([]);
+        c.strokeStyle = "#a8dce0";
+        c.lineWidth = 2;
+        c.beginPath(); c.moveTo(s.left - 6, s.horizonY); c.lineTo(s.right + 6, s.horizonY); c.stroke();
+        const labels = [[90, "東"], [135, "南東"], [180, "南"], [225, "南西"], [270, "西"]];
+        c.fillStyle = "#e3f3fc";
+        c.font = "700 17px system-ui";
+        c.textAlign = "center";
+        for (const [azimuth, label] of labels) {
+          c.fillText(label, this.#project({ azimuthDegrees: azimuth, altitudeDegrees: 0 }).x, s.horizonY + 30);
+        }
+        c.font = "13px system-ui";
+        c.fillStyle = "#bdd2dc";
+        c.fillText("地平線", s.width / 2, s.horizonY + 52);
+        c.restore();
+      }
+      #moonPath(model) {
+        const c = this.#context;
+        const s = SimulatorConfig.SKY;
+        const transit = Astronomy.transitHours(model.phaseDays);
+        c.save();
+        c.beginPath();
+        const steps = 100;
+        for (let i = 0; i <= steps; i++) {
+          const offsetHours = -SimulatorConfig.HORIZON_HOURS_HALF_SPAN + (2 * SimulatorConfig.HORIZON_HOURS_HALF_SPAN) * i / steps;
+          const coordinates = Astronomy.horizontalCoordinates(model.phaseDays, transit + offsetHours, model.latitudeDegrees);
+          const p = this.#project(coordinates);
+          if (i === 0) c.moveTo(p.x, p.y);
+          else c.lineTo(p.x, p.y);
+        }
+        c.strokeStyle = "rgba(245,248,255,.65)";
+        c.lineWidth = 2;
+        c.setLineDash([7, 7]);
+        c.stroke();
+        c.setLineDash([]);
+        c.font = "700 13px system-ui";
+        c.textAlign = "center";
+        c.fillStyle = "#c6e5ef";
+        c.fillText("月の通り道", s.width / 2, s.top - 15);
+        c.restore();
+      }
+      #sun(coordinates) {
+        if (coordinates.altitudeDegrees <= 0) return;
+        const c = this.#context;
+        const p = this.#project(coordinates);
+        c.save();
+        const glow = c.createRadialGradient(p.x, p.y, 4, p.x, p.y, 41);
+        glow.addColorStop(0, "rgba(255,250,210,1)");
+        glow.addColorStop(0.28, "rgba(255,217,136,.65)");
+        glow.addColorStop(1, "rgba(255,217,136,0)");
+        c.fillStyle = glow;
+        c.beginPath(); c.arc(p.x, p.y, 41, 0, SimulatorConfig.FULL_CIRCLE); c.fill();
+        c.fillStyle = "#ffecb0";
+        c.beginPath(); c.arc(p.x, p.y, 13, 0, SimulatorConfig.FULL_CIRCLE); c.fill();
+        c.font = "700 14px system-ui";
+        c.fillStyle = "#fff5d4";
+        c.textAlign = "center";
+        c.fillText("太陽", p.x, p.y - 27);
+        c.restore();
+      }
+      #moon(model, coordinates) {
+        const c = this.#context;
+        const fraction = Astronomy.illuminatedFraction(model.phaseDays);
+        if (coordinates.altitudeDegrees <= 0 || fraction < 0.015) return;
+        const p = this.#project(coordinates);
+        const s = SimulatorConfig.SKY;
+        const radius = s.moonSize / 2;
+        c.save();
+        c.strokeStyle = "rgba(120,235,219,.8)";
+        c.lineWidth = 1.5;
+        c.setLineDash([4,5]);
+        c.beginPath(); c.moveTo(p.x, p.y + radius); c.lineTo(p.x, s.horizonY); c.stroke();
+        c.setLineDash([]);
+        c.drawImage(this.#moonDisc, p.x - radius, p.y - radius, s.moonSize, s.moonSize);
+        c.strokeStyle = "#ecf9ff";
+        c.lineWidth = 1.5;
+        c.beginPath(); c.arc(p.x, p.y, radius * 0.84, 0, SimulatorConfig.FULL_CIRCLE); c.stroke();
+        c.font = "700 15px system-ui";
+        c.textAlign = "left";
+        c.fillStyle = "#d9fff9";
+        c.fillText("月", p.x + radius + 6, p.y - radius / 2);
+        c.restore();
+      }
+      draw(model) {
+        const sun = Astronomy.horizontalCoordinates(0, model.localHours, model.latitudeDegrees);
+        const moon = Astronomy.horizontalCoordinates(model.phaseDays, model.localHours, model.latitudeDegrees);
+        this.#background(sun.altitudeDegrees);
+        this.#grid();
+        this.#moonPath(model);
+        this.#sun(sun);
+        this.#moon(model, moon);
+        const c = this.#context;
+        const s = SimulatorConfig.SKY;
+        c.save();
+        c.textAlign = "right";
+        c.font = "700 17px system-ui";
+        c.fillStyle = "#eefaff";
+        c.fillText(`観測時刻  ${Astronomy.formatHours(model.localHours)}`, s.right + 6, 27);
+        c.restore();
+        if (moon.altitudeDegrees <= 0 || Astronomy.illuminatedFraction(model.phaseDays) < 0.015) {
+          c.save();
+          c.fillStyle = "rgba(8,19,30,.84)";
+          c.fillRect(250, 94, 400, 42);
+          c.textAlign = "center";
+          c.font = "700 17px system-ui";
+          c.fillStyle = "#e6eff8";
+          const description = moon.altitudeDegrees <= 0 ? "この時刻、月は地平線の下" : "新月に近く、月はほとんど見えません";
+          c.fillText(description, s.width / 2, 122);
+          c.restore();
+        }
+      }
+    }
+
+    /** Creates textual explanations and keeps DOM changes inside the view layer. */
+    class SimulatorDisplay {
+      #elements;
+      #moonRenderer;
+      #sceneRenderer;
+      #skyRenderer;
+      constructor(elements) {
+        this.#elements = elements;
+        this.#moonRenderer = new MoonDiskRenderer(elements.moonDisc);
+        this.#sceneRenderer = new SpaceSceneRenderer(elements.spaceCanvas);
+        this.#skyRenderer = new GroundSkyRenderer(elements.skyCanvas, elements.moonDisc);
+        this.#createPresets();
+      }
+      #createPresets() {
+        const template = document.createDocumentFragment();
+        for (const preset of SimulatorConfig.PRESETS) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "phase-button";
+          button.dataset.fraction = String(preset.fraction);
+          button.setAttribute("aria-pressed", "false");
+          const canvas = document.createElement("canvas");
+          canvas.className = "preset-disc";
+          canvas.width = SimulatorConfig.MOON_TEXTURE.width;
+          canvas.height = SimulatorConfig.MOON_TEXTURE.height;
+          canvas.setAttribute("aria-hidden", "true");
+          new MoonDiskRenderer(canvas).render(preset.fraction * SimulatorConfig.LUNAR_CYCLE_DAYS, true);
+          const label = document.createElement("span");
+          label.textContent = preset.label;
+          button.append(canvas, label);
+          template.append(button);
+        }
+        this.#elements.presetGrid.append(template);
+      }
+      render(model, playbackMode) {
+        const e = this.#elements;
+        const phase = SimulatorConfig.PHASES[Astronomy.phaseIndex(model.phaseDays)];
+        const fraction = Astronomy.illuminatedFraction(model.phaseDays);
+        const visible = Astronomy.moonIsAboveHorizon(model.phaseDays, model.localHours, model.latitudeDegrees);
+        const sunPosition = Astronomy.solarAltitudeFactor(model.localHours, model.latitudeDegrees);
+        const horizontal = Astronomy.horizontalCoordinates(model.phaseDays, model.localHours, model.latitudeDegrees);
+        const localTime = Astronomy.formatHours(model.localHours);
+        e.phaseSlider.value = model.phaseDays.toFixed(2);
+        e.timeSlider.value = String(model.localHours);
+        e.ageOutput.textContent = `${model.phaseDays.toFixed(1)}日`;
+        e.timeOutput.textContent = localTime;
+        e.latitudeSlider.value = String(model.latitudeDegrees);
+        e.latitudeOutput.textContent = `北緯${model.latitudeDegrees}°`;
+        e.skyAzimuth.textContent = `${Astronomy.compassLabel(horizontal.azimuthDegrees)}（${Math.round(horizontal.azimuthDegrees)}°）${visible ? "" : "※"}`;
+        e.skyAltitude.textContent = `${Math.round(horizontal.altitudeDegrees)}°${visible ? "" : "（地平線下）"}`;
+        e.moonriseTime.textContent = Astronomy.formatHours(Astronomy.moonriseHours(model.phaseDays));
+        e.moonsetTime.textContent = Astronomy.formatHours(Astronomy.moonsetHours(model.phaseDays));
+        e.phaseName.textContent = phase.name;
+        e.phaseAge.textContent = `月齢 約${model.phaseDays.toFixed(1)}日`;
+        e.illumination.textContent = `光って見える部分 約${Math.round(fraction * 100)}%`;
+        e.phaseExplanation.textContent = phase.detail;
+        e.moonStatus.textContent = visible ? "地平線より上" : "地平線より下";
+        e.sunStatus.textContent = this.#sunLabel(sunPosition);
+        e.transitTime.textContent = `${Astronomy.formatHours(Astronomy.transitHours(model.phaseDays))} ごろ`;
+        e.visibilityCard.classList.toggle("is-below", !visible);
+        e.visibilityTitle.textContent = visible ? "● 月は地平線より上" : "● 月は地平線より下";
+        e.visibilityDescription.textContent = this.#visibilityExplanation(visible, sunPosition, fraction);
+        const moonPlaying = playbackMode === SimulatorConfig.PLAYBACK_MODE.MOON;
+        const earthPlaying = playbackMode === SimulatorConfig.PLAYBACK_MODE.EARTH;
+        e.playButton.textContent = moonPlaying ? "■ 月の公転を停止" : "▶ 月を一周させる";
+        e.playButton.setAttribute("aria-pressed", String(moonPlaying));
+        e.rotateButton.textContent = earthPlaying ? "■ 地球の自転を停止" : "▶ 地球を自転させる（1日）";
+        e.rotateButton.setAttribute("aria-pressed", String(earthPlaying));
+        for (const button of e.presetGrid.querySelectorAll("button")) {
+          const selectedDay = Number(button.dataset.fraction) * SimulatorConfig.LUNAR_CYCLE_DAYS;
+          button.setAttribute("aria-pressed", String(Math.abs(selectedDay - model.phaseDays) < SimulatorConfig.PRESET_SELECTION_TOLERANCE_DAYS));
+        }
+        this.#moonRenderer.render(model.phaseDays);
+        this.#skyRenderer.draw(model);
+        e.skyCanvas.setAttribute("aria-label", `${localTime}、北緯${model.latitudeDegrees}度。月の方角${Astronomy.compassLabel(horizontal.azimuthDegrees)}、高度${Math.round(horizontal.altitudeDegrees)}度。`);
+        e.moonDisc.setAttribute("aria-label", `${phase.name}。見える明るさの割合は約${Math.round(fraction * 100)}パーセント。`);
+        this.#sceneRenderer.draw(model);
+      }
+      #sunLabel(factor) {
+        if (Math.abs(factor) <= SimulatorConfig.VISIBILITY_TOLERANCE) return "地平線の近く";
+        return factor > 0 ? "地平線より上（昼）" : "地平線より下（夜）";
+      }
+      #visibilityExplanation(visible, solarAltitude, fraction) {
+        if (!visible) return "この時刻には月が地平線の下にあり、地上からは見えません。";
+        if (fraction < 0.015) return "月は空の上にありますが、新月に近く、明るい部分はほとんど見えません。";
+        if (solarAltitude > SimulatorConfig.VISIBILITY_TOLERANCE) return "月は地平線より上です。昼間のため、空の明るさによっては見つけにくいことがあります。";
+        return "月は地平線より上にあり、夜空で観察できる方向にあります。";
+      }
+    }
+
+    /** Translates mouse and touch movements to orbital or observer angles. */
+    class DiagramPointerController {
+      #canvas;
+      #onMoonAngle;
+      #onObserverAngle;
+      #dragTarget = null;
+      constructor(canvas, onMoonAngle, onObserverAngle) {
+        this.#canvas = canvas;
+        this.#onMoonAngle = onMoonAngle;
+        this.#onObserverAngle = onObserverAngle;
+        canvas.addEventListener("pointerdown", event => this.#onDown(event));
+        canvas.addEventListener("pointermove", event => this.#onMove(event));
+        canvas.addEventListener("pointerup", event => this.#onUp(event));
+        canvas.addEventListener("pointercancel", event => this.#onUp(event));
+      }
+      #coordinates(event) {
+        const bounds = this.#canvas.getBoundingClientRect();
+        const x = (event.clientX - bounds.left) * this.#canvas.width / bounds.width;
+        const y = (event.clientY - bounds.top) * this.#canvas.height / bounds.height;
+        const scene = SimulatorConfig.SPACE;
+        return { x, y, dx: x - scene.centerX, dy: y - scene.centerY };
+      }
+      #chooseTarget(point, model) {
+        const scene = SimulatorConfig.SPACE;
+        const p = SimulatorConfig.POINTER;
+        const observer = Astronomy.pointOnCircle(scene.centerX, scene.centerY, scene.earthRadius, Astronomy.observerAngle(model.localHours));
+        const moon = Astronomy.pointOnCircle(scene.centerX, scene.centerY, scene.orbitRadius, Astronomy.phaseAngle(model.phaseDays));
+        if (Math.hypot(point.x - observer.x, point.y - observer.y) <= p.observerRadius) return "observer";
+        if (Math.hypot(point.x - moon.x, point.y - moon.y) <= p.moonRadius) return "moon";
+        const radialDistance = Math.hypot(point.dx, point.dy);
+        if (radialDistance <= scene.earthRadius + p.earthMargin) return "observer";
+        if (Math.abs(radialDistance - scene.orbitRadius) <= p.orbitMargin) return "moon";
+        return null;
+      }
+      #onDown(event) {
+        if (event.button !== 0 && event.pointerType === "mouse") return;
+        const point = this.#coordinates(event);
+        this.#dragTarget = this.#chooseTarget(point, this.model);
+        if (!this.#dragTarget) return;
+        this.#canvas.setPointerCapture(event.pointerId);
+        this.#apply(point);
+      }
+      #onMove(event) {
+        if (!this.#dragTarget) return;
+        this.#apply(this.#coordinates(event));
+      }
+      #onUp(event) {
+        this.#dragTarget = null;
+        if (this.#canvas.hasPointerCapture(event.pointerId)) this.#canvas.releasePointerCapture(event.pointerId);
+      }
+      #apply(point) {
+        const angle = Astronomy.normalize(Math.atan2(-point.dy, point.dx), SimulatorConfig.FULL_CIRCLE);
+        if (this.#dragTarget === "moon") this.#onMoonAngle(angle);
+        if (this.#dragTarget === "observer") this.#onObserverAngle(angle);
+      }
+      setModel(model) { this.model = model; }
+    }
+
+    /** Owns one animation loop; lunar revolution and Earth's rotation never compete. */
+    class SimulationPlayback {
+      #model;
+      #onTick;
+      #mode = null;
+      #frameId = null;
+      #lastTimestamp = null;
+      constructor(model, onTick) { this.#model = model; this.#onTick = onTick; }
+      get mode() { return this.#mode; }
+      toggle(mode) {
+        if (!Object.values(SimulatorConfig.PLAYBACK_MODE).includes(mode)) throw new RangeError("Unknown playback mode.");
+        if (this.#mode === mode) { this.stop(); return; }
+        this.stop();
+        this.#mode = mode;
+        this.#lastTimestamp = null;
+        this.#frameId = requestAnimationFrame(timestamp => this.#tick(timestamp));
+        this.#onTick();
+      }
+      stop() {
+        if (this.#mode === null) return;
+        this.#mode = null;
+        if (this.#frameId !== null) cancelAnimationFrame(this.#frameId);
+        this.#frameId = null;
+        this.#lastTimestamp = null;
+        this.#onTick();
+      }
+      #tick(timestamp) {
+        if (this.#mode === null) return;
+        if (this.#lastTimestamp !== null) {
+          const seconds = Astronomy.clamp(
+            (timestamp - this.#lastTimestamp) / SimulatorConfig.MILLISECONDS_PER_SECOND,
+            0, SimulatorConfig.MAX_ANIMATION_DELTA_SECONDS
+          );
+          if (this.#mode === SimulatorConfig.PLAYBACK_MODE.EARTH) {
+            this.#model.setLocalHours(this.#model.localHours + seconds * SimulatorConfig.ANIMATION_EARTH_HOURS_PER_SECOND);
+          } else {
+            this.#model.setPhaseDays(this.#model.phaseDays + seconds * SimulatorConfig.ANIMATION_LUNAR_DAYS_PER_SECOND);
+          }
+          this.#onTick();
+        }
+        this.#lastTimestamp = timestamp;
+        this.#frameId = requestAnimationFrame(nextTime => this.#tick(nextTime));
+      }
+    }
+
+    /** Composition root: wires user events to the model, view, and animation. */
+    class MoonPhaseApp {
+      #model;
+      #display;
+      #playback;
+      #elements;
+      constructor(documentRoot) {
+        this.#elements = this.#collectElements(documentRoot);
+        this.#model = new MoonSimulatorModel();
+        this.#display = new SimulatorDisplay(this.#elements);
+        this.#playback = new SimulationPlayback(this.#model, () => this.render());
+        this.#bindEvents();
+        this.render();
+      }
+      #collectElements(root) {
+        const ids = ["space-canvas", "moon-disc", "phase-slider", "time-slider", "age-output", "time-output", "phase-name", "phase-age", "illumination", "phase-explanation", "visibility-card", "visibility-title", "visibility-description", "moon-status", "sun-status", "transit-time", "preset-grid", "play-button", "rotate-button", "reset-button", "sky-canvas", "latitude-slider", "latitude-output", "sky-azimuth", "sky-altitude", "moonrise-time", "moonset-time", "sky-toggle", "sky-body"];
+        const names = ["spaceCanvas", "moonDisc", "phaseSlider", "timeSlider", "ageOutput", "timeOutput", "phaseName", "phaseAge", "illumination", "phaseExplanation", "visibilityCard", "visibilityTitle", "visibilityDescription", "moonStatus", "sunStatus", "transitTime", "presetGrid", "playButton", "rotateButton", "resetButton", "skyCanvas", "latitudeSlider", "latitudeOutput", "skyAzimuth", "skyAltitude", "moonriseTime", "moonsetTime", "skyToggle", "skyBody"];
+        const elements = {};
+        ids.forEach((id, index) => {
+          const element = root.getElementById(id);
+          if (!element) throw new Error(`Required interface element not found: ${id}`);
+          elements[names[index]] = element;
+        });
+        return elements;
+      }
+      #bindEvents() {
+        const e = this.#elements;
+        e.phaseSlider.max = SimulatorConfig.LUNAR_CYCLE_DAYS.toFixed(2);
+        e.phaseSlider.addEventListener("input", () => {
+          this.#playback.stop();
+          if (this.#model.setPhaseDays(Number(e.phaseSlider.value))) this.render();
+        });
+        e.timeSlider.addEventListener("input", () => {
+          this.#playback.stop();
+          if (this.#model.setLocalHours(Number(e.timeSlider.value))) this.render();
+        });
+        e.latitudeSlider.addEventListener("input", () => {
+          if (this.#model.setLatitudeDegrees(Number(e.latitudeSlider.value))) this.render();
+        });
+        e.skyToggle.addEventListener("click", () => {
+          const expanded = e.skyToggle.getAttribute("aria-expanded") === "true";
+          e.skyBody.hidden = expanded;
+          e.skyToggle.setAttribute("aria-expanded", String(!expanded));
+          e.skyToggle.textContent = expanded ? "+ 開く" : "− 閉じる";
+        });
+        e.presetGrid.addEventListener("click", event => {
+          const button = event.target.closest("button[data-fraction]");
+          if (!button || !e.presetGrid.contains(button)) return;
+          this.#playback.stop();
+          this.#model.setPhaseDays(Number(button.dataset.fraction) * SimulatorConfig.LUNAR_CYCLE_DAYS);
+          this.render();
+        });
+        e.playButton.addEventListener("click", () => this.#playback.toggle(SimulatorConfig.PLAYBACK_MODE.MOON));
+        e.rotateButton.addEventListener("click", () => this.#playback.toggle(SimulatorConfig.PLAYBACK_MODE.EARTH));
+        e.resetButton.addEventListener("click", () => {
+          this.#playback.stop(); this.#model.reset(); this.render();
+        });
+        const pointer = new DiagramPointerController(
+          e.spaceCanvas,
+          angle => { this.#playback.stop(); this.#model.setPhaseDays(angle / SimulatorConfig.FULL_CIRCLE * SimulatorConfig.LUNAR_CYCLE_DAYS); this.render(); },
+          angle => { this.#model.setLocalHours(Astronomy.observerHours(angle)); this.render(); }
+        );
+        pointer.setModel(this.#model);
+      }
+      render() { this.#display.render(this.#model, this.#playback.mode); }
+    }
+
+    new MoonPhaseApp(document);
+  </script>
+</body>
+</html>
