@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>星座早見シミュレーター | Constellation Planisphere</title>
+<!--
+ Program      : Constellation Planisphere Simulator
+ Version      : 1.1
+ Release Date : 2026-11-21
+ Copyright    : Copyright (c) 2026 Yasuhiro Kaizu
+ Development  : Designed and developed with assistance from OpenAI ChatGPT.
+ Note         : Approximate J2000 stellar positions. No network or external assets.
+                Sidereal time and solar approximation: U.S. Naval Observatory.
+                Stellar data: Yale Bright Star Catalog (public-domain data),
+                representative J2000 coordinates; simplified teaching selection.
+                Global observation presets including both geographic poles.
+                Southern Cross and Centaurus guide-star coordinates (J2000).
+-->
+<style>
+:root {
+  color-scheme:dark;
+  --bg:#04080d; --panel:#0a1119; --panel2:#0c1720; --line:#253745;
+  --fg:#f1f9ff; --muted:#9ab0bf; --cyan:#61e6f2; --lime:#b6f78a;
+  --gold:#ffd38b; --error:#ffa395; --blue:#82adff;
+  --font:system-ui,-apple-system,"Noto Sans JP","Yu Gothic",Meiryo,sans-serif;
+}
+* {box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.5}
+button,input,select{font:inherit}
+button{cursor:pointer;border:1px solid #386075;background:#12232f;color:var(--fg);border-radius:8px;padding:9px 12px}
+button:hover{background:#1d3c4b;border-color:var(--cyan)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+button:disabled{opacity:.5;cursor:not-allowed}
+header{border-bottom:1px solid var(--line);padding:16px clamp(14px,3vw,30px);background:#070e15}
+.header-inner{max-width:1780px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.eyebrow{font-size:11px;letter-spacing:.18em;color:var(--cyan);font-weight:700}
+h1{font-size:clamp(20px,2vw,29px);margin:2px 0 0;letter-spacing:.03em}
+.subtitle{color:var(--muted);font-size:12px}
+.mode-buttons{display:flex;flex-wrap:wrap;gap:7px}
+.mode-buttons button{font-weight:700;min-width:140px}
+.mode-buttons button.active{color:#00171a;background:var(--cyan);border-color:var(--cyan)}
+main{max-width:1780px;margin:0 auto;padding:15px;display:grid;grid-template-columns:minmax(254px,290px) minmax(370px,1fr) minmax(266px,328px);gap:14px;align-items:start}
+.panel{border:1px solid var(--line);background:var(--panel);border-radius:13px;overflow:hidden}
+.panel-pad{padding:17px}
+h2{font-size:15px;margin:0 0 13px;color:var(--cyan);letter-spacing:.04em}
+h3{font-size:14px;margin:18px 0 9px;color:var(--fg)}
+small,.small{font-size:12px;color:var(--muted)}
+.muted{color:var(--muted)}
+.field{display:grid;gap:5px;margin:0 0 13px}
+.field label{font-size:12px;font-weight:700;color:#bad1df}
+.field input,.field select,.obs-row input,.obs-row select{background:#061019;color:var(--fg);border:1px solid #36505f;border-radius:7px;padding:8px;max-width:100%;min-width:0}
+.field input[type="date"],.field input[type="time"]{width:100%;color-scheme:dark}
+.field input[type="range"]{accent-color:var(--cyan);padding:0;width:100%}
+.control-inline{display:flex;gap:9px;align-items:center}
+.control-inline input[type="number"]{width:98px;text-align:right}
+.control-inline input[type="range"]{flex:1}
+.preset-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.preset-grid button{font-size:12px;padding:9px 5px}
+.preset-grid .wide{grid-column:1/-1}
+.region-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:9px 0}
+.region-grid button{font-size:11px;padding:7px 2px;min-width:0}
+.city-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.city-grid button{font-size:12px;padding:8px 4px;min-width:0}
+.city-grid button.active,.region-grid button.active{background:#174b53;border-color:var(--cyan);color:#d7fbff;font-weight:700}
+.location-current{font-size:12px;color:var(--lime);margin:8px 0 5px;min-height:18px}
+.location-note{font-size:11px;color:var(--muted);margin:8px 0 0;line-height:1.6}
+.polar-label{color:var(--gold);font-size:12px;font-weight:700;margin:14px 0 7px}
+.polar-warning{font-size:12px;line-height:1.7;color:var(--gold)}
+.rule{height:1px;background:var(--line);margin:16px 0}
+.helper{color:var(--muted);line-height:1.7;font-size:12px;margin:8px 0 0}
+.check{display:flex;align-items:center;gap:9px;margin:7px 0;color:#c9dbe6}
+.check input{accent-color:var(--cyan)}
+.sky-panel{background:#050b12;display:flex;flex-direction:column;min-width:0}
+.sky-top{display:flex;align-items:flex-start;justify-content:space-between;gap:9px;flex-wrap:wrap;padding:13px 17px 0}
+.sky-top h2{margin:0;color:var(--fg)}
+.sky-top .small{color:var(--cyan)}
+.sky-holder{padding:0 7px 5px;position:relative}
+#skyCanvas{display:block;width:100%;height:auto;aspect-ratio:1/1;cursor:crosshair;touch-action:manipulation}
+.sky-footer{border-top:1px solid var(--line);padding:11px 17px 15px;background:#07111a;display:grid;gap:8px}
+.status{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}
+.status .key{color:var(--muted)}
+.status strong{color:var(--fg)}
+.tag{background:#112b34;border:1px solid #234d54;border-radius:5px;padding:3px 8px;color:var(--cyan);font-size:11px}
+.warning{color:var(--gold)}
+.star-info{min-height:29px;color:#cadde8;font-size:12px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+.legend .dot{color:#fff;font-size:17px;vertical-align:middle}
+.legend .line{color:var(--cyan)}
+.kpi{padding:13px;border:1px solid #234450;background:#0b1e28;border-radius:9px;margin:9px 0}
+.kpi .kpi-label{font-size:11px;color:#a8c4d2}
+.kpi .kpi-value{font-size:24px;font-variant-numeric:tabular-nums;color:var(--lime);font-weight:750}
+.kpi .kpi-sub{color:var(--muted);font-size:12px}
+#visibleList{display:grid;gap:7px}
+.const-item{display:flex;justify-content:space-between;gap:7px;align-items:center;border-bottom:1px solid #1c303b;padding-bottom:6px;font-size:12px}
+.const-item span:last-child{color:var(--muted);font-variant-numeric:tabular-nums}
+.explain{border:1px solid #324752;background:#101e28;border-radius:9px;padding:12px;line-height:1.85;font-size:12px}
+.explain strong{color:var(--cyan)}
+.obs-row{display:grid;grid-template-columns:1.25fr .74fr .74fr;gap:6px;align-items:center;margin:0 0 9px}
+.obs-row .row-head{font-size:11px;color:var(--muted)}
+.obs-row input,.obs-row select{width:100%;padding:8px 5px;font-size:12px}
+.obs-title{display:grid;grid-template-columns:1.25fr .74fr .74fr;gap:6px;font-size:11px;color:var(--muted);margin-bottom:5px}
+.obs-tools{display:grid;grid-template-columns:1fr;gap:8px}
+.primary{color:#031219;background:var(--cyan);border-color:var(--cyan);font-weight:750}
+.primary:hover{background:#9bf5fb;color:#031219}
+.inverse-result{margin-top:13px}
+.result-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.result-grid .kpi{margin:0;padding:10px}
+.result-grid .kpi-value{font-size:20px}
+.season-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.season-table td{padding:6px 3px;border-bottom:1px solid #23323e}
+.season-table td:last-child{text-align:right;color:var(--gold);font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+.footer-notes{max-width:1780px;margin:auto;padding:2px 24px 24px;color:#8197a5;font-size:11px;line-height:1.8}
+footer{padding:12px 18px;text-align:center;color:#7e94a2;font-size:11px}
+@media(max-width:1120px){main{grid-template-columns:270px minmax(340px,1fr)}.right-panel{grid-column:1/-1}.right-inner{display:grid;grid-template-columns:1fr 1fr;gap:16px}}
+@media(max-width:770px){main{display:flex;flex-direction:column;padding:9px;gap:9px}.panel{width:100%}.sky-panel{order:0}.left-panel{order:1}.right-panel{order:2}.right-inner{display:block}#skyCanvas{max-height:92vw}.header-inner{align-items:flex-start}.mode-buttons button{min-width:0;flex:1}.mode-buttons{width:100%}}
+</style>
+</head>
+<body>
+<header>
+ <div class="header-inner">
+  <div><div class="eyebrow">SCIENCE LAB / ASTRONOMY</div><h1>星座早見シミュレーター</h1><div class="subtitle">季節・時刻・緯度・経度と世界の星空を調べよう</div></div>
+  <nav class="mode-buttons" aria-label="学習モード">
+   <button type="button" id="forwardMode" class="active" aria-pressed="true">星空を調べる</button>
+   <button type="button" id="inverseMode" aria-pressed="false">星空から逆算</button>
+  </nav>
+ </div>
+</header>
+<main>
+ <section class="panel left-panel"><div class="panel-pad">
+  <h2>観測条件を変える</h2>
+  <div class="field"><label for="observationDate">日付（季節）</label><input id="observationDate" type="date" min="2000-01-01" max="2100-12-31"></div>
+  <div class="field"><label for="observationTime">時刻（日本標準時・JST）</label><input id="observationTime" type="time" step="60"></div>
+  <div class="preset-grid"><button type="button" id="stepBack">−１時間</button><button type="button" id="stepForward">＋１時間</button><button type="button" class="wide" id="playTime">▶ 時間を進める</button></div>
+  <h3>季節の代表日 <span class="small">（21:00）</span></h3>
+  <div class="preset-grid" id="seasonPresets"><button type="button" data-month="3" data-day="21">春・3月21日</button><button type="button" data-month="6" data-day="21">夏・6月21日</button><button type="button" data-month="9" data-day="23">秋・9月23日</button><button type="button" data-month="12" data-day="21">冬・12月21日</button></div>
+  <div class="rule"></div>
+  <div class="field"><label for="latitudeRange">緯度 <span id="latitudeValue" class="small">35.0° N</span></label><div class="control-inline"><input id="latitudeRange" type="range" min="-90" max="90" step="0.1" value="35"><input id="latitudeNumber" type="number" min="-90" max="90" step="0.1" value="35" aria-label="緯度（度）"></div></div>
+  <div class="field"><label for="longitudeNumber">経度（東経＋／西経－）</label><input type="number" id="longitudeNumber" min="-180" max="180" step="0.1" value="135"></div>
+  <h3>世界の観測地点</h3>
+  <p class="small">地域を選んでから都市のボタンを押すと、緯度・経度をまとめて設定します。</p>
+  <div class="polar-label">地球の北極・南極</div>
+  <div class="city-grid" id="polarPresets" aria-label="北極点と南極点"></div>
+  <div class="region-grid" id="regionPresets" aria-label="地域を選ぶ"></div>
+  <div class="city-grid" id="cityPresets" aria-label="都市を選ぶ"></div>
+  <div class="location-current" id="selectedLocation" aria-live="polite">選択地点：自由指定</div>
+  <p class="location-note">都市の緯度・経度は約0.1°の概略値です。極点の経度は定まらないため、計算上0°とします。</p>
+  <p class="helper">時刻は従来どおり、すべて日本標準時（JST / UTC＋9）です。世界各都市の現地時計とは異なり、同じ瞬間の星空を比較できます。</p>
+  <div class="rule"></div>
+  <h2>星図の表示</h2>
+  <label class="check"><input type="checkbox" id="showLines" checked> 星座を結ぶ線</label>
+  <label class="check"><input type="checkbox" id="showNames" checked> 明るい星の名前</label>
+  <label class="check"><input type="checkbox" id="showConstellationNames" checked> 星座の名前</label>
+  <p class="helper">星図の星をクリックすると、名前・方位・高度が表示されます。</p>
+ </div></section>
+ <section class="panel sky-panel" aria-label="全天星図">
+  <div class="sky-top"><div><h2>全天星図 <span class="small">／ 頭の真上を見上げた図</span></h2><div class="small" id="skyOrientationText">円の中心＝天頂（真上）　円周＝地平線　東は左・西は右</div></div><span id="skyModeTag" class="tag">観測シミュレーション</span></div>
+  <div class="sky-holder"><canvas id="skyCanvas" width="900" height="900" aria-label="星座と星の位置を表す全天星図"></canvas></div>
+  <div class="sky-footer">
+    <div class="status"><span class="key">観測</span><strong id="skyDateText"></strong><span class="key">緯度</span><strong id="skyLatText"></strong><span class="key">経度</span><strong id="skyLonText"></strong><span class="key">地点</span><strong id="skyPlaceText"></strong><span id="daylightWarning" class="warning"></span></div>
+    <div id="polarWarning" class="polar-warning" hidden>極点では東西南北の方位が定まりません。円周の角度は作図上の仮の基準で、北極点では全方向が南、南極点では全方向が北です。</div>
+    <div id="starInfo" class="star-info" aria-live="polite">明るい星をクリックして、位置を調べよう。</div>
+    <div class="legend"><span><span class="dot">●</span> 恒星（大小は明るさ）</span><span><span class="line">━</span> 星座線</span><span>同心円：高度30°・60°</span></div>
+  </div>
+ </section>
+ <aside class="panel right-panel"><div class="panel-pad right-inner">
+  <div id="forwardPanel">
+   <h2>いま見える星座</h2>
+   <div class="kpi"><div class="kpi-label">観測地の恒星時（星の配置の基準）</div><div id="siderealValue" class="kpi-value">--</div><div class="kpi-sub">地球の自転につれて変わります</div></div>
+   <div id="visibleList"></div>
+   <h3>学習ポイント</h3>
+   <div class="explain"><strong>① 時間を進めると？</strong> 星々は地球の自転により、およそ１時間に15°ずつ西へ動いて見えます。<div class="rule"></div><strong>② 季節を変えると？</strong> 同じ時刻でも見える星座が変わります。<div class="rule"></div><strong>③ 緯度を変えると？</strong> 見える星の範囲が変化します。南半球では南の星空を、極点では特有の星の動きを観察できます。</div>
+  </div>
+  <div id="inversePanel" hidden>
+   <h2>星空から逆算する</h2>
+   <p class="helper">星の名前と「方位・高度」を２～３個測れば、緯度と恒星時を推定できます。まず星図から観測値を取り込んで試してみましょう。</p>
+   <h3>星の観測記録</h3>
+   <div class="obs-title"><span>星の名前</span><span>方位°</span><span>高度°</span></div>
+   <div id="observationRows"></div>
+   <div class="obs-tools"><button type="button" id="captureObservations">表示中の星空から３つの星を記録</button><button type="button" id="solveObservations" class="primary">観測値から緯度と時刻を推定</button></div>
+   <p class="helper">通常地点の方位は「北0°・東90°・南180°・西270°」。高度は「地平線0°・天頂90°」です。極点での方位は仮の基準です。数値は手入力でも変更できます。逆算モードで星図の星をクリックすると、観測欄に順番に記録されます。</p>
+   <div id="inverseResult" class="inverse-result" aria-live="polite"></div>
+  </div>
+  </div></aside>
+</main>
+<div class="footer-notes">※ この星図は主な明るい恒星を収録した学習用の簡略版です。恒星位置は J2000.0 座標を使用し、歳差・章動・大気差・固有運動・地形による遮蔽は省略しています。太陽の位置は近似計算です。月・惑星は表示しません。正確な天体観測や航法に使うものではありません。</div>
+<footer>Copyright © 2026 Yasuhiro Kaizu</footer>
+<script>
+'use strict';
+
+/** Immutable configuration and numerical constants. */
+class Constants {
+ static DEG = Math.PI / 180;
+ static HOURS_PER_DAY = 24;
+ static DEGREES_PER_CIRCLE = 360;
+ static JULIAN_UNIX_EPOCH = 2440587.5;
+ static UNIX_DAY_MS = 86400000;
+ static J2000_JD = 2451545.0;
+ static JST_OFFSET_HOURS = 9;
+ static SIDEREAL_DEG_PER_HOUR = 15.0410686403;
+ static ANIMATION_INTERVAL_MS = 800;
+ static ANIMATION_STEP_MINUTES = 30;
+ static MIN_LAT = -90;
+ static MAX_LAT = 90;
+ static MAX_VISIBLE_STARS = 7;
+ static MAX_OBSERVATION_ERROR_DEG = 8;
+ static SELECT_DISTANCE_PX = 16;
+ static LABEL_MIN_DISTANCE_PX = 53;
+ static LABEL_MAX_MAG = 2.5;
+ static STAR_MIN_ALT_DEG = 0;
+ static INV_GRID_LAT_STEP = 5;
+ static INV_GRID_LST_STEP = 10;
+ static INV_REFINEMENTS = Object.freeze([[2,4],[0.5,1],[0.12,0.25],[0.03,0.06],[0.008,0.015]]);
+ static SEASONS = Object.freeze([{name:'春',month:3,day:21},{name:'夏',month:6,day:21},{name:'秋',month:9,day:23},{name:'冬',month:12,day:21}]);
+}
+
+class Angles {
+ static radians(deg) { return deg * Constants.DEG; }
+ static degrees(rad) { return rad / Constants.DEG; }
+ static wrap360(deg) { return ((deg % 360) + 360) % 360; }
+ static wrap180(deg) { return ((deg + 180) % 360 + 360) % 360 - 180; }
+ static clamp(value,min,max) { return Math.min(max,Math.max(min,value)); }
+ static between(a,b) { return Math.acos(Angles.clamp(a,-1,1)); }
+}
+
+/** Approximate city-center positions in WGS84 degrees, East positive. */
+class ObservationLocations {
+ static REGIONS = Object.freeze([
+  {id:'japan',name:'日本',places:[
+   ['sapporo','札幌',43.1,141.4],['sendai','仙台',38.3,140.9],['tokyo','東京',35.7,139.7],
+   ['nagoya','名古屋',35.2,136.9],['osaka','大阪',34.7,135.5],['fukuoka','福岡',33.6,130.4],['naha','那覇',26.2,127.7]]},
+  {id:'asia',name:'アジア',places:[
+   ['seoul','ソウル',37.6,127.0],['beijing','北京',39.9,116.4],['shanghai','上海',31.2,121.5],
+   ['taipei','台北',25.0,121.5],['hongkong','香港',22.3,114.2],['bangkok','バンコク',13.8,100.5],
+   ['singapore','シンガポール',1.3,103.8],['jakarta','ジャカルタ',-6.2,106.8],
+   ['delhi','ニューデリー',28.6,77.2],['mumbai','ムンバイ',19.1,72.9],['dubai','ドバイ',25.2,55.3]]},
+  {id:'europe',name:'ヨーロッパ',places:[
+   ['london','ロンドン',51.5,-0.1],['paris','パリ',48.9,2.4],['berlin','ベルリン',52.5,13.4],
+   ['rome','ローマ',41.9,12.5],['madrid','マドリード',40.4,-3.7],['athens','アテネ',38.0,23.7],
+   ['moscow','モスクワ',55.8,37.6],['oslo','オスロ',59.9,10.8],['reykjavik','レイキャビク',64.1,-21.9]]},
+  {id:'africa',name:'アフリカ',places:[
+   ['cairo','カイロ',30.0,31.2],['casablanca','カサブランカ',33.6,-7.6],
+   ['nairobi','ナイロビ',-1.3,36.8],['addis','アディスアベバ',9.0,38.8],
+   ['lagos','ラゴス',6.5,3.4],['capetown','ケープタウン',-33.9,18.4],
+   ['johannesburg','ヨハネスブルク',-26.2,28.0]]},
+  {id:'northamerica',name:'北アメリカ',places:[
+   ['newyork','ニューヨーク',40.7,-74.0],['washington','ワシントンD.C.',38.9,-77.0],
+   ['chicago','シカゴ',41.9,-87.6],['losangeles','ロサンゼルス',34.1,-118.2],
+   ['sanfrancisco','サンフランシスコ',37.8,-122.4],['vancouver','バンクーバー',49.3,-123.1],
+   ['toronto','トロント',43.7,-79.4],['mexicocity','メキシコシティ',19.4,-99.1],
+   ['anchorage','アンカレジ',61.2,-149.9],['honolulu','ホノルル',21.3,-157.9]]},
+  {id:'southamerica',name:'南アメリカ',places:[
+   ['bogota','ボゴタ',4.7,-74.1],['lima','リマ',-12.0,-77.0],['quito','キト',-0.2,-78.5],
+   ['rio','リオデジャネイロ',-22.9,-43.2],['saopaulo','サンパウロ',-23.6,-46.6],
+   ['buenosaires','ブエノスアイレス',-34.6,-58.4],['santiago','サンティアゴ',-33.4,-70.7]]},
+  {id:'oceania',name:'オセアニア',places:[
+   ['sydney','シドニー',-33.9,151.2],['melbourne','メルボルン',-37.8,145.0],
+   ['brisbane','ブリスベン',-27.5,153.0],['perth','パース',-31.9,115.9],
+   ['auckland','オークランド',-36.9,174.8],['wellington','ウェリントン',-41.3,174.8],
+   ['christchurch','クライストチャーチ',-43.5,172.6],['suva','スバ',-18.1,178.5]]}
+ ]);
+ static POLES = Object.freeze([
+  Object.freeze({id:'northpole',name:'北極点',lat:90,lon:0}),
+  Object.freeze({id:'southpole',name:'南極点',lat:-90,lon:0})
+ ]);
+ static getRegion(id){return ObservationLocations.REGIONS.find(region=>region.id===id);}
+
+}
+
+/** Owns the region and city buttons; emits coordinates but never computes astronomy. */
+class LocationPresetController {
+ constructor(documentRoot,onSelect){
+  this.doc=documentRoot;
+  this.onSelect=onSelect;
+  this.selectedId=null;
+  this.activeRegion=ObservationLocations.REGIONS[0].id;
+  this.regionHolder=this.get('regionPresets');
+  this.cityHolder=this.get('cityPresets');
+  this.polarHolder=this.get('polarPresets');
+  this.buildRegions();
+  this.buildPoles();
+  this.showRegion(this.activeRegion);
+ }
+ get(id){const result=this.doc.getElementById(id);if(!result)throw new Error(`地点UIがありません: ${id}`);return result;}
+ makeButton(text,callback){
+  const button=this.doc.createElement('button');button.type='button';button.textContent=text;
+  button.addEventListener('click',callback);return button;
+ }
+ buildRegions(){
+  for(const region of ObservationLocations.REGIONS){
+   const button=this.makeButton(region.name,()=>this.showRegion(region.id));
+   button.dataset.regionId=region.id;
+   this.regionHolder.append(button);
+  }
+ }
+ buildPoles(){
+  for(const place of ObservationLocations.POLES){this.polarHolder.append(this.placeButton(place));}
+ }
+ placeButton(place){
+  const button=this.makeButton(place.name,()=>this.select(place));
+  button.dataset.placeId=place.id;
+  button.title=`緯度 ${place.lat.toFixed(1)}°・経度 ${place.lon.toFixed(1)}°`;
+  return button;
+ }
+ showRegion(regionId){
+  const region=ObservationLocations.getRegion(regionId);
+  if(!region)throw new Error('未対応の地域です。');
+  this.activeRegion=regionId;
+  this.cityHolder.replaceChildren();
+  for(const [id,name,lat,lon] of region.places){
+   this.cityHolder.append(this.placeButton({id,name,lat,lon}));
+  }
+  for(const button of this.regionHolder.querySelectorAll('button[data-region-id]')){
+   const active=button.dataset.regionId===regionId;
+   button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));
+  }
+  this.updateButtonSelection();
+ }
+ select(place){
+  if(!Number.isFinite(place.lat)||!Number.isFinite(place.lon))throw new Error('観測地点の座標が無効です。');
+  this.selectedId=place.id;
+  this.updateButtonSelection();
+  this.onSelect(place);
+ }
+ clearSelection(){this.selectedId=null;this.updateButtonSelection();}
+ updateButtonSelection(){
+  for(const button of [...this.polarHolder.querySelectorAll('button[data-place-id]'),...this.cityHolder.querySelectorAll('button[data-place-id]')]){
+   const active=button.dataset.placeId===this.selectedId;
+   button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));
+  }
+ }
+}
+
+/** Fixed-star J2000 equatorial positions; values in degrees. */
+class StarCatalog {
+ constructor() {
+  // id | RA degrees | declination degrees | apparent V magnitude | color index B-V | Japanese name
+  const source = `
+Sirius|101.2871|-16.7161|-1.46|0.00|シリウス
+RigilKentaurus|219.9021|-60.8339|-0.01|0.71|リギル・ケンタウルス
+Hadar|210.9559|-60.3730|0.61|-0.23|ハダル
+Acrux|186.6496|-63.0991|0.77|-0.24|アクルックス
+Mimosa|191.9304|-59.6888|1.25|-0.24|ミモザ
+Gacrux|187.7917|-57.1132|1.59|1.60|ガクルックス
+Imai|183.7863|-58.7489|2.79|-0.19|イマイ
+Canopus|95.9879|-52.6958|-0.72|0.15|カノープス
+Arcturus|213.9154|19.1825|-0.04|1.23|アークトゥルス
+Vega|279.2346|38.7836|0.03|0.00|ベガ
+Capella|79.1725|45.9981|0.08|0.80|カペラ
+Rigel|78.6346|-8.2017|0.12|-0.03|リゲル
+Procyon|114.8254|5.2250|0.38|0.42|プロキオン
+Achernar|24.4288|-57.2367|0.46|-0.16|アケルナル
+Betelgeuse|88.7929|7.4069|0.50|1.85|ベテルギウス
+Altair|297.6958|8.8683|0.77|0.22|アルタイル
+Aldebaran|68.9800|16.5092|0.85|1.54|アルデバラン
+Antares|247.3517|-26.4319|0.96|1.83|アンタレス
+Spica|201.2983|-11.1614|0.98|-0.23|スピカ
+Pollux|116.3287|28.0261|1.14|1.00|ポルックス
+Fomalhaut|344.4129|-29.6222|1.16|0.09|フォーマルハウト
+Deneb|310.3579|45.2803|1.25|0.09|デネブ
+Regulus|152.0929|11.9672|1.35|-0.11|レグルス
+Adhara|104.6562|-28.9722|1.50|-0.21|アダラ
+Shaula|263.4021|-37.1039|1.63|-0.22|シャウラ
+Bellatrix|81.2829|6.3497|1.64|-0.22|ベラトリックス
+Elnath|81.5729|28.6075|1.65|-0.13|エルナト
+Alnilam|84.0533|-1.2019|1.70|-0.19|アルニラム
+Alioth|193.5071|55.9597|1.77|-0.02|アリオト
+Mirfak|51.0808|49.8611|1.79|0.48|ミルファク
+Dubhe|165.9321|61.7508|1.79|1.07|ドゥーベ
+Wezen|107.0979|-26.3933|1.84|0.68|ウェズン
+KausAustralis|276.0429|-34.3847|1.85|-0.03|カウス・アウストラリス
+Alkaid|206.8850|49.3133|1.86|-0.19|アルカイド
+Sargas|264.3300|-42.9978|1.87|0.40|サルガス
+Menkalinan|89.8821|44.9475|1.90|0.03|メンカリナン
+Alhena|99.4279|16.3992|1.93|0.00|アルヘナ
+Castor|113.6500|31.8883|1.98|0.03|カストル
+Mirzam|95.6750|-17.9558|1.98|-0.23|ミルザム
+Alphard|141.8967|-8.6586|1.98|1.44|アルファルド
+Hamal|31.7933|23.4625|2.00|1.15|ハマル
+Polaris|37.9529|89.2642|2.02|0.60|北極星
+Nunki|283.8163|-26.2967|2.02|-0.22|ヌンキ
+Alnitak|85.1896|-1.9428|2.05|-0.21|アルニタク
+Alpheratz|2.0971|29.0906|2.06|-0.11|アルフェラッツ
+Mirach|17.4329|35.6206|2.06|1.58|ミラク
+Saiph|86.9392|-9.6697|2.06|-0.17|サイフ
+Kochab|222.6763|74.1556|2.08|1.47|コカブ
+Rasalhague|263.7337|12.5600|2.08|0.15|ラスアルハゲ
+Algol|47.0421|40.9556|2.12|-0.05|アルゴル
+Denebola|177.2650|14.5719|2.14|0.09|デネボラ
+Sadr|305.5571|40.2567|2.20|0.68|サドル
+Suhail|136.9992|-43.4325|2.21|1.66|スハイル
+Schedar|10.1271|56.5372|2.23|1.17|シェダル
+Mintaka|83.0017|-0.2992|2.23|-0.22|ミンタカ
+Alphecca|233.6721|26.7147|2.23|-0.02|アルフェッカ
+Eltanin|269.1517|51.4889|2.23|1.52|エルタニン
+Almach|30.9750|42.3297|2.26|1.37|アルマク
+Caph|2.2946|59.1497|2.27|0.34|カフ
+Mizar|200.9812|54.9253|2.27|0.02|ミザール
+Dschubba|240.0833|-22.6217|2.32|-0.12|ジュバ
+Merak|165.4604|56.3825|2.37|-0.02|メラク
+Enif|326.0467|9.8750|2.39|1.53|エニフ
+Scheat|345.9438|28.0828|2.42|1.67|シェアト
+Sabik|257.5946|-15.7247|2.43|0.06|サビク
+Phecda|178.4575|53.6947|2.44|0.00|フェクダ
+Alderamin|319.6450|62.5856|2.44|0.22|アルデラミン
+Aludra|111.0238|-29.3031|2.45|-0.08|アルドラ
+Aljanah|311.5529|33.9703|2.46|1.03|アルジャナー
+Markab|346.1904|15.2053|2.49|-0.04|マルカブ
+Zosma|168.5271|20.5236|2.56|0.12|ゾスマ
+Arneb|83.1825|-17.8222|2.58|0.21|アルネブ
+Gienah|183.9517|-17.5419|2.59|-0.11|ギェナー
+Ascella|285.6529|-29.8803|2.60|0.08|アスケラ
+Algieba|154.9929|19.8417|2.61|1.15|アルギエバ
+Mahasim|89.9304|37.2125|2.62|-0.08|マハシム
+Acrab|241.3592|-19.8056|2.62|-0.07|アクラブ
+Sheratan|28.6600|20.8081|2.64|0.13|シェラタン
+Unukalhai|236.0671|6.4256|2.65|1.17|ウヌクアルハイ
+Ruchbah|21.4542|60.2353|2.68|0.13|ルクバー
+Muphrid|208.6713|18.3978|2.68|0.58|ムフリド
+Hassaleh|74.2483|33.1661|2.69|1.53|ハッサレ
+Lesath|262.6908|-37.2958|2.69|-0.22|レサト
+Larawag|252.5408|-34.2933|2.29|1.15|ララワグ
+Izar|221.2467|27.0742|2.70|0.97|イザール
+KausMedia|275.2487|-29.8281|2.70|1.38|カウス・メディア
+Tarazed|296.5650|10.6133|2.72|1.52|タラゼド
+YedPrior|243.5863|-3.6944|2.74|1.58|イェド・プリオル
+Zubenelgenubi|222.7196|-16.0417|2.75|0.15|ズベン・エル・ゲヌビ
+Hatysa|83.8583|-5.9100|2.77|-0.24|ハツィサ
+Kornephoros|247.5550|21.4897|2.77|0.94|コルネフォロス
+Cebalrai|265.8683|4.5672|2.77|1.16|ケバルライ
+Cursa|76.9625|-5.0864|2.79|0.13|クルサ
+Rastaban|262.6083|52.3014|2.79|0.98|ラスタバン
+KausBorealis|276.9925|-25.4217|2.81|1.04|カウス・ボレアリス
+Algenib|3.3092|15.1836|2.83|-0.23|アルゲニブ
+Vindemiatrix|195.5442|10.9592|2.83|0.94|ヴィンデミアトリクス
+Alcyone|56.8713|24.1050|2.87|-0.09|アルキオネ（すばる）
+Fawaris|296.2437|45.1308|2.87|-0.03|ファワリス
+Tejat|95.7400|22.5136|2.88|1.64|テジャト
+Fang|239.7129|-26.1142|2.89|-0.19|ファン
+Alniyat|245.2971|-25.5928|2.89|0.13|アルニヤト
+Albaldah|287.4408|-21.0236|2.89|0.35|アルバルダ
+Gomeisa|111.7875|8.2894|2.90|-0.09|ゴメイザ
+CorCaroli|194.0071|38.3183|2.90|-0.12|コル・カロリ
+Sadalsuud|322.8896|-5.5711|2.91|0.83|サダルスウド
+Matar|340.7504|30.2214|2.94|0.86|マタル
+Algorab|187.4663|-16.5156|2.95|-0.05|アルゴラブ
+Sadalmelik|331.4458|-0.3197|2.96|0.98|サダルメリク
+Mebsuta|100.9829|25.1311|2.98|1.40|メブスタ
+Almaaz|75.4921|43.8233|2.99|0.54|アルマーズ
+Alnasl|271.4521|-30.4242|2.99|1.00|アルナスル
+Okab|286.3525|13.8633|2.99|0.01|オカブ
+Tianguan|84.4113|21.1425|3.00|-0.19|天関
+Mira|34.8362|-2.9775|3.04|1.42|ミラ
+Seginus|218.0196|38.3083|3.03|0.19|セギヌス
+TaniaAustralis|155.5821|41.4994|3.05|1.59|タニア・アウストラリス
+Pherkad|230.1821|71.8339|3.05|0.05|フェルカド
+Albireo|292.6804|27.9597|3.08|1.13|アルビレオ
+Talitha|134.8017|48.0417|3.14|0.19|タリタ
+Sarin|258.7579|24.8392|3.14|0.08|サリン
+Haedus|76.6287|41.2344|3.17|-0.18|ヘドゥス
+Alfirk|322.1650|70.5608|3.23|-0.22|アルフィルク
+YedPosterior|244.5804|-4.6925|3.24|0.96|イェド・ポステリオル
+Sulafat|284.7358|32.6894|3.24|-0.05|スラファト
+Skat|343.6625|-15.8208|3.27|0.05|スカト
+Segin|28.5987|63.6700|3.38|-0.15|セギン
+Megrez|183.8567|57.0325|3.31|0.08|メグレズ
+Chertan|168.5600|15.4294|3.34|-0.01|シェルタン
+Alzirr|101.3225|12.8956|3.36|0.43|アルジル
+Muscida|127.5662|60.7181|3.36|0.84|ムシダ
+Heze|203.6733|-0.5958|3.37|0.11|ヘゼ
+Minelauva|193.9008|3.3975|3.38|1.58|ミネラウヴァ
+Mothallah|28.2704|29.5789|3.41|0.49|モサラー
+Adhafera|154.1725|23.4172|3.44|0.31|アダフェラ
+Sheliak|282.5200|33.3628|3.45|0.00|シェリアク
+Nekkar|225.4867|40.3906|3.50|0.97|ネッカル
+Tarf|124.1288|9.1856|3.52|1.48|タルフ
+Subra|145.2875|9.8922|3.52|0.49|スブラ
+Ain|67.1542|19.1803|3.53|1.01|アイン
+Wasat|110.0308|21.9822|3.53|0.34|ワサト
+Meissa|83.7846|9.9342|3.54|-0.18|メイサ
+Rasalgethi|258.6621|14.3903|3.48|1.44|ラスアルゲティ
+Errai|354.8367|77.6325|3.21|1.03|エライ
+Altais|288.1388|67.6617|3.07|1.00|アルタイス
+Alshain|298.8283|6.4068|3.71|0.86|アルシャイン
+Fuyue|267.4646|-37.0433|3.21|1.17|フユエ
+Sadalbari|342.5008|24.6017|3.48|0.93|サダルバリ
+Furud|95.0783|-30.0633|3.02|-0.19|フルド
+Nihal|82.0613|-20.7594|2.84|0.82|ニハル
+Markab2|140.5283|-55.0108|2.50|-0.18|マルケブ
+Rana|55.8121|-9.7633|3.54|0.92|ラナ
+Zaurak|59.5075|-13.5086|2.95|1.59|ザウラク
+DenebAlgedi|326.7600|-16.1272|2.87|0.29|デネブ・アルゲディ
+`; 
+  this.stars = Object.freeze(source.trim().split('\n').map(row => {
+   const [id,ra,dec,mag,bv,ja] = row.split('|');
+   return Object.freeze({id,ra:Number(ra),dec:Number(dec),mag:Number(mag),bv:Number(bv),ja});
+  }));
+  this.byId = new Map(this.stars.map(star => [star.id,star]));
+  // Simple educational asterism line segments, independently authored.
+  this.constellations = Object.freeze([
+   {ja:'みなみじゅうじ座（南十字星）',paths:[['Gacrux','Acrux'],['Mimosa','Imai']]},
+   {ja:'ケンタウルス座（南天の道しるべ）',paths:[['RigilKentaurus','Hadar']]},
+   {ja:'オリオン座',paths:[['Betelgeuse','Alnitak','Alnilam','Mintaka','Bellatrix'],['Betelgeuse','Saiph','Rigel','Bellatrix'],['Meissa','Betelgeuse'],['Meissa','Bellatrix']]},
+   {ja:'おおぐま座（北斗七星）',paths:[['Dubhe','Merak','Phecda','Megrez','Alioth','Mizar','Alkaid'],['Dubhe','Megrez']]},
+   {ja:'カシオペヤ座',paths:[['Caph','Schedar','Navi','Ruchbah','Segin']]},
+   {ja:'こぐま座',paths:[['Polaris','Kochab','Pherkad']]},
+   {ja:'はくちょう座',paths:[['Deneb','Sadr','Albireo'],['Fawaris','Sadr','Aljanah']]},
+   {ja:'こと座',paths:[['Vega','Sheliak','Sulafat','Vega']]},
+   {ja:'わし座',paths:[['Tarazed','Altair','Alshain'],['Okab','Altair']]},
+   {ja:'さそり座',paths:[['Acrab','Dschubba','Fang','Antares','Larawag','Sargas','Shaula','Lesath'],['Dschubba','Alniyat']]},
+   {ja:'いて座',paths:[['KausBorealis','KausMedia','KausAustralis','Ascella','Nunki','KausBorealis'],['Alnasl','KausAustralis'],['Albaldah','Nunki']]},
+   {ja:'しし座',paths:[['Regulus','Algieba','Adhafera','Zosma','Denebola','Chertan','Regulus'],['Algieba','Subra']]},
+   {ja:'うしかい座',paths:[['Arcturus','Izar','Seginus','Nekkar','Arcturus'],['Arcturus','Muphrid']]},
+   {ja:'おとめ座',paths:[['Spica','Heze','Vindemiatrix'],['Heze','Minelauva']]},
+   {ja:'ふたご座',paths:[['Castor','Wasat','Alhena'],['Pollux','Mebsuta','Tejat'],['Castor','Pollux']]},
+   {ja:'おうし座',paths:[['Elnath','Tianguan','Aldebaran','Ain'],['Aldebaran','Alcyone']]},
+   {ja:'おおいぬ座',paths:[['Sirius','Mirzam','Furud'],['Sirius','Adhara','Wezen','Aludra']]},
+   {ja:'こいぬ座',paths:[['Procyon','Gomeisa']]},
+   {ja:'ぎょしゃ座',paths:[['Capella','Menkalinan','Mahasim','Hassaleh','Capella'],['Capella','Haedus']]},
+   {ja:'ペガスス座',paths:[['Alpheratz','Scheat','Markab','Algenib','Alpheratz'],['Scheat','Matar','Enif']]},
+   {ja:'アンドロメダ座',paths:[['Alpheratz','Mirach','Almach']]},
+   {ja:'ペルセウス座',paths:[['Mirfak','Algol']]},
+   {ja:'おひつじ座',paths:[['Hamal','Sheratan','Mothallah']]},
+   {ja:'ケフェウス座',paths:[['Alderamin','Alfirk','Errai','Alderamin']]},
+   {ja:'ヘルクレス座',paths:[['Rasalgethi','Kornephoros','Sarin']]},
+   {ja:'かんむり座',paths:[['Alphecca']]}
+  ]);
+  // Gamma Cassiopeiae, Bayer name "Navi", is needed for the W figure.
+  const navi=Object.freeze({id:'Navi',ra:14.1771,dec:60.7167,mag:2.47,bv:-0.15,ja:'ナヴィ'});
+  this.stars=Object.freeze([...this.stars,navi]);
+  this.byId.set(navi.id,navi);
+ }
+}
+
+class AstroClock {
+ static parseDateTime(dateString,timeString) {
+  const match=/^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString);
+  const t=/^(\d{2}):(\d{2})$/.exec(timeString);
+  if(!match||!t) throw new Error('日付または時刻の形式が正しくありません。');
+  const [year,month,day]=match.slice(1).map(Number);
+  const [hour,minute]=t.slice(1).map(Number);
+  if(year<2000||year>2100||month<1||month>12||day<1||day>31||hour>23||minute>59) throw new Error('指定された日時が範囲外です。');
+  const utc=Date.UTC(year,month-1,day,hour-Constants.JST_OFFSET_HOURS,minute);
+  const value=new Date(utc);
+  const check=new Date(Date.UTC(year,month-1,day));
+  if(check.getUTCFullYear()!==year||check.getUTCMonth()!==month-1||check.getUTCDate()!==day) throw new Error('存在しない日付です。');
+  return value;
+ }
+ static formatJST(date) {
+  return new Date(date.getTime()+Constants.JST_OFFSET_HOURS*3600000).toISOString().slice(0,16);
+ }
+ static year(dateString) {return Number(dateString.slice(0,4));}
+ static padded(value) {return String(value).padStart(2,'0');}
+ static formatMinutes(minutes) {
+  const normalized=((Math.round(minutes)%1440)+1440)%1440;
+  return `${AstroClock.padded(Math.floor(normalized/60))}:${AstroClock.padded(normalized%60)}`;
+ }
+}
+
+/** Sidereal-time and horizontal-coordinate calculations. */
+class Astronomy {
+ static julianDay(date) {return date.getTime()/Constants.UNIX_DAY_MS+Constants.JULIAN_UNIX_EPOCH;}
+ static localSidereal(date,longitude) {
+  const jd=Astronomy.julianDay(date);
+  const jd0=Math.floor(jd+0.5)-0.5;
+  const h=(jd-jd0)*24;
+  const d0=jd0-Constants.J2000_JD;
+  const t=(jd-Constants.J2000_JD)/36525;
+  // USNO approximate GMST, in hours.
+  const gmst=6.697375+0.065709824279*d0+1.0027379*h+0.0000258*t*t;
+  return Angles.wrap360(gmst*15+longitude);
+ }
+ static toHorizontal(star,lst,latitude) {
+  const hourAngle=Angles.radians(Angles.wrap180(lst-star.ra));
+  const dec=Angles.radians(star.dec);
+  const phi=Angles.radians(latitude);
+  const east=-Math.cos(dec)*Math.sin(hourAngle);
+  const north=Math.cos(phi)*Math.sin(dec)-Math.sin(phi)*Math.cos(dec)*Math.cos(hourAngle);
+  const up=Math.sin(phi)*Math.sin(dec)+Math.cos(phi)*Math.cos(dec)*Math.cos(hourAngle);
+  return {alt:Angles.degrees(Math.asin(Angles.clamp(up,-1,1))),az:Angles.wrap360(Angles.degrees(Math.atan2(east,north))),east,north,up};
+ }
+ static solarPosition(date) {
+  const d=Astronomy.julianDay(date)-Constants.J2000_JD;
+  const g=Angles.radians(Angles.wrap360(357.529+0.98560028*d));
+  const q=280.459+0.98564736*d;
+  const e=Angles.radians(23.439-0.00000036*d);
+  const lon=Angles.radians(Angles.wrap360(q+1.915*Math.sin(g)+0.020*Math.sin(2*g)));
+  return {ra:Angles.wrap360(Angles.degrees(Math.atan2(Math.cos(e)*Math.sin(lon),Math.cos(lon)))),dec:Angles.degrees(Math.asin(Math.sin(e)*Math.sin(lon)))};
+ }
+ static sunAltitude(date,lst,latitude) {return Astronomy.toHorizontal(Astronomy.solarPosition(date),lst,latitude).alt;}
+ static timeAtSidereal(dateString,lst,longitude) {
+  const midnight=AstroClock.parseDateTime(dateString,'00:00');
+  const base=Astronomy.localSidereal(midnight,longitude);
+  return Angles.wrap360(lst-base)/Constants.SIDEREAL_DEG_PER_HOUR*60;
+ }
+ static dateAtSidereal(year,minutes,lst,longitude) {
+  let closest=null;
+  for(let day=Date.UTC(year,0,1);day<Date.UTC(year+1,0,1);day+=Constants.UNIX_DAY_MS) {
+   const date=new Date(day).toISOString().slice(0,10);
+   const datetime=AstroClock.parseDateTime(date,AstroClock.formatMinutes(minutes));
+   const difference=Math.abs(Angles.wrap180(Astronomy.localSidereal(datetime,longitude)-lst));
+   if(!closest||difference<closest.difference) closest={date,difference};
+  }
+  return closest;
+ }
+}
+
+class SkyRenderer {
+ constructor(canvas,catalog,selectionCallback) {
+  this.canvas=canvas;
+  this.ctx=canvas.getContext('2d');
+  if(!this.ctx) throw new Error('このブラウザはCanvas 2Dに対応していません。');
+  this.catalog=catalog;
+  this.selectionCallback=selectionCallback;
+  this.hitTargets=[];
+  this.layout={cx:0,cy:0,radius:0};
+  canvas.addEventListener('click',event=>this.handleClick(event));
+ }
+ geometry(width,height) {const radius=Math.min(width,height)*0.427;return {cx:width/2,cy:height/2,radius};}
+ project(horizontal) {
+  const r=this.layout.radius*(90-horizontal.alt)/90;
+  const a=Angles.radians(horizontal.az);
+  return {x:this.layout.cx-r*Math.sin(a),y:this.layout.cy-r*Math.cos(a)};
+ }
+ render(date,latitude,longitude,options,selectedId) {
+  const rect=this.canvas.getBoundingClientRect();
+  const size=Math.max(320,Math.round(rect.width||720));
+  const pixelRatio=Math.min(window.devicePixelRatio||1,2);
+  const actual=Math.round(size*pixelRatio);
+  if(this.canvas.width!==actual||this.canvas.height!==actual) {this.canvas.width=actual;this.canvas.height=actual;}
+  this.ctx.setTransform(pixelRatio,0,0,pixelRatio,0,0);
+  this.layout=this.geometry(size,size);
+  const ctx=this.ctx;
+  ctx.clearRect(0,0,size,size);
+  this.drawScaffolding();
+  const lst=Astronomy.localSidereal(date,longitude);
+  const entries=this.catalog.stars.map(star=>({star,position:Astronomy.toHorizontal(star,lst,latitude)}));
+  const lookup=new Map(entries.map(e=>[e.star.id,e.position]));
+  if(options.lines) this.drawConstellations(lookup);
+  this.drawStars(entries,options.names,selectedId);
+  if(options.constellationNames) this.drawConstellationNames(lookup);
+  this.drawDirections(latitude);
+  return {lst,entries};
+ }
+ drawScaffolding() {
+  const {ctx,layout:{cx,cy,radius:r}}=this;
+  ctx.save();
+  const fill=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+  fill.addColorStop(0,'#0b1c2b');fill.addColorStop(0.7,'#091520');fill.addColorStop(1,'#030c14');
+  ctx.beginPath();ctx.arc(cx,cy,r,0,2*Math.PI);ctx.fillStyle=fill;ctx.fill();
+  for(const altitude of [60,30,0]) {
+   const ring=r*(90-altitude)/90;
+   ctx.beginPath();ctx.arc(cx,cy,ring,0,2*Math.PI);
+   ctx.strokeStyle=altitude===0?'#6b9fb1':'#244251';
+   ctx.lineWidth=altitude===0?1.7:0.9;ctx.setLineDash(altitude===0?[]:[4,6]);ctx.stroke();
+   if(altitude>0){ctx.fillStyle='#5f8193';ctx.font='11px system-ui';ctx.fillText(`${altitude}°`,cx+5,cy-ring+15);}
+  }
+  ctx.setLineDash([]);ctx.strokeStyle='#213846';ctx.lineWidth=0.7;
+  ctx.beginPath();ctx.moveTo(cx-r,cy);ctx.lineTo(cx+r,cy);ctx.moveTo(cx,cy-r);ctx.lineTo(cx,cy+r);ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,3.5,0,2*Math.PI);ctx.fillStyle='#b8edff';ctx.fill();
+  ctx.fillStyle='#83a9bd';ctx.font='12px system-ui';ctx.textAlign='left';ctx.fillText('天頂',cx+10,cy-9);
+  ctx.restore();
+ }
+ drawDirections(latitude) {
+  const {ctx,layout:{cx,cy,radius:r}}=this;
+  const polar=Math.abs(latitude)===Constants.MAX_LAT;
+  const labels=polar?['0°','90°','180°','270°']:['北 N','東 E','南 S','西 W'];
+  ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold 18px system-ui';
+  for(const point of [{text:labels[0],x:cx,y:cy-r-22},{text:labels[1],x:cx-r-32,y:cy},{text:labels[2],x:cx,y:cy+r+24},{text:labels[3],x:cx+r+32,y:cy}]) {
+   ctx.fillStyle='#b1ecfb';ctx.fillText(point.text,point.x,point.y);
+  }
+  ctx.restore();
+ }
+ drawConstellations(lookup) {
+  const ctx=this.ctx;
+  ctx.save();ctx.lineWidth=1.15;ctx.strokeStyle='rgba(78,208,223,0.62)';
+  for(const constellation of this.catalog.constellations){
+   for(const path of constellation.paths){
+    for(let i=0;i<path.length-1;i++){
+     const a=lookup.get(path[i]),b=lookup.get(path[i+1]);
+     if(a&&b) this.drawClippedEdge(a,b);
+    }
+   }
+  }
+  ctx.restore();
+ }
+ // Interpolate on the projected sky, stopping lines at the horizon.
+ drawClippedEdge(a,b) {
+  const pointAt=t=>{
+   const u=Angles.radians(a.az),v=Angles.radians(b.az);
+   const aa=Angles.radians(a.alt),bb=Angles.radians(b.alt);
+   const x=(1-t)*Math.cos(aa)*Math.sin(u)+t*Math.cos(bb)*Math.sin(v);
+   const y=(1-t)*Math.cos(aa)*Math.cos(u)+t*Math.cos(bb)*Math.cos(v);
+   const z=(1-t)*Math.sin(aa)+t*Math.sin(bb);
+   return {alt:Angles.degrees(Math.atan2(z,Math.hypot(x,y))),az:Angles.wrap360(Angles.degrees(Math.atan2(x,y)))};
+  };
+  // Short line segments connect neighboring stars. Angular interpolation avoids azimuth wrapping.
+  const ctx=this.ctx;
+  const pieces=16;
+  let prev=pointAt(0),penDown=false;
+  for(let i=1;i<=pieces;i++){
+   const now=pointAt(i/pieces);
+   if(prev.alt>=0&&now.alt>=0){
+    if(!penDown){const p=this.project(prev);ctx.beginPath();ctx.moveTo(p.x,p.y);penDown=true;}
+    const p=this.project(now);ctx.lineTo(p.x,p.y);
+   } else if(prev.alt>=0&&now.alt<0){
+    const ratio=prev.alt/(prev.alt-now.alt);const point=pointAt((i-1+ratio)/pieces);
+    const p=this.project({...point,alt:0});
+    if(!penDown){const start=this.project(prev);ctx.beginPath();ctx.moveTo(start.x,start.y);}
+    ctx.lineTo(p.x,p.y);ctx.stroke();penDown=false;
+   } else if(prev.alt<0&&now.alt>=0){
+    const ratio=-prev.alt/(now.alt-prev.alt);const point=pointAt((i-1+ratio)/pieces);
+    const p=this.project({...point,alt:0});ctx.beginPath();ctx.moveTo(p.x,p.y);
+    const end=this.project(now);ctx.lineTo(end.x,end.y);penDown=true;
+   }
+   prev=now;
+  }
+  if(penDown)ctx.stroke();
+ }
+ drawStars(entries,showNames,selectedId) {
+  const ctx=this.ctx;this.hitTargets=[];
+  const visible=entries.filter(e=>e.position.alt>=Constants.STAR_MIN_ALT_DEG).sort((a,b)=>b.star.mag-a.star.mag);
+  const occupied=[];
+  for(const entry of visible){
+   const {star,position}=entry,p=this.project(position);
+   const radius=Angles.clamp(3.55-star.mag*0.62,1.35,5.2);
+   const color=star.bv>1.15?'#ffd0a0':star.bv<-0.1?'#a5d5ff':'#f1f5ff';
+   ctx.save();ctx.shadowBlur=radius>2.5?10:3;ctx.shadowColor=color;
+   ctx.beginPath();ctx.arc(p.x,p.y,radius,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();ctx.restore();
+   this.hitTargets.push({star,position,x:p.x,y:p.y});
+   if(star.id===selectedId){
+    ctx.beginPath();ctx.arc(p.x,p.y,radius+7,0,2*Math.PI);ctx.strokeStyle='#b6f78a';ctx.lineWidth=1.5;ctx.stroke();
+   }
+  }
+  if(!showNames)return;
+  // Label the most recognizable stars, avoiding unnecessary overlap.
+  for(const {star,position,x,y} of this.hitTargets.slice().sort((a,b)=>a.star.mag-b.star.mag)){
+   if(star.mag>Constants.LABEL_MAX_MAG&&star.id!==selectedId)continue;
+   if(occupied.some(other=>Math.hypot(x-other.x,y-other.y)<Constants.LABEL_MIN_DISTANCE_PX)&&star.id!==selectedId)continue;
+   occupied.push({x,y});
+   ctx.save();ctx.font='11px system-ui';ctx.textBaseline='middle';ctx.fillStyle=star.id==='Polaris'?'#b6f78a':'#d4e6f0';
+   ctx.shadowColor='#030811';ctx.shadowBlur=6;ctx.fillText(star.ja,x+7,y-7);ctx.restore();
+  }
+ }
+ drawConstellationNames(lookup) {
+  const ctx=this.ctx;ctx.save();ctx.font='12px system-ui';ctx.fillStyle='#60cfbb';ctx.textAlign='center';ctx.textBaseline='middle';
+  const occupied=[];
+  for(const constellation of this.catalog.constellations){
+   const ids=[...new Set(constellation.paths.flat())];
+   const positions=ids.map(id=>lookup.get(id)).filter(p=>p&&p.alt>8);
+   if(positions.length<2)continue;
+   const points=positions.map(p=>this.project(p));
+   const x=points.reduce((sum,p)=>sum+p.x,0)/points.length;
+   const y=points.reduce((sum,p)=>sum+p.y,0)/points.length;
+   if(occupied.some(p=>Math.hypot(p.x-x,p.y-y)<62))continue;
+   occupied.push({x,y});ctx.fillText(constellation.ja,x,y+15);
+  }
+  ctx.restore();
+ }
+ handleClick(event) {
+  const rect=this.canvas.getBoundingClientRect();
+  const x=event.clientX-rect.left;
+  const y=event.clientY-rect.top;
+  let closest=null,distance=Constants.SELECT_DISTANCE_PX;
+  for(const item of this.hitTargets){const d=Math.hypot(item.x-x,item.y-y);if(d<distance){distance=d;closest=item;}}
+  if(closest) this.selectionCallback(closest.star,closest.position);
+ }
+}
+
+/** Fits observer latitude and local sidereal angle from measured star positions. */
+class InverseSolver {
+ constructor(catalog){this.catalog=catalog;}
+ estimate(observations){
+  if(observations.length<2)throw new Error('異なる星を２個以上記録してください。');
+  const ids=new Set(observations.map(o=>o.id));
+  if(ids.size!==observations.length)throw new Error('同じ星は重複して記録できません。');
+  const items=observations.map(o=>{
+   const star=this.catalog.byId.get(o.id);
+   if(!star||!Number.isFinite(o.alt)||!Number.isFinite(o.az)||o.alt<0||o.alt>90||o.az<0||o.az>=360)throw new Error('星の名前・方位・高度を確認してください。');
+   const az=Angles.radians(o.az),alt=Angles.radians(o.alt);
+   return {star,measured:{east:Math.cos(alt)*Math.sin(az),north:Math.cos(alt)*Math.cos(az),up:Math.sin(alt)}};
+  });
+  const score=(latitude,lst)=>{
+   let error=0;
+   for(const {star,measured} of items){
+    const p=Astronomy.toHorizontal(star,lst,latitude);
+    const dot=p.east*measured.east+p.north*measured.north+p.up*measured.up;
+    error+=2*(1-Angles.clamp(dot,-1,1));
+   }
+   return error;
+  };
+  let best={latitude:0,lst:0,error:Infinity};
+  for(let lat=Constants.MIN_LAT;lat<=Constants.MAX_LAT;lat+=Constants.INV_GRID_LAT_STEP){
+   for(let lst=0;lst<360;lst+=Constants.INV_GRID_LST_STEP){
+    const error=score(lat,lst);
+    if(error<best.error)best={latitude:lat,lst,error};
+   }
+  }
+  for(const [latStep,lstStep] of Constants.INV_REFINEMENTS){
+   let candidate=best;
+   for(let i=-5;i<=5;i++)for(let j=-5;j<=5;j++){
+    const latitude=Angles.clamp(best.latitude+i*latStep,Constants.MIN_LAT,Constants.MAX_LAT);
+    const lst=Angles.wrap360(best.lst+j*lstStep);
+    const error=score(latitude,lst);
+    if(error<candidate.error)candidate={latitude,lst,error};
+   }
+   best=candidate;
+  }
+  let sumSquares=0;
+  for(const {star,measured} of items){
+   const p=Astronomy.toHorizontal(star,best.lst,best.latitude);
+   const dot=p.east*measured.east+p.north*measured.north+p.up*measured.up;
+   sumSquares+=Math.pow(Angles.degrees(Angles.between(dot,1)),2);
+  }
+  return {...best,rms:Math.sqrt(sumSquares/items.length)};
+ }
+}
+
+/** Orchestrates controls, validation, drawing, and the two learning modes. */
+class SimulatorApp {
+ constructor(documentRoot){
+  this.doc=documentRoot;
+  this.catalog=new StarCatalog();
+  this.solver=new InverseSolver(this.catalog);
+  this.sky=new SkyRenderer(this.byId('skyCanvas'),this.catalog,(star,p)=>this.onStarClick(star,p));
+  const japaneseToday=new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const todayParts=Object.fromEntries(japaneseToday.filter(part=>part.type!=='literal').map(part=>[part.type,part.value]));
+  const today=`${todayParts.year}-${todayParts.month}-${todayParts.day}`;
+  this.state={date:today,time:'21:00',latitude:35,longitude:135,placeName:'自由指定',mode:'forward',lines:true,names:true,constellationNames:true,selectedId:null};
+  this.animationId=null;
+  this.lastRendered=null;
+  this.selectedObservationIndex=0;
+  this.observationFields=[];
+  this.locationPresets=new LocationPresetController(this.doc,place=>this.selectLocation(place));
+  this.bindUI();this.createObservationRows();this.syncInputs();this.render();
+  window.addEventListener('resize',()=>this.render());
+  window.addEventListener('beforeunload',()=>this.stopAnimation());
+ }
+ byId(id){const e=this.doc.getElementById(id);if(!e)throw new Error(`必要な画面要素がありません: ${id}`);return e;}
+ bindUI(){
+  this.byId('observationDate').addEventListener('change',e=>this.updateDateTime(e.target.value,this.state.time));
+  this.byId('observationTime').addEventListener('change',e=>this.updateDateTime(this.state.date,e.target.value));
+  this.byId('latitudeRange').addEventListener('input',e=>this.updateCoordinate('latitude',Number(e.target.value)));
+  this.byId('latitudeNumber').addEventListener('change',e=>this.updateCoordinate('latitude',Number(e.target.value)));
+  this.byId('longitudeNumber').addEventListener('change',e=>this.updateCoordinate('longitude',Number(e.target.value)));
+  this.byId('forwardMode').addEventListener('click',()=>this.setMode('forward'));
+  this.byId('inverseMode').addEventListener('click',()=>this.setMode('inverse'));
+  this.byId('stepBack').addEventListener('click',()=>this.addMinutes(-60));
+  this.byId('stepForward').addEventListener('click',()=>this.addMinutes(60));
+  this.byId('playTime').addEventListener('click',()=>this.toggleAnimation());
+  this.byId('seasonPresets').addEventListener('click',e=>{
+   const button=e.target.closest('button[data-month]');if(!button)return;
+   const y=AstroClock.year(this.state.date);
+   this.updateDateTime(`${y}-${AstroClock.padded(button.dataset.month)}-${AstroClock.padded(button.dataset.day)}`,'21:00');
+  });
+  // Location presets are handled by LocationPresetController.
+  for(const [id,name] of [['showLines','lines'],['showNames','names'],['showConstellationNames','constellationNames']]){
+   this.byId(id).addEventListener('change',e=>{this.state[name]=e.target.checked;this.render();});
+  }
+  this.byId('captureObservations').addEventListener('click',()=>this.captureObservations());
+  this.byId('solveObservations').addEventListener('click',()=>this.solveObservations());
+ }
+ createObservationRows(){
+  const holder=this.byId('observationRows');
+  const sorted=this.catalog.stars.slice().sort((a,b)=>a.ja.localeCompare(b.ja,'ja'));
+  for(let index=0;index<3;index++){
+   const wrap=this.doc.createElement('div');wrap.className='obs-row';
+   const select=this.doc.createElement('select');select.setAttribute('aria-label',`星${index+1}の名前`);
+   for(const star of sorted){const option=this.doc.createElement('option');option.value=star.id;option.textContent=star.ja;select.append(option);}
+   const az=this.makeNumericInput(`星${index+1}の方位`,0,359.9);
+   const alt=this.makeNumericInput(`星${index+1}の高度`,0,90);
+   wrap.append(select,az,alt);holder.append(wrap);
+   this.observationFields.push({select,az,alt});
+  }
+ }
+ makeNumericInput(label,min,max){
+  const input=this.doc.createElement('input');input.type='number';input.step='0.1';input.min=String(min);input.max=String(max);input.setAttribute('aria-label',label);return input;
+ }
+ syncInputs(){
+  this.byId('observationDate').value=this.state.date;
+  this.byId('observationTime').value=this.state.time;
+  this.byId('latitudeRange').value=String(this.state.latitude);
+  this.byId('latitudeNumber').value=String(this.state.latitude);
+  this.byId('latitudeValue').textContent=`${Math.abs(this.state.latitude).toFixed(1)}° ${this.state.latitude>=0?'N':'S'}`;
+  this.byId('longitudeNumber').value=String(this.state.longitude);
+  this.byId('selectedLocation').textContent=`選択地点：${this.state.placeName}`;
+ }
+ updateDateTime(date,time){
+  try{AstroClock.parseDateTime(date,time);}catch(error){this.byId('starInfo').textContent=error.message;this.syncInputs();return;}
+  this.state.date=date;this.state.time=time;this.syncInputs();this.render();
+ }
+ updateCoordinate(name,value){
+  const min=name==='latitude'?Constants.MIN_LAT:-180,max=name==='latitude'?Constants.MAX_LAT:180;
+  if(!Number.isFinite(value)){this.syncInputs();return;}
+  this.state[name]=Math.round(Angles.clamp(value,min,max)*10)/10;
+  this.state.placeName='自由指定';
+  this.locationPresets.clearSelection();
+  this.syncInputs();this.render();
+ }
+ selectLocation(place){
+  this.state.latitude=place.lat;
+  this.state.longitude=place.lon;
+  this.state.placeName=place.name;
+  this.syncInputs();this.render();
+ }
+ addMinutes(delta){
+  const now=AstroClock.parseDateTime(this.state.date,this.state.time);
+  const moved=new Date(now.getTime()+delta*60000);
+  const local=AstroClock.formatJST(moved);
+  if(local.slice(0,4)<'2000'||local.slice(0,4)>'2100'){this.stopAnimation();return;}
+  this.updateDateTime(local.slice(0,10),local.slice(11));
+ }
+ toggleAnimation(){
+  if(this.animationId!==null){this.stopAnimation();return;}
+  this.animationId=window.setInterval(()=>this.addMinutes(Constants.ANIMATION_STEP_MINUTES),Constants.ANIMATION_INTERVAL_MS);
+  this.byId('playTime').textContent='■ 時間を止める';
+ }
+ stopAnimation(){
+  if(this.animationId!==null){window.clearInterval(this.animationId);this.animationId=null;}
+  this.byId('playTime').textContent='▶ 時間を進める';
+ }
+ setMode(mode){
+  if(this.state.mode===mode)return;
+  this.state.mode=mode;this.stopAnimation();
+  const inverse=mode==='inverse';
+  this.byId('forwardPanel').hidden=inverse;
+  this.byId('inversePanel').hidden=!inverse;
+  for(const [id,active] of [['forwardMode',!inverse],['inverseMode',inverse]]){
+   const button=this.byId(id);button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));
+  }
+  this.byId('skyModeTag').textContent=inverse?'星の観測・逆算':'観測シミュレーション';
+  this.render();
+  if(inverse)this.captureObservations();
+ }
+ render(){
+  this.syncInputs();
+  const utc=AstroClock.parseDateTime(this.state.date,this.state.time);
+  this.lastRendered=this.sky.render(utc,this.state.latitude,this.state.longitude,this.state,this.state.selectedId);
+  const {lst,entries}=this.lastRendered;
+  const sunAlt=Astronomy.sunAltitude(utc,lst,this.state.latitude);
+  this.byId('skyDateText').textContent=`${this.state.date}  ${this.state.time} JST`;
+  this.byId('skyLatText').textContent=`${Math.abs(this.state.latitude).toFixed(1)}° ${this.state.latitude>=0?'N':'S'}`;
+  this.byId('skyLonText').textContent=`${Math.abs(this.state.longitude).toFixed(1)}° ${this.state.longitude>=0?'E':'W'}`;
+  this.byId('skyPlaceText').textContent=this.state.placeName;
+  const polar=Math.abs(this.state.latitude)===Constants.MAX_LAT;
+  this.byId('polarWarning').hidden=!polar;
+  this.byId('skyOrientationText').textContent=polar?
+   '円の中心＝天頂　円周＝地平線　極点では東西南北の基準を定められません':
+   '円の中心＝天頂（真上）　円周＝地平線　東は左・西は右';
+  this.byId('daylightWarning').textContent=sunAlt>-6?(sunAlt>=0?'☀ 昼間：星は肉眼では見えません':'☀ 薄明：暗い星は見えにくいです'):'';
+  this.byId('siderealValue').textContent=`${(lst/15).toFixed(2)} 時`; 
+  this.renderConstellationList(entries);
+  if(this.state.selectedId){
+   const selected=entries.find(entry=>entry.star.id===this.state.selectedId);
+   if(selected)this.presentStar(selected.star,selected.position);
+  }
+ }
+ renderConstellationList(entries){
+  const positions=new Map(entries.map(e=>[e.star.id,e.position]));
+  const items=this.catalog.constellations.map(constellation=>{
+   const visible=[...new Set(constellation.paths.flat())].map(id=>positions.get(id)).filter(p=>p&&p.alt>0);
+   if(!visible.length)return null;
+   const max=Math.max(...visible.map(p=>p.alt));
+   return {name:constellation.ja,max,count:visible.length};
+  }).filter(Boolean).sort((a,b)=>b.max-a.max).slice(0,Constants.MAX_VISIBLE_STARS);
+  const holder=this.byId('visibleList');holder.replaceChildren();
+  for(const item of items){
+   const row=this.doc.createElement('div');row.className='const-item';
+   const name=this.doc.createElement('span');name.textContent=item.name;
+   const alt=this.doc.createElement('span');alt.textContent=`最高 ${item.max.toFixed(0)}°`;
+   row.append(name,alt);holder.append(row);
+  }
+ }
+ presentStar(star,position){
+  const az=position.az,compass=az<22.5||az>=337.5?'北':az<67.5?'北東':az<112.5?'東':az<157.5?'南東':az<202.5?'南':az<247.5?'南西':az<292.5?'西':'北西';
+  const polar=Math.abs(this.state.latitude)===Constants.MAX_LAT;
+  const direction=polar?`仮の基準角 ${az.toFixed(1)}°`:`方位 ${az.toFixed(1)}°（${compass}）`;
+  this.byId('starInfo').textContent=`★ ${star.ja}　${direction} ／ 高度 ${position.alt.toFixed(1)}° ／ 等級 ${star.mag.toFixed(1)}`;
+ }
+ onStarClick(star,position){
+  this.state.selectedId=star.id;
+  if(this.state.mode==='inverse'){
+   const field=this.observationFields[this.selectedObservationIndex];
+   field.select.value=star.id;field.az.value=position.az.toFixed(1);field.alt.value=position.alt.toFixed(1);
+   this.selectedObservationIndex=(this.selectedObservationIndex+1)%this.observationFields.length;
+   this.byId('inverseResult').replaceChildren();
+  }
+  this.presentStar(star,position);this.render();
+ }
+ captureObservations(){
+  if(!this.lastRendered)return;
+  const available=this.lastRendered.entries.filter(e=>e.position.alt>=12&&e.position.alt<=80)
+   .sort((a,b)=>a.star.mag-b.star.mag);
+  const selected=[];
+  const polar=available.find(e=>e.star.id==='Polaris');
+  if(polar)selected.push(polar);
+  for(const entry of available){
+   if(selected.length===this.observationFields.length)break;
+   if(selected.some(other=>Math.abs(Angles.wrap180(other.position.az-entry.position.az))<42))continue;
+   selected.push(entry);
+  }
+  if(selected.length<2){this.showInverseError('観測できる明るい星が足りません。夜間の日時に変更してください。');return;}
+  this.observationFields.forEach((field,i)=>{
+   const entry=selected[i];
+   if(!entry){field.select.value='';field.az.value='';field.alt.value='';return;}
+   field.select.value=entry.star.id;field.az.value=entry.position.az.toFixed(1);field.alt.value=entry.position.alt.toFixed(1);
+  });
+  this.selectedObservationIndex=0;
+  this.byId('inverseResult').replaceChildren();
+  this.byId('starInfo').textContent='表示した星空の観測値を入力しました。右の「推定」ボタンで逆算できます。';
+ }
+ getObservations(){
+  return this.observationFields.filter(f=>f.az.value.trim()!==''&&f.alt.value.trim()!=='').map(f=>({
+   id:f.select.value,az:Number(f.az.value),alt:Number(f.alt.value)
+  }));
+ }
+ solveObservations(){
+  const holder=this.byId('inverseResult');holder.replaceChildren();
+  try{
+   const result=this.solver.estimate(this.getObservations());
+   this.showSolution(result,holder);
+  }catch(error){this.showInverseError(error.message);}
+ }
+ showInverseError(message){
+  const holder=this.byId('inverseResult');holder.replaceChildren();
+  const p=this.doc.createElement('p');p.className='warning';p.textContent=message;holder.append(p);
+ }
+ showSolution(result,holder){
+  const create=(tag,cls,text,parent=holder)=>{
+   const element=this.doc.createElement(tag);if(cls)element.className=cls;
+   element.textContent=text;parent.append(element);return element;
+  };
+  const grid=create('div','result-grid','');
+  for(const [title,value] of [['推定された緯度',`${result.latitude.toFixed(1)}°`],['推定された恒星時',`${(result.lst/15).toFixed(2)} 時`]]){
+   const card=create('div','kpi','',grid);create('div','kpi-label',title,card);create('div','kpi-value',value,card);
+  }
+  create('p','small',`観測値との平均ずれ（RMS）：${result.rms.toFixed(2)}°`);
+  if(result.rms>Constants.MAX_OBSERVATION_ERROR_DEG){
+   create('p','warning','星の取り違えや数値の誤りがある可能性があります。');
+   return;
+  }
+  const year=AstroClock.year(this.state.date);
+  create('h3','','この年の季節別・同じ星空になる時刻');
+  const table=create('table','season-table','');
+  for(const season of Constants.SEASONS){
+   const date=`${year}-${AstroClock.padded(season.month)}-${AstroClock.padded(season.day)}`;
+   const minutes=Astronomy.timeAtSidereal(date,result.lst,this.state.longitude);
+   const tr=create('tr','','',table);
+   create('td','',`${season.name} ${season.month}/${season.day}`,tr);
+   const clock=AstroClock.formatMinutes(minutes);
+   const sampleDate=AstroClock.parseDateTime(date,clock);
+   const sunAltitude=Astronomy.sunAltitude(sampleDate,Astronomy.localSidereal(sampleDate,this.state.longitude),result.latitude);
+   create('td','',`${clock} 頃${sunAltitude>=-6?' ☀':''}`,tr);
+  }
+  const exactMinutes=Astronomy.timeAtSidereal(this.state.date,result.lst,this.state.longitude);
+  const para=create('div','explain','');
+  const first=create('div','','',para);
+  create('strong','',`日付が ${this.state.date} と分かれば：`,first);
+  create('span','',` 時刻は ${AstroClock.formatMinutes(exactMinutes)} JST 頃と推定できます。`,first);
+  const [hour,minute]=this.state.time.split(':').map(Number);
+  const found=Astronomy.dateAtSidereal(year,hour*60+minute,result.lst,this.state.longitude);
+  const second=create('div','','',para);
+  create('strong','',`時刻が ${this.state.time} JST と分かれば：`,second);
+  create('span','',` この年では ${found.date} 頃と推定できます。`,second);
+  create('p','helper','☀ は明るい空・薄明を意味します。同じ星の配置でも、昼間は肉眼で見えません。');
+  create('p','helper','重要：星空の配置だけでは季節と時刻を両方同時には一意に決められません。日付か時刻を別に知る必要があります。');
+ }
+}
+
+window.addEventListener('DOMContentLoaded',()=>{
+ try{new SimulatorApp(document);}catch(error){
+  const container=document.getElementById('starInfo');
+  if(container)container.textContent=`初期化エラー：${error.message}`;
+  console.error('Simulator startup failed:',error);
+ }
+});
+</script>
+</body>
+</html>
